@@ -558,15 +558,15 @@
                             </div>
                             <span class="text-[10px] font-mono opacity-40 group-hover/item:opacity-60 transition-opacity">Alt+N+G</span>
                         </button>
-                        <button onclick="window.sendAcp('new-chat?agent=claude'); window.ACP.toggleDropdown()" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left group/item opacity-50">
+                        <button class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface transition-colors text-left group/item opacity-30 cursor-not-allowed" disabled>
                             <div class="flex items-center gap-3">
-                                <img src="https://cdn.agentclientprotocol.com/registry/v1/latest/claude-acp.svg" class="w-[18px] h-[18px] object-contain group-hover/item:scale-110 transition-transform" alt="Claude">
+                                <img src="https://cdn.agentclientprotocol.com/registry/v1/latest/claude-acp.svg" class="w-[18px] h-[18px] object-contain" alt="Claude">
                                 Claude
                             </div>
                         </button>
-                        <button onclick="window.sendAcp('new-chat?agent=codex'); window.ACP.toggleDropdown()" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left group/item opacity-50">
+                        <button class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface transition-colors text-left group/item opacity-30 cursor-not-allowed" disabled>
                             <div class="flex items-center gap-3">
-                                <img src="https://cdn.agentclientprotocol.com/registry/v1/latest/codex-acp.svg" class="w-[18px] h-[18px] object-contain group-hover/item:scale-110 transition-transform" alt="Codex">
+                                <img src="https://cdn.agentclientprotocol.com/registry/v1/latest/codex-acp.svg" class="w-[18px] h-[18px] object-contain" alt="Codex">
                                 Codex CLI
                             </div>
                         </button>
@@ -687,7 +687,7 @@
                 </div>
             </aside>
         </div>
-    </main>
+    </nav>
 
     <script>
         window.addEventListener('DOMContentLoaded', () => {
