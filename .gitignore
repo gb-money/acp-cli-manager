@@ -1,0 +1,21 @@
+# Delphi/C++Builder
+**/__history/
+**/__recovery/
+*.dcu
+*.res
+*.identcache
+*.local
+*.stat
+
+# Build output
+Win32/
+Win64/
+**/Debug/
+**/Release/
+
+# Logs
+acp_logs/
+*.log
+
+# Project specific
+src/modules/JsonDataObjects/

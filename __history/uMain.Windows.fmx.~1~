@@ -1,6 +1,0 @@
-inherited TFrmMain: TTFrmMain
-  Caption = ''
-  ClientHeight = 574
-  ClientWidth = 1104
-  DesignerMasterStyle = 0
-end
