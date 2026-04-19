@@ -5,21 +5,14 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Layouts,
-  FMX.ListBox, FMX.StdCtrls, FMX.Controls.Presentation, FMX.Menus, System.Actions,
-  FMX.ActnList, FMX.Platform;
+  FMX.ListBox, FMX.StdCtrls, FMX.Controls.Presentation;
 
 type
   TfrmDebugRPC = class(TForm)
     lstLogs: TListBox;
-    pnlHeader: TPanel;
-    lblTitle: TLabel;
+    pnlTool: TPanel;
     btnClear: TButton;
-    pmLogs: TPopupMenu;
-    miCopy: TMenuItem;
-    alDebug: TActionList;
-    actCopy: TAction;
     procedure btnClearClick(Sender: TObject);
-    procedure actCopyExecute(Sender: TObject);
   private
     { Private declarations }
   public
@@ -34,13 +27,7 @@ implementation
 
 {$R *.fmx}
 
-procedure TfrmDebugRPC.actCopyExecute(Sender: TObject);
-var
-  Svc: IFMXClipboardService;
-begin
-  if (lstLogs.ItemIndex >= 0) and TPlatformServices.Current.SupportsPlatformService(IFMXClipboardService, Svc) then
-    Svc.SetClipboard(lstLogs.Items[lstLogs.ItemIndex]);
-end;
+{ TfrmDebugRPC }
 
 procedure TfrmDebugRPC.AddLog(const Direction, RawText: string);
 begin

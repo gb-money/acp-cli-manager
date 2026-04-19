@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages,
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Generics.Collections,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.WebBrowser, uAgent, uGeminiAgent, uACPAgent,
-  uSessionManager, uAgentControl, uDebugRPC, JsonDataObjects, uConversationService;
+  uSessionManager, uAgentControl, uDebugRPC, JsonDataObjects, uConversationService, uUIControl;
 
 type
   TAgentType = (atGemini, atClaude, atCodex);
@@ -26,7 +26,8 @@ type
     procedure WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
   private
     FSessionMgr: TSessionManager;
-    FUIControl: TAgentControl;
+    FUIControl: TUIControl;
+    FAgentControl: TAgentControl;
     FAgents: TDictionary<TAgentType, TAgent>;
     FInitialized: Boolean;
     procedure DoStatusChange(Sender: TObject; const Msg: string);
@@ -38,6 +39,7 @@ type
     procedure DoRawData(Sender: TObject; const Direction, RawText: string);
     procedure DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject);
     procedure DoSessionMetadataUpdate(Sender: TObject; const SessionId: string);
+    procedure DoOpenExplorer(Sender: TObject);
     procedure LoadSessionsFromDisk;
     function GetOrCreateAgent(AType: TAgentType): TAgent;
   public
@@ -51,7 +53,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils, uACPClient, FMX.Dialogs;
+  System.IOUtils, uACPClient, FMX.Dialogs, uFileExplorer;
 
 { TAgentTypeHelper }
 
@@ -72,8 +74,32 @@ begin
   FInitialized := False;
   FSessionMgr := TSessionManager.Create;
   FAgents := TDictionary<TAgentType, TAgent>.Create;
-  FUIControl := TAgentControl.Create(WebBrowserMain, FSessionMgr);
-  FUIControl.OnNewChat := DoNewChat;
+  FUIControl := TUIControl.Create;
+  FUIControl.OnOpenExplorer := DoOpenExplorer;
+  FAgentControl := TAgentControl.Create(WebBrowserMain, FSessionMgr);
+  FAgentControl.OnNewChat := DoNewChat;
+end;
+
+procedure TS.DoOpenExplorer(Sender: TObject);
+var
+  LActive: TSessionInfo;
+  LPath: string;
+begin
+  if not Assigned(frmFileExplorer) then
+    frmFileExplorer := TfrmFileExplorer.Create(Application);
+  
+  LPath := '';
+  LActive := FSessionMgr.ActiveSession;
+  if Assigned(LActive) and (LActive.Cwd <> '') then
+    LPath := LActive.Cwd;
+    
+  if (LPath = '') and Assigned(FAgentControl) then
+    LPath := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), '..\..\'));
+
+  if LPath <> '' then
+    frmFileExplorer.Explore(LPath);
+    
+  frmFileExplorer.Show;
 end;
 
 function TS.GetOrCreateAgent(AType: TAgentType): TAgent;
@@ -149,22 +175,25 @@ procedure TS.WebBrowserMainDidFinishLoad(ASender: TObject);
 begin
   System.Classes.TThread.ForceQueue(nil, procedure begin 
     if Assigned(WebBrowserMain) and WebBrowserMain.Visible then WebBrowserMain.SetFocus; 
-    if Assigned(FUIControl) then FUIControl.UpdateSessionList; 
+    if Assigned(FAgentControl) then FAgentControl.UpdateSessionList; 
   end);
 end;
 
 procedure TS.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
-  if Assigned(FUIControl) then
-    FUIControl.HandleRequest(URL);
+  if Assigned(FUIControl) and FUIControl.HandleRequest(URL) then
+    Exit;
+    
+  if Assigned(FAgentControl) then
+    FAgentControl.HandleRequest(URL);
 end;
 
 procedure TS.DoResponse(Sender: TObject; const SessionId, Text: string);
 begin
   System.Classes.TThread.Queue(nil, procedure begin 
-    if Assigned(FUIControl) then begin 
-      FUIControl.ShowTyping(False); 
-      FUIControl.UpdateSessionList; 
+    if Assigned(FAgentControl) then begin 
+      FAgentControl.ShowTyping(False); 
+      FAgentControl.UpdateSessionList; 
     end; 
   end);
 end;
@@ -179,16 +208,16 @@ begin
     LActualText := FullText.Substring(5); 
   end;
   System.Classes.TThread.Queue(nil, procedure begin 
-    if Assigned(FUIControl) then 
-      FUIControl.UpdateMessageStreaming(SessionId, LActualText, LRole); 
+    if Assigned(FAgentControl) then 
+      FAgentControl.UpdateMessageStreaming(SessionId, LActualText, LRole); 
   end);
 end;
 
 procedure TS.DoThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
 begin
   System.Classes.TThread.Queue(nil, procedure begin 
-    if Assigned(FUIControl) then 
-      FUIControl.UpdateThoughtStreaming(SessionId, FullText); 
+    if Assigned(FAgentControl) then 
+      FAgentControl.UpdateThoughtStreaming(SessionId, FullText); 
   end);
 end;
 
@@ -259,16 +288,16 @@ begin
   LID := ID; LMethod := Method; LSID := SessionId;
   LToolCall := ToolCall.ToJSON(False);
   System.Classes.TThread.Queue(nil, procedure begin 
-    if Assigned(FUIControl) then 
-      FUIControl.RequestPermissionUI(LSID, LID, LMethod, LToolCall); 
+    if Assigned(FAgentControl) then 
+      FAgentControl.RequestPermissionUI(LSID, LID, LMethod, LToolCall); 
   end);
 end;
 
 procedure TS.DoSessionMetadataUpdate(Sender: TObject; const SessionId: string);
 begin
   System.Classes.TThread.Queue(nil, procedure begin 
-    if Assigned(FUIControl) then 
-      FUIControl.UpdateSessionList; 
+    if Assigned(FAgentControl) then 
+      FAgentControl.UpdateSessionList; 
   end);
 end;
 
@@ -318,7 +347,7 @@ begin
             System.Classes.TThread.Queue(nil, procedure begin
               if SessionId <> '' then begin FSessionMgr.FinalizeSessionId(LTargetSession, SessionId); LTargetSession.IsLoading := False; LGemini.SetSessionLogPath(SessionId, LTargetSession.LogPath); end
               else FSessionMgr.DeleteSession(LTargetSession);
-              if Assigned(FUIControl) then begin FUIControl.UpdateSessionList; FUIControl.UpdateFileList(LTargetSession.Cwd); end;
+              if Assigned(FAgentControl) then begin FAgentControl.UpdateSessionList; FAgentControl.UpdateFileList(LTargetSession.Cwd); end;
             end);
           end);
         end else begin
@@ -328,13 +357,13 @@ begin
             System.Classes.TThread.Queue(nil, procedure begin
               LTargetSession.IsLoading := False; TConversationService.FinalizeRestoration(LTargetSession);
               if SessionId <> '' then LGemini.SetSessionLogPath(SessionId, LTargetSession.LogPath);
-              if Assigned(FUIControl) then begin FUIControl.UpdateSessionList; FUIControl.UpdateFileList(LTargetSession.Cwd); end;
+              if Assigned(FAgentControl) then begin FAgentControl.UpdateSessionList; FAgentControl.UpdateFileList(LTargetSession.Cwd); end;
             end);
           end);
         end;
       end;
     end;
-    if Assigned(FUIControl) then FUIControl.UpdateSessionList;
+    if Assigned(FAgentControl) then FAgentControl.UpdateSessionList;
   end);
 end;
 
@@ -348,7 +377,7 @@ begin
     LPendingSession := FSessionMgr.AddSession(LGemini, LPendingId, FSessionMgr.GetUniqueSessionName('New Chat'), LSelectedDir);
     LPendingSession.IsLoading := True; FSessionMgr.SelectSession(LPendingSession);
     if Assigned(WebBrowserMain) then WebBrowserMain.EvaluateJavaScript('window.ACP.clearChat()');
-    if Assigned(FUIControl) then begin FUIControl.UpdateSessionList; FUIControl.UpdateFileList(LSelectedDir); end;
+    if Assigned(FAgentControl) then begin FAgentControl.UpdateSessionList; FAgentControl.UpdateFileList(LSelectedDir); end;
     System.Classes.TThread.Queue(nil, procedure begin
       if LGemini.State = asReady then begin
         LGemini.Workspace := LSelectedDir;
@@ -357,7 +386,7 @@ begin
           System.Classes.TThread.Queue(nil, procedure begin
             if SessionId <> '' then begin FSessionMgr.FinalizeSessionId(LPendingSession, SessionId); LPendingSession.IsLoading := False; LGemini.SetSessionLogPath(SessionId, LPendingSession.LogPath); end
             else FSessionMgr.DeleteSession(LPendingSession);
-            if Assigned(FUIControl) then begin FUIControl.UpdateSessionList; FUIControl.UpdateFileList(LSelectedDir); end;
+            if Assigned(FAgentControl) then begin FAgentControl.UpdateSessionList; FAgentControl.UpdateFileList(LSelectedDir); end;
           end);
         end);
       end else if LGemini.State in [asDisconnected, asError] then LGemini.Connect;

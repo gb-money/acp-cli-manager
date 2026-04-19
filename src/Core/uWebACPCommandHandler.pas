@@ -17,7 +17,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    function HandleUrl(const AUrl: string): Boolean;
+    function HandleUrl(const AUrl: string; const ASchema: string): Boolean;
     property OnCommand: TACPCommandEvent read FOnCommand write FOnCommand;
     property OnLog: TACPLogEvent read FOnLog write FOnLog;
   end;
@@ -36,9 +36,7 @@ begin
   inherited;
 end;
 
-function TWebACPCommandHandler.HandleUrl(const AUrl: string): Boolean;
-const
-  SCHEMA = 'acp-action://';
+function TWebACPCommandHandler.HandleUrl(const AUrl: string; const ASchema: string): Boolean;
 var
   LRaw, LAction, LParamStr, LPair: string;
   LQuery: TStringList;
@@ -46,12 +44,12 @@ var
   LParams: TDictionary<string, string>;
 begin
   Result := False;
-  if not AUrl.ToLower.StartsWith(SCHEMA) then Exit;
+  if not AUrl.ToLower.StartsWith(ASchema.ToLower) then Exit;
 
   if Assigned(FOnLog) then
     FOnLog(Self, '[ACP-ACTION] Incoming: ' + AUrl);
 
-  LRaw := AUrl.Substring(SCHEMA.Length);
+  LRaw := AUrl.Substring(ASchema.Length);
   LPos := LRaw.IndexOf('?');
   
   if LPos >= 0 then

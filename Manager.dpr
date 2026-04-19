@@ -16,7 +16,9 @@ uses
   uACPClient in 'src\ACP\uACPClient.pas',
   uACPProtocol in 'src\ACP\uACPProtocol.pas',
   uGeminiAgent in 'src\Agents\Gemini\uGeminiAgent.pas',
-  uActionModule in 'src\Actions\uActionModule.pas' {dmActions: TDataModule},
+  uFileExplorer in 'src\UI\uFileExplorer.pas' {frmFileExplorer},
+  uExplorerControl in 'src\UI\uExplorerControl.pas',
+  uUIControl in 'src\UI\uUIControl.pas',
   JsonDataObjects in 'src\modules\JsonDataObjects\Source\JsonDataObjects.pas';
 
 {$R *.res}
@@ -24,7 +26,6 @@ uses
 begin
   Application.Initialize;
   Application.CreateForm(TS, S);
-  Application.CreateForm(TdmActions, dmActions);
   Application.CreateForm(TfrmDebugRPC, frmDebugRPC);
   Application.Run;
 end.

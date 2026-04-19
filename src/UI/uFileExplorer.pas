@@ -15,6 +15,7 @@ type
     procedure WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
     procedure WebBrowserMainDidFinishLoad(ASender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure FormDestroy(Sender: TObject);
   private
     FExplorerCtrl: TExplorerControl;
     FInitialized: Boolean;
@@ -39,9 +40,15 @@ begin
   FExplorerCtrl := TExplorerControl.Create(WebBrowserMain);
 end;
 
-procedure TfrmFileExplorer.FormClose(Sender: TObject; var Action: TCloseAction);
+procedure TfrmFileExplorer.FormDestroy(Sender: TObject);
 begin
   FExplorerCtrl.Free;
+  frmFileExplorer := nil;
+end;
+
+procedure TfrmFileExplorer.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  Action := TCloseAction.caFree;
 end;
 
 procedure TfrmFileExplorer.FormShow(Sender: TObject);

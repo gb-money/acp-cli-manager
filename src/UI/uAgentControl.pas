@@ -49,7 +49,7 @@ type
 implementation
 
 uses
-  JsonDataObjects, uActionModule, FMX.Forms, uGeminiAgent, uACPAgent, System.Types, uConversationService, uDebugRPC;
+  JsonDataObjects, FMX.Forms, uGeminiAgent, uACPAgent, System.Types, uConversationService, uDebugRPC;
 
 constructor TAgentControl.Create(AWebBrowser: TWebBrowser; ASessionMgr: TSessionManager);
 var
@@ -100,7 +100,7 @@ end;
 
 function TAgentControl.HandleRequest(const AUrl: string): Boolean;
 begin
-  Result := FCommandHandler.HandleUrl(AUrl);
+  Result := FCommandHandler.HandleUrl(AUrl, 'acp-action://');
 end;
 
 procedure TAgentControl.HandleNewChat(const Params: TDictionary<string, string>);
@@ -210,22 +210,8 @@ begin
 end;
 
 procedure TAgentControl.HandleAction(const Params: TDictionary<string, string>);
-var
-  LActionName: string;
-  LComp: TComponent;
 begin
-  if Params.TryGetValue('name', LActionName) then
-  begin
-    System.Classes.TThread.Queue(nil, procedure
-    begin
-      if Assigned(dmActions) then
-      begin
-        LComp := dmActions.FindComponent(LActionName);
-        if Assigned(LComp) and (LComp is TAction) then
-          TAction(LComp).Execute;
-      end;
-    end);
-  end;
+  // Action module removed
 end;
 
 procedure TAgentControl.HandleChangeModel(const Params: TDictionary<string, string>);

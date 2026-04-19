@@ -1,7 +1,7 @@
 object frmDebugRPC: TfrmDebugRPC
   Left = 0
   Top = 0
-  Caption = 'ACP RPC Debugger'
+  Caption = 'Debug RPC'
   ClientHeight = 480
   ClientWidth = 640
   FormFactor.Width = 320
@@ -14,25 +14,15 @@ object frmDebugRPC: TfrmDebugRPC
     Size.Height = 432.000000000000000000
     Size.PlatformDefault = False
     TabOrder = 0
-    PopupMenu = pmLogs
     Viewport.Width = 636.000000000000000000
     Viewport.Height = 428.000000000000000000
   end
-  object pnlHeader: TPanel
+  object pnlTool: TPanel
     Align = Top
     Size.Width = 640.000000000000000000
     Size.Height = 48.000000000000000000
     Size.PlatformDefault = False
     TabOrder = 1
-    object lblTitle: TLabel
-      Align = Left
-      Margins.Left = 10.000000000000000000
-      Size.Width = 150.000000000000000000
-      Size.Height = 48.000000000000000000
-      Size.PlatformDefault = False
-      Text = 'RPC Logs'
-      TabOrder = 0
-    end
     object btnClear: TButton
       Align = Right
       Margins.Right = 10.000000000000000000
@@ -43,21 +33,6 @@ object frmDebugRPC: TfrmDebugRPC
       TabOrder = 1
       Text = 'Clear'
       OnClick = btnClearClick
-    end
-  end
-  object pmLogs: TPopupMenu
-    Left = 304
-    Top = 224
-    object miCopy: TMenuItem
-      Action = actCopy
-    end
-  end
-  object alDebug: TActionList
-    Left = 376
-    Top = 224
-    object actCopy: TAction
-      Caption = 'Copy'
-      OnExecute = actCopyExecute
     end
   end
 end

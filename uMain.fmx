@@ -19,7 +19,7 @@ object S: TS
     Size.Width = 1082.000000000000000000
     Size.Height = 581.000000000000000000
     Size.PlatformDefault = False
-    WindowsEngine = EdgeIfAvailable
+    WindowsEngine = EdgeOnly
     OnDidFinishLoad = WebBrowserMainDidFinishLoad
     OnShouldStartLoadWithRequest = WebBrowserMainShouldStartLoadWithRequest
   end

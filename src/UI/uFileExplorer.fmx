@@ -12,13 +12,14 @@ object frmFileExplorer: TfrmFileExplorer
   OnCreate = FormCreate
   OnShow = FormShow
   OnClose = FormClose
+  OnDestroy = FormDestroy
   DesignerMasterStyle = 0
   object WebBrowserMain: TWebBrowser
     Align = Contents
     Size.Width = 1000.000000000000000000
     Size.Height = 700.000000000000000000
     Size.PlatformDefault = False
-    WindowsEngine = EdgeIfAvailable
+    WindowsEngine = EdgeOnly
     OnShouldStartLoadWithRequest = WebBrowserMainShouldStartLoadWithRequest
     OnDidFinishLoad = WebBrowserMainDidFinishLoad
   end

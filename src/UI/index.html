@@ -75,7 +75,7 @@
 
     <script>
         window.sendAcp = function(url) {
-            const finalUrl = url.replace('acp-control://', 'acp-action://').replace('http://acp-action/', 'acp-action://') + '&t=' + Date.now();
+            const finalUrl = url.includes('://') ? url : 'acp-action://' + url;
             let iframe = document.getElementById('acp-comm-frame');
             if (!iframe) {
                 iframe = document.createElement('iframe'); 
@@ -83,7 +83,12 @@
                 iframe.style.display = 'none'; 
                 document.body.appendChild(iframe);
             }
-            iframe.src = finalUrl;
+            iframe.src = finalUrl + (finalUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+        };
+
+        window.sendUi = function(url) {
+            const finalUrl = url.includes('://') ? url : 'ui-action://' + url;
+            window.sendAcp(finalUrl);
         };
 
         window.ACP = {
@@ -123,7 +128,7 @@
                 const input = document.getElementById('userInput');
                 const text = input.innerText.trim();
                 if (text) {
-                    window.sendAcp('acp-action://send-message?text=' + encodeURIComponent(JSON.stringify(text)));
+                    window.sendAcp('send-message?text=' + encodeURIComponent(JSON.stringify(text)));
                     input.innerHTML = '';
                     window.ACP.lastAiMsgId = ''; window.ACP.lastAiThoughtId = null; window.ACP.lastBlockType = ''; window.ACP.lastMessageRole = '';
                     window.ACP.accumulatedThought = '';
@@ -132,7 +137,7 @@
 
             resumeSession: () => {
                 window.ACP.clearChat(); 
-                window.sendAcp('acp-action://resume-session?id=' + window.ACP.activeSessionId);
+                window.sendAcp('resume-session?id=' + window.ACP.activeSessionId);
             },
 
             addMessageToUI: (role, text) => {
@@ -300,7 +305,7 @@
                                 if (isActive) currentModelLabel = mName;
                                 
                                 dropdown.innerHTML += `
-                                    <button onclick="window.sendAcp('acp-action://change-model?modelId=${mId}'); document.getElementById('modelDropdown').classList.add('hidden');"
+                                    <button onclick="window.sendAcp('change-model?modelId=${mId}'); document.getElementById('modelDropdown').classList.add('hidden');"
                                         class="cmd-item w-full text-left px-5 py-3 transition-colors flex items-center justify-between">
                                         <div class="flex flex-col min-w-0">
                                             <span class="text-sm font-bold ${isActive ? 'text-primary' : 'text-on-surface'}">${mName}</span>
@@ -317,7 +322,7 @@
                 }
 
                 container.innerHTML = sessions.map(s => `
-                    <div onclick="window.sendAcp('acp-action://select-session?id=${s.id}')" 
+                    <div onclick="window.sendAcp('select-session?id=${s.id}')" 
                         class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer group relative overflow-hidden ${s.active ? 'bg-surface-container-high border-l-[3px] border-primary' : 'hover:bg-surface-container-high/50 text-on-surface-variant hover:text-on-surface border-l-[3px] border-transparent'}">
                         <div class="relative z-10">
                             <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/20">
@@ -538,12 +543,12 @@
                     <p class="text-xs font-label text-on-surface-variant">Nocturnal Architect</p>
                 </div>
             </div>
-            <button onclick="window.ACP.toggleDropdown(event)" class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all duration-200 group active:scale-95">
+            <button onclick="window.sendAcp('new-chat?agent=gemini')" class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all duration-200 group active:scale-95">
                 <span class="material-symbols-outlined text-lg group-hover:text-primary transition-colors">add</span>
                 <span class="font-headline font-medium text-sm">New Chat</span>
             </button>
             <div id="newChatDropdown" class="hidden absolute left-6 top-32 w-60 bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[100] opacity-0 invisible transition-all duration-200">
-                <button onclick="window.sendAcp('acp-action://new-chat?agent=gemini'); window.ACP.toggleDropdown()" class="w-full flex items-center gap-3 px-4 py-3 text-sm text-on-surface hover:bg-surface-container-high transition-colors rounded-xl">
+                <button onclick="window.sendAcp('new-chat?agent=gemini'); window.ACP.toggleDropdown()" class="w-full flex items-center gap-3 px-4 py-3 text-sm text-on-surface hover:bg-surface-container-high transition-colors rounded-xl">
                     <span class="material-symbols-outlined text-primary">smart_toy</span>Gemini CLI
                 </button>
             </div>
@@ -551,11 +556,13 @@
         <div id="sessionListContainer" class="flex-1 overflow-y-auto px-3 space-y-1 pb-6">
             <!-- Sessions list -->
         </div>
-        <div class="p-4 mt-auto border-t border-white/5">
-            <div class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-white rounded-lg transition-colors duration-200 cursor-pointer group">
+        <div class="p-4 mt-auto border-t border-white/5 flex items-center justify-between">
+            <button onclick="window.sendUi('open-explorer')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="File Explorer">
+                <span class="material-symbols-outlined text-lg">folder</span>
+            </button>
+            <button class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="Settings">
                 <span class="material-symbols-outlined text-lg group-hover:rotate-45 transition-transform duration-300">settings</span>
-                <span class="text-sm font-medium">Settings</span>
-            </div>
+            </button>
         </div>
     </nav>
 
@@ -629,7 +636,7 @@
                             
                             <div class="flex items-center justify-between px-3 pb-3 pt-1">
                                 <div class="flex items-center gap-1">
-                                    <button id="attachBtn" onclick="window.sendAcp('acp-action://open-file-dialog')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Attach file"><span class="material-icons text-[20px]">attach_file</span></button>
+                                    <button id="attachBtn" onclick="window.sendUi('open-file-dialog')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Attach file"><span class="material-icons text-[20px]">attach_file</span></button>
                                     <button id="toolsBtn" onclick="document.getElementById('userInput').innerText='/'; window.ACP.handleSlashCommand('/'); document.getElementById('userInput').focus();" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Use Tool"><span class="material-icons text-[20px]">construction</span></button>
                                     <div class="h-4 w-[1px] bg-outline-variant/30 mx-1"></div>
                                     <span class="px-2 py-1 rounded bg-surface-container text-[10px] font-mono text-on-surface-variant border border-outline-variant/20 flex items-center gap-1">
