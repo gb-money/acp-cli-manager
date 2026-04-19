@@ -17,6 +17,7 @@ type
 
     procedure SendInitialize;
     procedure ExtractAvailableModels(Target: TJsonObject);
+    procedure ExtractSessionMetadata(const SessionId: string; Target: TJsonObject);
   protected
     procedure DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject); override;
   public
@@ -95,6 +96,46 @@ begin
   end;
 end;
 
+procedure TGeminiAgent.ExtractSessionMetadata(const SessionId: string; Target: TJsonObject);
+var
+  Data: TSessionData;
+  Changed: Boolean;
+begin
+  if not Assigned(Target) then Exit;
+  
+  if not Sessions.TryGetValue(SessionId, Data) then
+    Data := Default(TSessionData);
+    
+  Changed := False;
+
+  if Target.Contains('modes') then
+  begin
+    Data.ModesJson := Target.O['modes'].ToJSON(False);
+    Changed := True;
+  end;
+  
+  if Target.Contains('models') then
+  begin
+    Data.ModelsJson := Target.O['models'].ToJSON(False);
+    Changed := True;
+  end;
+
+  if Target.Contains('availableCommands') then
+  begin
+    Data.CommandsJson := Target.A['availableCommands'].ToJSON(False);
+    Changed := True;
+  end;
+
+  if Changed then
+  begin
+    Sessions.AddOrSetValue(SessionId, Data);
+    ExtractAvailableModels(Target);
+    
+    if Assigned(OnSessionMetadataUpdate) then
+      OnSessionMetadataUpdate(Self, SessionId);
+  end;
+end;
+
 procedure TGeminiAgent.CreateNewSession(const ACwd: string; const APrompt: string; OnSuccess: TSessionCreatedCallback);
 var
   Params: TJsonObject;
@@ -106,7 +147,6 @@ begin
       procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
       var
         NewSessionId: string;
-        Data: TSessionData;
       begin
         if Success and Assigned(ResultObj) then
         begin
@@ -115,17 +155,7 @@ begin
 
           if NewSessionId <> '' then
           begin
-            if not Sessions.TryGetValue(NewSessionId, Data) then
-              Data := Default(TSessionData);
-
-            if ResultObj.Contains('modes') then
-              Data.ModesJson := ResultObj.O['modes'].ToJSON(False);
-            if ResultObj.Contains('models') then
-              Data.ModelsJson := ResultObj.O['models'].ToJSON(False);
-            
-            Sessions.AddOrSetValue(NewSessionId, Data);
-            ExtractAvailableModels(ResultObj);
-            
+            ExtractSessionMetadata(NewSessionId, ResultObj);
             DoStatusChange('Session Created: ' + NewSessionId);
             if Assigned(OnSuccess) then OnSuccess(NewSessionId);
           end
@@ -153,38 +183,22 @@ begin
   try
     Params.S['sessionId'] := SessionId;
     Params.S['cwd'] := Workspace;
-    Params.A['mcpServers']; // 빈 배열 생성 (규격 준수)
+    Params.A['mcpServers']; 
     
-    // 공식 메서드명 'session/load' 사용
     ACPClient.Send('session/load', Params,
       procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
-      var
-        Data: TSessionData;
       begin
         if Success then
         begin
-          if not Sessions.TryGetValue(SessionId, Data) then
-            Data := Default(TSessionData);
-
-          if Assigned(ResultObj) then
-          begin
-            if ResultObj.Contains('modes') then
-              Data.ModesJson := ResultObj.O['modes'].ToJSON(False);
-            if ResultObj.Contains('models') then
-              Data.ModelsJson := ResultObj.O['models'].ToJSON(False);
-            ExtractAvailableModels(ResultObj);
-          end;
-          
-          Sessions.AddOrSetValue(SessionId, Data);
-          
+          ExtractSessionMetadata(SessionId, ResultObj);
           DoStatusChange('Session Loaded: ' + SessionId);
-          State := asReady; // 상태 변경 (중요: 이 시점에 전송 버튼이 활성화됨)
+          State := asReady;
           if Assigned(OnSuccess) then OnSuccess(SessionId);
         end
         else
         begin
           DoStatusChange('Session Load Failed');
-          State := asReady; // 실패하더라도 에이전트 자체는 Ready일 수 있으나 상황에 따라 조절
+          State := asReady; 
           if Assigned(OnSuccess) then OnSuccess('');
         end;
       end);
@@ -206,7 +220,7 @@ begin
   Data.FullMessage := '';
   Data.CurrentBlockText := '';
   Data.LastChunkType := '';
-  Data.IsProcessing := True; // 응답 생성 시작
+  Data.IsProcessing := True; 
   Sessions.AddOrSetValue(SessionId, Data);
 
   if AText.StartsWith('[') and AText.EndsWith(']') then
@@ -229,7 +243,7 @@ begin
       begin
         if Sessions.TryGetValue(SessionId, LData) then
         begin
-          LData.IsProcessing := False; // 응답 생성 종료
+          LData.IsProcessing := False; 
           Sessions.AddOrSetValue(SessionId, LData);
         end;
 
