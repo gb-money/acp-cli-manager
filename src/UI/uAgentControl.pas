@@ -38,7 +38,7 @@ type
     destructor Destroy; override;
     function HandleRequest(const AUrl: string): Boolean;
     procedure UpdateSessionList;
-    procedure UpdateMessageStreaming(const ASessionId, AContent: string; const ARole: string = 'ai');
+    procedure UpdateMessageStreaming(const ASessionId, AContent: string; const ARole: string = 'ai'; const AStopReason: string = '');
     procedure UpdateThoughtStreaming(const ASessionId, AContent: string);
     procedure UpdateFileList(const ARootPath: string = '');
     procedure RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson: string);
@@ -131,9 +131,8 @@ end;
 
 procedure TAgentControl.HandleSelectSession(const Params: TDictionary<string, string>);
 var
-  LSessionId, LJsonStr: string;
+  LSessionId: string;
   LTargetSession, LSession: TSessionInfo;
-  LMessages: TJsonArray;
   LSessions: TList<TSessionInfo>;
 begin
   if Params.TryGetValue('id', LSessionId) and (LSessionId <> '') then
@@ -155,7 +154,6 @@ begin
       FSessionMgr.SelectSession(LTargetSession);
       UpdateSessionList;
       
-      // 비동기 실행 시 LTargetSession이 여전히 유효한지 체크 (AV 방어)
       System.Classes.TThread.Queue(nil, procedure
       var
         LInnerMsg: TJsonArray;
@@ -211,7 +209,6 @@ end;
 
 procedure TAgentControl.HandleAction(const Params: TDictionary<string, string>);
 begin
-  // Action module removed
 end;
 
 procedure TAgentControl.HandleChangeModel(const Params: TDictionary<string, string>);
@@ -318,11 +315,11 @@ procedure TAgentControl.ShowTyping(const AShow: Boolean);
 begin
   System.Classes.TThread.Queue(nil, procedure
   begin
-    FWebBrowser.EvaluateJavaScript(Format('window.ACP.showTyping(%s)', [BoolToStr(AShow, True).ToLower]));
+    FWebBrowser.EvaluateJavaScript(Format('window.ACP.showProcessing(%s)', [BoolToStr(AShow, True).ToLower]));
   end);
 end;
 
-procedure TAgentControl.UpdateMessageStreaming(const ASessionId, AContent: string; const ARole: string);
+procedure TAgentControl.UpdateMessageStreaming(const ASessionId, AContent: string; const ARole: string; const AStopReason: string);
 var
   LObj: TJsonObject;
 begin
@@ -331,6 +328,8 @@ begin
     LObj.S['sessionId'] := ASessionId;
     LObj.S['content'] := AContent;
     LObj.S['role'] := ARole; 
+    if AStopReason <> '' then
+      LObj.S['stopReason'] := AStopReason;
     FWebBrowser.EvaluateJavaScript('window.ACP.streamMessage(' + LObj.ToJSON(False) + ')');
   finally
     LObj.Free;
@@ -375,7 +374,6 @@ begin
 
   LArray := TJsonArray.Create;
   try
-    // 성능을 위해 재귀 스캔을 끄고 루트 파일만 먼저 보여줌 (Slowness 해결)
     LFiles := TDirectory.GetFiles(LTargetRoot, '*', TSearchOption.soTopDirectoryOnly);
     for LPath in LFiles do
     begin
@@ -389,9 +387,20 @@ begin
 end;
 
 procedure TAgentControl.RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson: string);
+var
+  LData: TJsonObject;
 begin
-  FWebBrowser.EvaluateJavaScript(Format('window.ACP.showPermissionRequest({sessionId: "%s", id: "%s", method: "%s", toolCall: %s})', 
-    [ASessionId, AID, AMethod, AToolCallJson]));
+  LData := TJsonObject.Create;
+  try
+    LData.S['sessionId'] := ASessionId;
+    LData.S['id'] := AID;
+    LData.S['method'] := AMethod;
+    if AToolCallJson <> '' then
+      LData.O['toolCall'].FromJSON(AToolCallJson);
+    FWebBrowser.EvaluateJavaScript('window.ACP.renderPermissionRequest(' + LData.ToJSON(False) + ')');
+  finally
+    LData.Free;
+  end;
 end;
 
 function TAgentControl.GetWorkspaceDisplayText(const ACwd: string): string;

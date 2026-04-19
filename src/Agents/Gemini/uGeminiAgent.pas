@@ -240,6 +240,7 @@ begin
       procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
       var
         LData: TSessionData;
+        LStopReason: string;
       begin
         if Sessions.TryGetValue(SessionId, LData) then
         begin
@@ -247,10 +248,13 @@ begin
           Sessions.AddOrSetValue(SessionId, LData);
         end;
 
-        if Success and Assigned(ResultObj) and (ResultObj.S['stopReason'] <> '') then
+        if Success and Assigned(ResultObj) then
         begin
+          LStopReason := ResultObj.S['stopReason'];
+          if LStopReason = '' then LStopReason := 'end_turn';
+          
           if Sessions.TryGetValue(SessionId, LData) then
-            DoResponse(SessionId, LData.FullMessage);
+            DoResponse(SessionId, LData.FullMessage + '||STOP:' + LStopReason);
         end;
       end);
   finally

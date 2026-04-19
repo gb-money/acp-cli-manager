@@ -196,9 +196,23 @@ begin
 end;
 
 procedure TS.DoResponse(Sender: TObject; const SessionId, Text: string);
+var
+  LActualText, LStopReason: string;
+  LStopIdx: Integer;
 begin
+  LActualText := Text;
+  LStopReason := 'end_turn';
+  
+  LStopIdx := Text.IndexOf('||STOP:');
+  if LStopIdx >= 0 then
+  begin
+    LActualText := Text.Substring(0, LStopIdx);
+    LStopReason := Text.Substring(LStopIdx + 7);
+  end;
+
   System.Classes.TThread.Queue(nil, procedure begin 
     if Assigned(FAgentControl) then begin 
+      FAgentControl.UpdateMessageStreaming(SessionId, LActualText, 'ai', LStopReason);
       FAgentControl.ShowTyping(False); 
       FAgentControl.UpdateSessionList; 
     end; 

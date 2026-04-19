@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com" rel="preconnect">
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+    <link href="https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg" rel="icon">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
     
@@ -71,6 +72,14 @@
             pointer-events: none !important;
             opacity: 0.2 !important;
         }
+        
+        @keyframes pulse-custom {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.9); }
+        }
+        .animate-pulse-custom {
+            animation: pulse-custom 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
     </style>
 
     <script>
@@ -124,14 +133,44 @@
                 if (sidebar) sidebar.classList.toggle('hidden');
             },
 
+            showProcessing: (show) => {
+                let indicator = document.getElementById('processingIndicator');
+                if (show) {
+                    if (!indicator) {
+                        const html = `
+                            <div id="processingIndicator" class="flex flex-col items-start gap-1.5 max-w-3xl mr-auto mt-4 mb-8 px-4">
+                                <div class="bg-surface-container-highest px-5 py-3.5 rounded-2xl rounded-tl-sm border border-outline-variant/10 flex items-center gap-2 shadow-lg">
+                                    <div class="w-1.5 h-1.5 rounded-full bg-primary/40 animate-pulse"></div>
+                                    <div class="w-1.5 h-1.5 rounded-full bg-primary/70 animate-pulse delay-75"></div>
+                                    <div class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse delay-150"></div>
+                                </div>
+                            </div>`;
+                        document.getElementById('mainChatCanvasInner').insertAdjacentHTML('beforeend', html);
+                        const outer = document.getElementById('mainChatCanvas');
+                        outer.scrollTop = outer.scrollHeight;
+                    }
+                } else if (indicator) {
+                    indicator.remove();
+                }
+            },
+
             sendMessage: async () => {
                 const input = document.getElementById('userInput');
                 const text = input.innerText.trim();
                 if (text) {
-                    window.sendAcp('send-message?text=' + encodeURIComponent(JSON.stringify(text)));
+                    // 1. Add user bubble immediately
+                    window.ACP.addMessageToUI('me', text);
+                    
+                    // 2. Clear input and reset state
                     input.innerHTML = '';
                     window.ACP.lastAiMsgId = ''; window.ACP.lastAiThoughtId = null; window.ACP.lastBlockType = ''; window.ACP.lastMessageRole = '';
                     window.ACP.accumulatedThought = '';
+                    
+                    // 3. Show processing indicator
+                    window.ACP.showProcessing(true);
+                    
+                    // 4. Send to ACP
+                    window.sendAcp('send-message?text=' + encodeURIComponent(JSON.stringify(text)));
                 }
             },
 
@@ -145,8 +184,11 @@
                 const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const id = 'msg-' + Date.now() + Math.random().toString(36).substr(2, 5);
                 
+                // Remove indicator before adding new bubble to keep order
+                window.ACP.showProcessing(false);
+
                 let html = role === 'me' ? `
-                    <div class="flex flex-col items-end gap-1.5 max-w-3xl ml-auto">
+                    <div class="flex flex-col items-end gap-1.5 max-w-3xl ml-auto mb-8 px-4">
                         <div class="bg-secondary-container text-on-surface px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-xl shadow-black/20 border border-white/5">
                             <p id="${id}" class="text-sm font-body leading-relaxed">${text}</p>
                         </div>
@@ -155,13 +197,14 @@
                             <span class="material-symbols-outlined text-[14px] text-on-surface-variant">check_circle</span>
                         </div>
                     </div>` : `
-                    <div class="flex flex-col items-start gap-1.5 max-w-3xl mr-auto group">
+                    <div class="flex flex-col items-start gap-1.5 max-w-3xl mr-auto group mb-8 px-4">
                         <div class="flex items-center gap-3 mb-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <span class="text-[11px] font-headline font-semibold text-primary">Gemini-CLI</span>
                             <span class="text-[11px] text-on-surface-variant font-medium">${time}</span>
                         </div>
-                        <div class="bg-surface-container-highest text-on-surface px-5 py-4 rounded-2xl rounded-tl-sm shadow-xl shadow-black/20 border border-outline-variant/10 w-full">
+                        <div class="bg-surface-container-highest text-on-surface px-5 py-4 rounded-2xl rounded-tl-sm shadow-xl shadow-black/20 border border-outline-variant/10 w-full relative">
                             <div id="${id}" class="markdown-body min-h-[1.5rem]"></div>
+                            <div id="${id}-actions" class="mt-4 pt-4 border-t border-outline-variant/10 hidden flex-wrap gap-2"></div>
                         </div>
                     </div>`;
                 container.insertAdjacentHTML('beforeend', html);
@@ -171,13 +214,15 @@
             },
 
             createThoughtContainer: () => {
+                window.ACP.showProcessing(false);
+
                 const container = document.getElementById('mainChatCanvasInner');
                 const id = 'thought-' + Date.now();
                 const hdrId = 'thought-hdr-' + Date.now();
                 window.ACP.thoughtStartTime = Date.now();
                 
                 const html = `
-                    <div class="flex justify-start">
+                    <div class="flex justify-start mb-4 px-4">
                         <div class="w-full max-w-3xl flex flex-col space-y-2">
                             <div id="${hdrId}" class="flex items-center space-x-2 text-xs text-gray-500 dark:text-text-muted cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none w-max group py-1">
                                 <span class="material-icons text-sm text-primary">psychology</span>
@@ -191,6 +236,8 @@
                 container.insertAdjacentHTML('beforeend', html);
                 const outer = document.getElementById('mainChatCanvas');
                 outer.scrollTop = outer.scrollHeight;
+                
+                window.ACP.showProcessing(true);
                 return { contentId: id, headerId: hdrId };
             },
 
@@ -231,8 +278,6 @@
                         
                         const arrow = hdr.querySelector('.material-icons:last-child');
                         if (arrow) arrow.innerText = 'expand_more';
-                        
-                        // Set to collapsed by default
                         if (cnt) cnt.classList.add('hidden');
                         
                         hdr.onclick = () => {
@@ -263,6 +308,10 @@
                     document.getElementById('mainInputArea').classList.remove('hidden');
                     document.getElementById('mainChatCanvas').classList.remove('hidden');
                     document.getElementById('mainEmptyArea').classList.add('hidden');
+
+                    if (activeSession.commands) {
+                        window.ACP.availableCommands = activeSession.commands;
+                    }
 
                     const isOffline = !activeSession.online && !activeSession.loading;
                     const isLoading = activeSession.loading;
@@ -354,7 +403,7 @@
             },
 
             streamMessage: (data) => {
-                const { content, role } = data;
+                const { content, role, stopReason } = data;
                 const targetRole = role === 'user' ? 'me' : 'ai';
                 
                 if (window.ACP.lastBlockType === 'thought') {
@@ -376,8 +425,44 @@
                         targetDiv.innerText = content;
                     }
                 }
+                
+                if (stopReason) {
+                    window.ACP.showProcessing(false);
+                } else {
+                    window.ACP.showProcessing(true);
+                }
+
                 const outer = document.getElementById('mainChatCanvas');
                 outer.scrollTop = outer.scrollHeight;
+            },
+
+            renderPermissionRequest: (data) => {
+                try {
+                    const { id, toolCall } = typeof data === 'string' ? JSON.parse(data) : data;
+                    const actionContainerId = `${window.ACP.lastAiMsgId}-actions`;
+                    const container = document.getElementById(actionContainerId);
+                    if (!container) return;
+
+                    container.classList.remove('hidden');
+                    container.classList.add('flex');
+                    
+                    const options = [
+                        { id: 'allow_once', label: 'Allow Once', icon: 'check', color: 'text-primary' },
+                        { id: 'allow_always', label: 'Always Allow', icon: 'done_all', color: 'text-primary' },
+                        { id: 'cancel', label: 'Reject', icon: 'close', color: 'text-error' }
+                    ];
+
+                    container.innerHTML = options.map(opt => `
+                        <button onclick="window.sendAcp('reply-permission?id=${id}&optionId=${opt.id}'); this.parentElement.classList.add('opacity-50', 'pointer-events-none')"
+                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container border border-outline-variant/20 text-xs font-medium text-on-surface transition-colors shadow-sm active:scale-95">
+                            <span class="material-symbols-outlined text-[14px] ${opt.color}">${opt.icon}</span>
+                            ${opt.label}
+                        </button>
+                    `).join('');
+
+                    const outer = document.getElementById('mainChatCanvas');
+                    outer.scrollTop = outer.scrollHeight;
+                } catch (e) { console.error('Permission render error:', e); }
             },
 
             loadHistoryBase64: (base64) => {
@@ -389,7 +474,7 @@
                     const data = JSON.parse(json);
                     
                     document.getElementById('mainChatCanvasInner').innerHTML = `
-                        <div class="flex justify-center">
+                        <div class="flex justify-center mb-8 px-4">
                             <span class="px-3 py-1 text-[11px] font-medium tracking-wider text-on-surface-variant uppercase bg-surface-container rounded-full border border-outline-variant/10">Today</span>
                         </div>`;
                     window.ACP.lastMessageRole = ''; window.ACP.lastBlockType = '';
@@ -404,7 +489,7 @@
                             window.ACP.parseAndRenderThought(msg.content, tIds.contentId);
                             window.ACP.finalizeThought();
                         } else {
-                            window.ACP.streamMessage({content: msg.content, role: r});
+                            window.ACP.streamMessage({content: msg.content, role: r, stopReason: 'history'});
                         }
                     });
                 } catch (e) { console.error('History load error:', e); }
@@ -413,6 +498,7 @@
             clearChat: () => {
                 document.getElementById('mainChatCanvasInner').innerHTML = '';
                 window.ACP.lastAiMsgId = ''; window.ACP.lastAiThoughtId = null; window.ACP.lastBlockType = ''; window.ACP.lastMessageRole = '';
+                window.ACP.showProcessing(false);
             },
 
             // Mention & Command Logic
@@ -522,7 +608,7 @@
                 window.ACP.replaceTriggerRange('@', pill); window.ACP.showFiles(false);
             },
             setWorkspaceFiles: (files) => { window.ACP.workspaceFiles = files; },
-            showTyping: (show) => { /* send-button handles this */ },
+            showTyping: (show) => { window.ACP.showProcessing(show); },
             parseStructuredPrompt: async (text) => { return text; }
         };
     </script>
@@ -612,8 +698,8 @@
         <div class="flex-1 flex flex-row overflow-hidden relative">
             <div class="flex-1 flex flex-col min-w-0 relative">
                 <!-- Chat Canvas -->
-                <div id="mainChatCanvas" class="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-8 scroll-smooth hidden">
-                    <div id="mainChatCanvasInner" class="max-w-4xl mx-auto space-y-8">
+                <div id="mainChatCanvas" class="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-2 scroll-smooth hidden">
+                    <div id="mainChatCanvasInner" class="max-w-4xl mx-auto flex flex-col">
                         <!-- Messages -->
                     </div>
                 </div>
@@ -687,7 +773,7 @@
                 </div>
             </aside>
         </div>
-    </nav>
+    </main>
 
     <script>
         window.addEventListener('DOMContentLoaded', () => {
