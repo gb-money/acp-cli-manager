@@ -17,5 +17,8 @@ Win64/
 acp_logs/
 *.log
 
+# Images
+images/
+
 # Project specific
 src/modules/JsonDataObjects/
