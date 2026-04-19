@@ -20,7 +20,7 @@ type
     IsRestoring: Boolean;     // True if replaying history (session/load)
   end;
 
-  TAgentPermissionRequestEvent = procedure(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject) of object;
+  TAgentPermissionRequestEvent = procedure(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray) of object;
   TSessionMetadataUpdateEvent = procedure(Sender: TObject; const SessionId: string) of object;
 
   TACPAgent = class(TAgent)
@@ -53,6 +53,7 @@ type
     procedure SetSessionLogPath(const SessionId, APath: string);
     procedure StartRestoration(const SessionId: string);
     procedure FinalizeRestoration(const SessionId: string);
+    function IsRestoringSession(const SessionId: string): Boolean;
     
     property OnRawData: TACPRawDataEvent read FOnRawData write FOnRawData;
     property OnPermissionRequest: TAgentPermissionRequestEvent read FOnPermissionRequest write FOnPermissionRequest;
@@ -124,6 +125,16 @@ begin
     Data.IsRestoring := False;
     FSessions.AddOrSetValue(SessionId, Data);
   end;
+end;
+
+function TACPAgent.IsRestoringSession(const SessionId: string): Boolean;
+var
+  Data: TSessionData;
+begin
+  if FSessions.TryGetValue(SessionId, Data) then
+    Result := Data.IsRestoring
+  else
+    Result := False;
 end;
 
 procedure TACPAgent.ReplyPermission(const ID, OptionId: string);
@@ -205,12 +216,14 @@ procedure TACPAgent.HandleRequestPermission(const ID, Method: string; Params: TJ
 var
   LSID: string;
   LToolCall: TJsonObject;
+  LOptions: TJsonArray;
 begin
   LSID := Params.S['sessionId'];
   LToolCall := Params.O['toolCall'];
+  LOptions := Params.A['options'];
   
   if Assigned(FOnPermissionRequest) then
-    FOnPermissionRequest(Self, ID, Method, LSID, LToolCall)
+    FOnPermissionRequest(Self, ID, Method, LSID, LToolCall, LOptions)
   else
     ReplyPermission(ID, 'cancel');
 end;

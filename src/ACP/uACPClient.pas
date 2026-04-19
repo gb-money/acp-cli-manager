@@ -285,13 +285,30 @@ begin
       Callback := nil;
       if (vID <> '') and (vID <> '0') then 
       begin
-        FPendingMethods.Remove(vID);
         if FCallbacks.TryGetValue(vID, Callback) then
+        begin
           FCallbacks.Remove(vID);
+          if Assigned(FOnRawData) then
+            FOnRawData(Self, 'SYS', 'Callback FOUND and matching for ID: ' + vID + ' (Method: ' + vMethod + ')');
+        end
+        else
+        begin
+          if Assigned(FOnRawData) then
+            FOnRawData(Self, 'SYS', 'Callback NOT FOUND for ID: ' + vID + ' (Method: ' + vMethod + ')');
+        end;
+        FPendingMethods.Remove(vID);
       end;
 
       if Assigned(Callback) then
-        Callback(not Assigned(pError), pResult, pError);
+      begin
+        try
+          Callback(not Assigned(pError), pResult, pError);
+        except
+          on E: Exception do
+            if Assigned(FOnRawData) then
+              FOnRawData(Self, 'SYS', 'Exception in RPC Callback: ' + E.Message);
+        end;
+      end;
 
       if Assigned(FOnReceive) and not FAgentProcess.IsStopping then
         FOnReceive(Self, vID, vMethod, pParams, pResult, pError);

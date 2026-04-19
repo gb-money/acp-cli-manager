@@ -37,7 +37,7 @@ type
     procedure DoMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
     procedure DoThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
     procedure DoRawData(Sender: TObject; const Direction, RawText: string);
-    procedure DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject);
+    procedure DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
     procedure DoSessionMetadataUpdate(Sender: TObject; const SessionId: string);
     procedure DoOpenExplorer(Sender: TObject);
     procedure LoadSessionsFromDisk;
@@ -184,14 +184,17 @@ begin
   // 1. Allow initial UI file
   if URL.ToLower.Contains('index.html') then Exit;
 
-  // 2. Handle Custom Schemas (acp-action, ui-action)
+  // 2. Ignore internal Edge/WebView2 protocols
+  if URL.ToLower.StartsWith('about:') or URL.ToLower.StartsWith('javascript:') then Exit;
+
+  // 3. Handle Custom Schemas (acp-action, ui-action)
   if Assigned(FUIControl) and FUIControl.HandleRequest(URL) then Exit;
   if Assigned(FAgentControl) and FAgentControl.HandleRequest(URL) then Exit;
 
-  // 3. Open everything else (External links, local file links) in system default app
+  // 4. Open everything else (External links, local file links) in system default app
   ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWNORMAL);
 
-  // 4. Block internal navigation
+  // 5. Block internal navigation
   WebBrowserMain.Stop;
 end;
 
@@ -221,16 +224,37 @@ end;
 
 procedure TS.DoMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
 var
-  LRole, LActualText: string;
+  LRole, LActualText, LStopReason: string;
+  LSessionInfo, LFound: TSessionInfo;
+  LSessions: TList<TSessionInfo>;
 begin
   LRole := 'ai'; LActualText := FullText;
+  LStopReason := '';
+  
+  LFound := nil;
+  if Assigned(FSessionMgr) then begin
+    LSessions := FSessionMgr.GetSessionListSnapshot;
+    try
+      for LSessionInfo in LSessions do
+        if LSessionInfo.SessionId = SessionId then begin
+          LFound := LSessionInfo;
+          Break;
+        end;
+    finally LSessions.Free; end;
+  end;
+
+  if Assigned(LFound) then begin
+    if LFound.IsLoading or ((Sender is TACPAgent) and TACPAgent(Sender).IsRestoringSession(SessionId)) then
+      LStopReason := 'history';
+  end;
+
   if FullText.StartsWith('USER:') then begin 
     LRole := 'user'; 
     LActualText := FullText.Substring(5); 
   end;
   System.Classes.TThread.Queue(nil, procedure begin 
     if Assigned(FAgentControl) then 
-      FAgentControl.UpdateMessageStreaming(SessionId, LActualText, LRole); 
+      FAgentControl.UpdateMessageStreaming(SessionId, LActualText, LRole, LStopReason); 
   end);
 end;
 
@@ -258,10 +282,17 @@ begin
     LSessions: TList<TSessionInfo>;
   begin
     if Assigned(frmDebugRPC) then frmDebugRPC.AddLog(LDir, LRaw);
+    if SameText(LDir, 'SYS') then Exit;
     if not Assigned(FSessionMgr) then Exit;
     
-    LBase := TJsonBaseObject.Parse(LRaw);
+    LBase := nil;
     try
+      try
+        LBase := TJsonBaseObject.Parse(LRaw);
+      except
+        on E: Exception do Exit;
+      end;
+      
       if Assigned(LBase) and (LBase is TJsonObject) then
       begin
         LObj := TJsonObject(LBase);
@@ -293,7 +324,6 @@ begin
                 if SameText(LUpdateType, 'available_commands_update') then LDoLog := False;
               end;
             end;
-            
             if LDoLog then TConversationService.AppendLog(LTargetSession, LDir, LRaw);
           end;
         end;
@@ -302,15 +332,16 @@ begin
   end);
 end;
 
-procedure TS.DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject);
+procedure TS.DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
 var
-  LID, LMethod, LSID, LToolCall: string;
+  LID, LMethod, LSID, LToolCall, LOptions: string;
 begin
   LID := ID; LMethod := Method; LSID := SessionId;
   LToolCall := ToolCall.ToJSON(False);
+  LOptions := Options.ToJSON(False);
   System.Classes.TThread.Queue(nil, procedure begin 
     if Assigned(FAgentControl) then 
-      FAgentControl.RequestPermissionUI(LSID, LID, LMethod, LToolCall); 
+      FAgentControl.RequestPermissionUI(LSID, LID, LMethod, LToolCall, LOptions); 
   end);
 end;
 
@@ -366,9 +397,18 @@ begin
           LGemini.CreateNewSession(LTargetSession.Cwd, '', procedure(const SessionId: string)
           begin
             System.Classes.TThread.Queue(nil, procedure begin
-              if SessionId <> '' then begin FSessionMgr.FinalizeSessionId(LTargetSession, SessionId); LTargetSession.IsLoading := False; LGemini.SetSessionLogPath(SessionId, LTargetSession.LogPath); end
+              if SessionId <> '' then begin 
+                FSessionMgr.FinalizeSessionId(LTargetSession, SessionId); 
+                LTargetSession.IsLoading := False; 
+                LGemini.SetSessionLogPath(SessionId, LTargetSession.LogPath); 
+              end
               else FSessionMgr.DeleteSession(LTargetSession);
-              if Assigned(FAgentControl) then begin FAgentControl.UpdateSessionList; FAgentControl.UpdateFileList(LTargetSession.Cwd); end;
+              
+              if Assigned(FAgentControl) then begin 
+                FAgentControl.ShowTyping(False);
+                FAgentControl.UpdateSessionList; 
+                FAgentControl.UpdateFileList(LTargetSession.Cwd); 
+              end;
             end);
           end);
         end else begin
@@ -376,9 +416,15 @@ begin
           LGemini.LoadSession(LTargetSession.SessionId, procedure(const SessionId: string)
           begin
             System.Classes.TThread.Queue(nil, procedure begin
-              LTargetSession.IsLoading := False; TConversationService.FinalizeRestoration(LTargetSession);
+              LTargetSession.IsLoading := False; 
+              TConversationService.FinalizeRestoration(LTargetSession);
               if SessionId <> '' then LGemini.SetSessionLogPath(SessionId, LTargetSession.LogPath);
-              if Assigned(FAgentControl) then begin FAgentControl.UpdateSessionList; FAgentControl.UpdateFileList(LTargetSession.Cwd); end;
+              
+              if Assigned(FAgentControl) then begin 
+                FAgentControl.ShowTyping(False);
+                FAgentControl.UpdateSessionList; 
+                FAgentControl.UpdateFileList(LTargetSession.Cwd); 
+              end;
             end);
           end);
         end;

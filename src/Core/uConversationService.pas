@@ -3,20 +3,16 @@ unit uConversationService;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, JsonDataObjects, uSessionManager;
+  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, JsonDataObjects, uSessionManager;
 
 type
   TConversationService = class
   private
+    class function CleanContent(const AContent: string): string;
     class procedure ProcessLogEntry(ALogEntry: TJsonObject; LMessages: TJsonArray; var LLastMsg: TJsonObject);
   public
-    // 3. sessionId 기반으로 채팅 UI 데이터 가져오기 (정제된 배열 반환) - 고속 Read
     class function GetConversationsBySessionId(ASession: TSessionInfo): TJsonArray;
-    
-    // 4. 새로운 RPC 로그 추가 - 고속 Append
     class procedure AppendLog(ASession: TSessionInfo; const ADirection, ARawText: string);
-    
-    // 5. Resume (복구) 관련 기능
     class procedure StartRestoration(ASession: TSessionInfo);
     class procedure FinalizeRestoration(ASession: TSessionInfo);
   end;
@@ -24,6 +20,34 @@ type
 implementation
 
 { TConversationService }
+
+class function TConversationService.CleanContent(const AContent: string): string;
+var
+  LIdx: Integer;
+  LMatches: TMatchCollection;
+  LMatch: TMatch;
+  LRaw, LPath, LFile: string;
+begin
+  Result := AContent;
+  
+  // 1. Remove context blocks added by agent
+  LIdx := Result.IndexOf('--- Content from');
+  if LIdx >= 0 then
+    Result := Result.Substring(0, LIdx).Trim;
+
+  // 2. Normalize @file:/// paths to @filename for UI
+  try
+    LMatches := TRegEx.Matches(Result, '@file:///[^\s\xa0\n]+');
+    for LMatch in LMatches do
+    begin
+      LRaw := LMatch.Value;
+      LPath := LRaw.Replace('@file:///', '').Replace('/', PathDelim);
+      LFile := TPath.GetFileName(LPath);
+      Result := Result.Replace(LRaw, '@' + LFile);
+    end;
+  except
+  end;
+end;
 
 class function TConversationService.GetConversationsBySessionId(ASession: TSessionInfo): TJsonArray;
 var
@@ -38,7 +62,6 @@ begin
   if (ASession = nil) or (ASession.LogPath = '') or not TFile.Exists(ASession.LogPath) then Exit;
 
   LLastMsg := nil;
-  LStream := nil;
   LLines := TStringList.Create;
   try
     LStream := TFileStream.Create(ASession.LogPath, fmOpenRead or fmShareDenyNone);
@@ -53,7 +76,6 @@ begin
       LLine := LLines[I].Trim;
       if LLine = '' then Continue;
 
-      // TJsonObject 대신 TJsonBaseObject를 사용하여 Array/Object 자동 판별
       LBase := TJsonBaseObject.Parse(LLine);
       try
         if Assigned(LBase) then
@@ -62,7 +84,6 @@ begin
             ProcessLogEntry(TJsonObject(LBase), Result, LLastMsg)
           else if LBase is TJsonArray then
           begin
-            // 기존 통째로 저장된 Array 포맷 대응
             for J := 0 to TJsonArray(LBase).Count - 1 do
               if TJsonArray(LBase).Items[J].Typ = jdtObject then
                 ProcessLogEntry(TJsonArray(LBase).O[J], Result, LLastMsg);
@@ -79,8 +100,8 @@ end;
 
 class procedure TConversationService.ProcessLogEntry(ALogEntry: TJsonObject; LMessages: TJsonArray; var LLastMsg: TJsonObject);
 var
-  LEntryData, LParamsObj, LUpdateObj: TJsonObject;
-  LUpdateType, LChunkText, LRole, LPrompt: string;
+  LEntryData, LParamsObj, LUpdateObj, LResObj: TJsonObject;
+  LUpdateType, LChunkText, LRole, LPrompt, LUri, LFileName: string;
   K: Integer;
 begin
   if (ALogEntry = nil) or not ALogEntry.Contains('data') then Exit;
@@ -96,14 +117,27 @@ begin
     if LParamsObj.IndexOf('prompt') >= 0 then
     begin
       case LParamsObj.Items[LParamsObj.IndexOf('prompt')].Typ of
-        jdtString: LLastMsg.S['content'] := LParamsObj.S['prompt'];
+        jdtString: LLastMsg.S['content'] := CleanContent(LParamsObj.S['prompt']);
         jdtArray: 
         begin
           LPrompt := '';
           for K := 0 to LParamsObj.A['prompt'].Count - 1 do
+          begin
             if LParamsObj.A['prompt'].Items[K].Typ = jdtObject then
-              LPrompt := LPrompt + LParamsObj.A['prompt'].O[K].S['text'];
-          LLastMsg.S['content'] := LPrompt;
+            begin
+              LResObj := LParamsObj.A['prompt'].O[K];
+              if LResObj.S['type'] = 'text' then
+                LPrompt := LPrompt + LResObj.S['text']
+              else if LResObj.S['type'] = 'resource' then
+              begin
+                LUri := LResObj.O['resource'].S['uri'];
+                LUri := LUri.Replace('file:///', '').Replace('/', PathDelim);
+                LFileName := TPath.GetFileName(LUri);
+                LPrompt := LPrompt + '@' + LFileName;
+              end;
+            end;
+          end;
+          LLastMsg.S['content'] := CleanContent(LPrompt);
         end;
       end;
     end;
@@ -146,6 +180,9 @@ begin
 
         if LChunkText <> '' then
         begin
+          LChunkText := CleanContent(LChunkText);
+          if LChunkText = '' then Exit;
+
           if (LUpdateType <> 'full_message') and Assigned(LLastMsg) and (LLastMsg.S['role'] = LRole) then
             LLastMsg.S['content'] := LLastMsg.S['content'] + LChunkText
           else
@@ -168,7 +205,6 @@ var
   LBase: TJsonBaseObject;
 begin
   if (ASession = nil) or (ASession.LogPath = '') then Exit;
-  
   LTargetFile := ASession.LogPath;
   if ASession.IsLoading and TFile.Exists(ASession.LogPath + '.new') then
     LTargetFile := ASession.LogPath + '.new';
@@ -188,14 +224,9 @@ begin
       finally
         LBase.Free;
       end;
-      
-      LJSON := LLogObj.ToJSON(False);
-      // 줄바꿈 문자는 JSON-RPC 로그 보존을 위해 제거하되, #9(Tab)은 JSON 문자열 내부의 \t로 인코딩되므로 굳이 공백 치환할 필요 없음
-      LJSON := LJSON.Replace(#13, '').Replace(#10, '');
-      
+      LJSON := LLogObj.ToJSON(False).Replace(#13, '').Replace(#10, '');
       TFile.AppendAllText(LTargetFile, LJSON + sLineBreak, TEncoding.UTF8);
     except
-      on E: Exception do ;
     end;
   finally
     LLogObj.Free;
@@ -203,8 +234,7 @@ begin
 end;
 
 class procedure TConversationService.StartRestoration(ASession: TSessionInfo);
-var
-  LNewPath: string;
+var LNewPath: string;
 begin
   if (ASession = nil) or (ASession.LogPath = '') then Exit;
   LNewPath := ASession.LogPath + '.new';
@@ -213,8 +243,7 @@ begin
 end;
 
 class procedure TConversationService.FinalizeRestoration(ASession: TSessionInfo);
-var
-  LNewPath: string;
+var LNewPath: string;
 begin
   if (ASession = nil) or (ASession.LogPath = '') then Exit;
   LNewPath := ASession.LogPath + '.new';

@@ -41,7 +41,7 @@ type
     procedure UpdateMessageStreaming(const ASessionId, AContent: string; const ARole: string = 'ai'; const AStopReason: string = '');
     procedure UpdateThoughtStreaming(const ASessionId, AContent: string);
     procedure UpdateFileList(const ARootPath: string = '');
-    procedure RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson: string);
+    procedure RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
     procedure ShowTyping(const AShow: Boolean);
     property OnNewChat: TNewChatEvent read FOnNewChat write FOnNewChat;
   end;
@@ -372,6 +372,9 @@ begin
   
   if not TDirectory.Exists(LTargetRoot) then Exit;
 
+  // Ensure trailing delimiter to get clean relative paths (filename only for root files)
+  LTargetRoot := IncludeTrailingPathDelimiter(LTargetRoot);
+
   LArray := TJsonArray.Create;
   try
     LFiles := TDirectory.GetFiles(LTargetRoot, '*', TSearchOption.soTopDirectoryOnly);
@@ -386,7 +389,7 @@ begin
   end;
 end;
 
-procedure TAgentControl.RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson: string);
+procedure TAgentControl.RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
 var
   LData: TJsonObject;
 begin
@@ -397,6 +400,8 @@ begin
     LData.S['method'] := AMethod;
     if AToolCallJson <> '' then
       LData.O['toolCall'].FromJSON(AToolCallJson);
+    if AOptionsJson <> '' then
+      LData.A['options'].FromJSON(AOptionsJson);
     FWebBrowser.EvaluateJavaScript('window.ACP.renderPermissionRequest(' + LData.ToJSON(False) + ')');
   finally
     LData.Free;
