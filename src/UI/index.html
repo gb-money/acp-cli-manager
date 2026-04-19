@@ -543,14 +543,35 @@
                     <p class="text-xs font-label text-on-surface-variant">Nocturnal Architect</p>
                 </div>
             </div>
-            <button onclick="window.sendAcp('new-chat?agent=gemini')" class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all duration-200 group active:scale-95">
-                <span class="material-symbols-outlined text-lg group-hover:text-primary transition-colors">add</span>
-                <span class="font-headline font-medium text-sm">New Chat</span>
-            </button>
-            <div id="newChatDropdown" class="hidden absolute left-6 top-32 w-60 bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[100] opacity-0 invisible transition-all duration-200">
-                <button onclick="window.sendAcp('new-chat?agent=gemini'); window.ACP.toggleDropdown()" class="w-full flex items-center gap-3 px-4 py-3 text-sm text-on-surface hover:bg-surface-container-high transition-colors rounded-xl">
-                    <span class="material-symbols-outlined text-primary">smart_toy</span>Gemini CLI
+            <!-- New Chat with Dropdown -->
+            <div class="relative w-full group">
+                <button onclick="window.ACP.toggleDropdown(event)" class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all duration-200 group active:scale-95">
+                    <span class="material-symbols-outlined text-lg group-hover:text-primary transition-colors">add</span>
+                    <span class="font-headline font-medium text-sm">New Chat</span>
                 </button>
+                <div id="newChatDropdown" class="hidden absolute left-0 top-full mt-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[100] opacity-0 invisible transition-all duration-200">
+                    <div class="py-1">
+                        <button onclick="window.sendAcp('new-chat?agent=gemini'); window.ACP.toggleDropdown()" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left group/item">
+                            <div class="flex items-center gap-3">
+                                <img src="https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg" class="w-[18px] h-[18px] object-contain group-hover/item:scale-110 transition-transform" alt="Gemini">
+                                Gemini CLI
+                            </div>
+                            <span class="text-[10px] font-mono opacity-40 group-hover/item:opacity-60 transition-opacity">Alt+N+G</span>
+                        </button>
+                        <button onclick="window.sendAcp('new-chat?agent=claude'); window.ACP.toggleDropdown()" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left group/item opacity-50">
+                            <div class="flex items-center gap-3">
+                                <img src="https://cdn.agentclientprotocol.com/registry/v1/latest/claude-acp.svg" class="w-[18px] h-[18px] object-contain group-hover/item:scale-110 transition-transform" alt="Claude">
+                                Claude
+                            </div>
+                        </button>
+                        <button onclick="window.sendAcp('new-chat?agent=codex'); window.ACP.toggleDropdown()" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left group/item opacity-50">
+                            <div class="flex items-center gap-3">
+                                <img src="https://cdn.agentclientprotocol.com/registry/v1/latest/codex-acp.svg" class="w-[18px] h-[18px] object-contain group-hover/item:scale-110 transition-transform" alt="Codex">
+                                Codex CLI
+                            </div>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
         <div id="sessionListContainer" class="flex-1 overflow-y-auto px-3 space-y-1 pb-6">
@@ -720,6 +741,26 @@
                     }
                 });
             }
+
+            // Keyboard Shortcuts Manager
+            window.addEventListener('keydown', (e) => {
+                // Alt + N combinations
+                if (e.altKey && e.code === 'KeyN') {
+                    e.preventDefault();
+                    window.ACP.toggleDropdown(null); // Pure toggle
+                }
+
+                // If dropdown is open, handle 'G' for Gemini
+                const dropdown = document.getElementById('newChatDropdown');
+                if (dropdown && !dropdown.classList.contains('hidden')) {
+                    if (e.code === 'KeyG') {
+                        e.preventDefault();
+                        window.sendAcp('new-chat?agent=gemini');
+                        window.ACP.toggleDropdown(null, false); // Hide
+                    }
+                }
+            });
+
             document.addEventListener('click', (e) => {
                 if (!e.target.closest('#newChatDropdown') && !e.target.closest('button[onclick*="toggleDropdown"]')) {
                     const d = document.getElementById('newChatDropdown');
@@ -730,15 +771,13 @@
                     if (md) md.classList.add('hidden');
                 }
 
-                // Global Link Guard: Intercepts all <a> clicks (including Ctrl+Click)
-                document.addEventListener('click', (e) => {
-                    const link = e.target.closest('a');
-                    if (!link || !link.href || link.href.startsWith('javascript:') || link.getAttribute('href').startsWith('#')) return;
-
+                // Global Link Guard: Intercepts all <a> clicks (including Ctrl+Click and local file links)
+                const link = e.target.closest('a');
+                if (link && link.href && !link.href.startsWith('javascript:') && !(link.getAttribute('href') && link.getAttribute('href').startsWith('#'))) {
                     e.preventDefault();
                     e.stopPropagation();
                     window.location.href = link.href;
-                }, true);
+                }
             }, true);
         });
     </script>
