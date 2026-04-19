@@ -31,7 +31,8 @@ begin
   Result := AContent;
   
   // 1. Remove context blocks added by agent
-  LIdx := Result.IndexOf('--- Content from');
+  LIdx := Result.ToLower.IndexOf('--- content from');
+  if LIdx < 0 then LIdx := Result.ToLower.IndexOf('--- context from');
   if LIdx >= 0 then
     Result := Result.Substring(0, LIdx).Trim;
 

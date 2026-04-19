@@ -260,7 +260,8 @@ begin
     LActualText := LActualText.Substring(5); 
   end;
 
-  LIdx := LActualText.IndexOf('--- Content from');
+  LIdx := LActualText.ToLower.IndexOf('--- content from');
+  if LIdx < 0 then LIdx := LActualText.ToLower.IndexOf('--- context from');
   if LIdx >= 0 then
     LActualText := LActualText.Substring(0, LIdx).Trim;
 
@@ -281,10 +282,6 @@ begin
       LStopReason := 'history';
   end;
 
-  if FullText.StartsWith('USER:') then begin 
-    LRole := 'user'; 
-    LActualText := FullText.Substring(5); 
-  end;
   System.Classes.TThread.Queue(nil, procedure begin 
     if Assigned(FAgentControl) then 
       FAgentControl.UpdateMessageStreaming(SessionId, LActualText, LRole, LStopReason); 
