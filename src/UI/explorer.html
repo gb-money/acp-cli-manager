@@ -105,54 +105,45 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     <script>
         const Explorer = {
-            currentPath: '', currentView: 'grid', currentData: [], historyStack: [], forwardStack: [], sortKey: 'name', sortOrder: 'asc', selectedPath: null, searchQuery: '',
+            currentPath: '', currentView: 'grid', currentData: [], historyStack: [], forwardStack: [], sortKey: 'name', sortOrder: 'asc', selectedPath: null, searchQuery: '', isInternalNav: false,
             updateFileList(json) {
                 const data = typeof json === 'string' ? JSON.parse(json) : json;
                 this.currentData = (data.files || []).map(f => ({ ...f, selected: false }));
                 const newPath = data.currentPath || (this.currentData.length > 0 ? this.currentData[0].path.split(/[\\\/]/).slice(0,-1).join('\\') : '');
                 
-                // History Management
-                const isNavAction = window.location.href.includes('noHistory=true');
                 if (newPath && newPath !== this.currentPath) {
-                    if (!isNavAction && this.currentPath) {
-                        this.historyStack.push(this.currentPath);
-                        this.forwardStack = []; // Reset forward on new manual navigation
+                    if (this.isInternalNav) {
+                        this.isInternalNav = false;
+                    } else {
+                        if (this.currentPath) {
+                            this.historyStack.push(this.currentPath);
+                            this.forwardStack = [];
+                        }
                     }
                     this.currentPath = newPath;
                 }
-                
                 this.updateUI(); this.render();
             },
             updateUI() {
                 document.getElementById('current-path-display').innerText = this.currentPath || 'Project Root';
                 document.getElementById('main-title').innerText = this.currentPath ? this.currentPath.split(/[\\\/]/).pop() : 'Project Root';
-                
-                // Update Button Active States
-                const btnBack = document.getElementById('btn-back');
-                const btnForward = document.getElementById('btn-forward');
-                if (btnBack) btnBack.disabled = this.historyStack.length === 0;
-                if (btnForward) btnForward.disabled = this.forwardStack.length === 0;
+                document.getElementById('btn-back').disabled = this.historyStack.length === 0;
+                document.getElementById('btn-forward').disabled = this.forwardStack.length === 0;
             },
             goBack() { 
                 if (this.historyStack.length === 0) return; 
+                this.isInternalNav = true;
                 this.forwardStack.push(this.currentPath); 
-                const prev = this.historyStack.pop();
-                this.navigateTo(prev, true); 
+                this.navigateTo(this.historyStack.pop()); 
             },
             goForward() { 
                 if (this.forwardStack.length === 0) return; 
+                this.isInternalNav = true;
                 this.historyStack.push(this.currentPath); 
-                const next = this.forwardStack.pop();
-                this.navigateTo(next, true); 
+                this.navigateTo(this.forwardStack.pop()); 
             },
-            goUp() { 
-                if (!this.currentPath) return; 
-                const parent = this.currentPath.split(/[\\\/]/).slice(0, -1).join('\\'); 
-                if (parent) this.navigateTo(parent); 
-            },
-            navigateTo(path, silent = false) { 
-                window.location.href = `explorer-action://open?path=${encodeURIComponent(path)}&isDir=true${silent ? '&noHistory=true' : ''}`; 
-            },
+            goUp() { if (!this.currentPath) return; const parent = this.currentPath.split(/[\\\/]/).slice(0, -1).join('\\'); if (parent) this.navigateTo(parent); },
+            navigateTo(path) { window.location.href = `explorer-action://open?path=${encodeURIComponent(path)}&isDir=true`; },
             switchView(view) {
                 this.currentView = view;
                 document.getElementById('explorer-grid-view').classList.toggle('hidden', view !== 'grid');
