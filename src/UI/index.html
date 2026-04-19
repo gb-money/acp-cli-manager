@@ -64,6 +64,13 @@
         .cmd-item.active .icon-box { background-color: #3fff8b; color: #000; }
         .cmd-item.active .text-highlight { color: #3fff8b; }
         .cmd-item:hover:not(.active) { background-color: rgba(255, 255, 255, 0.05); }
+
+        /* Disable state styles */
+        button:disabled {
+            cursor: not-allowed !important;
+            pointer-events: none !important;
+            opacity: 0.2 !important;
+        }
     </style>
 
     <script>
@@ -210,6 +217,8 @@
                 const sendBtn = document.getElementById('send-button');
                 const userInput = document.getElementById('userInput');
                 const modelSelectBtn = document.getElementById('modelSelectBtn');
+                const attachBtn = document.getElementById('attachBtn');
+                const toolsBtn = document.getElementById('toolsBtn');
                 
                 let activeSession = sessions.find(s => s.active);
                 if (activeSession) {
@@ -225,18 +234,27 @@
                     const isOffline = !activeSession.online && !activeSession.loading;
                     const isLoading = activeSession.loading;
 
+                    const setDisabled = (val) => {
+                        if (modelSelectBtn) modelSelectBtn.disabled = val;
+                        if (attachBtn) attachBtn.disabled = val;
+                        if (toolsBtn) toolsBtn.disabled = val;
+                    };
+
                     if (isLoading) {
                         sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">refresh</span>`;
                         sendBtn.onclick = null;
                         userInput.setAttribute('contenteditable', 'false');
+                        setDisabled(true);
                     } else if (isOffline) {
                         sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">autorenew</span>`;
                         sendBtn.onclick = () => window.ACP.resumeSession();
                         userInput.setAttribute('contenteditable', 'false');
+                        setDisabled(true);
                     } else {
                         sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">send</span>`;
                         sendBtn.onclick = () => window.ACP.sendMessage();
                         userInput.setAttribute('contenteditable', 'true');
+                        setDisabled(false);
                     }
 
                     if (activeSession.models && modelSelectBtn) {
@@ -582,8 +600,8 @@
                             
                             <div class="flex items-center justify-between px-3 pb-3 pt-1">
                                 <div class="flex items-center gap-1">
-                                    <button onclick="window.sendAcp('acp-action://open-file-dialog')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Attach file"><span class="material-icons text-[20px]">attach_file</span></button>
-                                    <button onclick="document.getElementById('userInput').innerText='/'; window.ACP.handleSlashCommand('/'); document.getElementById('userInput').focus();" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Use Tool"><span class="material-icons text-[20px]">construction</span></button>
+                                    <button id="attachBtn" onclick="window.sendAcp('acp-action://open-file-dialog')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Attach file"><span class="material-icons text-[20px]">attach_file</span></button>
+                                    <button id="toolsBtn" onclick="document.getElementById('userInput').innerText='/'; window.ACP.handleSlashCommand('/'); document.getElementById('userInput').focus();" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Use Tool"><span class="material-icons text-[20px]">construction</span></button>
                                     <div class="h-4 w-[1px] bg-outline-variant/30 mx-1"></div>
                                     <span class="px-2 py-1 rounded bg-surface-container text-[10px] font-mono text-on-surface-variant border border-outline-variant/20 flex items-center gap-1">
                                         <span class="w-1.5 h-1.5 rounded-full bg-primary inline-block"></span> Local Context
