@@ -729,7 +729,17 @@
                     const md = document.getElementById('modelDropdown');
                     if (md) md.classList.add('hidden');
                 }
-            });
+
+                // Global Link Guard: Intercepts all <a> clicks (including Ctrl+Click)
+                document.addEventListener('click', (e) => {
+                    const link = e.target.closest('a');
+                    if (!link || !link.href || link.href.startsWith('javascript:') || link.getAttribute('href').startsWith('#')) return;
+
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.location.href = link.href;
+                }, true);
+            }, true);
         });
     </script>
 </body>

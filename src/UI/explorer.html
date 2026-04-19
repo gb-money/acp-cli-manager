@@ -102,7 +102,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-pascal.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     <script>
         function sendExplorerAction(url) {
@@ -194,6 +193,16 @@
             if (e.button === 3) { e.preventDefault(); window.ACP_EXPLORER.goBack(); }
             else if (e.button === 4) { e.preventDefault(); window.ACP_EXPLORER.goForward(); }
         });
+
+        // Global Link Guard: Intercepts all <a> clicks (including Ctrl+Click and local file links)
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (!link || !link.href || link.href.startsWith('javascript:') || (link.getAttribute('href') && link.getAttribute('href').startsWith('#'))) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+            window.location.href = link.href;
+        }, true);
     </script>
 </body>
 </html>

@@ -33,7 +33,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils, uFileViewer;
+  System.IOUtils, uFileViewer, Winapi.ShellAPI, Winapi.Windows;
 
 procedure TfrmFileExplorer.FormCreate(Sender: TObject);
 begin
@@ -93,12 +93,16 @@ end;
 
 procedure TfrmFileExplorer.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
-  if URL.StartsWith('file://', True) then Exit;
+  // 1. Allow initial UI file
+  if URL.ToLower.Contains('explorer.html') then Exit;
 
-  if FExplorerCtrl.HandleRequest(URL) then
-    Exit;
+  // 2. Handle Custom Actions
+  if FExplorerCtrl.HandleRequest(URL) then Exit;
 
-  // Block any external navigation
+  // 3. Open everything else in system default app
+  ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWNORMAL);
+
+  // 4. Block internal navigation
   WebBrowserMain.Stop;
 end;
 

@@ -53,7 +53,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils, uACPClient, FMX.Dialogs, uFileExplorer;
+  System.IOUtils, uACPClient, FMX.Dialogs, uFileExplorer, Winapi.ShellAPI;
 
 { TAgentTypeHelper }
 
@@ -181,15 +181,17 @@ end;
 
 procedure TS.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
-  if URL.StartsWith('file://', True) then Exit;
+  // 1. Allow initial UI file
+  if URL.ToLower.Contains('index.html') then Exit;
 
-  if Assigned(FUIControl) and FUIControl.HandleRequest(URL) then
-    Exit;
-    
-  if Assigned(FAgentControl) and FAgentControl.HandleRequest(URL) then
-    Exit;
+  // 2. Handle Custom Schemas (acp-action, ui-action)
+  if Assigned(FUIControl) and FUIControl.HandleRequest(URL) then Exit;
+  if Assigned(FAgentControl) and FAgentControl.HandleRequest(URL) then Exit;
 
-  // Block any external browsing in the main window
+  // 3. Open everything else (External links, local file links) in system default app
+  ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWNORMAL);
+
+  // 4. Block internal navigation
   WebBrowserMain.Stop;
 end;
 
@@ -420,6 +422,7 @@ end;
 procedure TS.FormClose(Sender: TObject; var Action: TCloseAction);
 var Agent: TAgent;
 begin
+  if Assigned(FAgentControl) then FreeAndNil(FAgentControl);
   if Assigned(FUIControl) then FreeAndNil(FUIControl);
   if Assigned(FSessionMgr) then FreeAndNil(FSessionMgr);
   if Assigned(FAgents) then begin
