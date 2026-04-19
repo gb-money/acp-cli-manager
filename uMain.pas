@@ -40,6 +40,7 @@ type
     procedure DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
     procedure DoSessionMetadataUpdate(Sender: TObject; const SessionId: string);
     procedure DoOpenExplorer(Sender: TObject);
+    procedure DoOpenFileViewer(Sender: TObject; const APath: string);
     procedure LoadSessionsFromDisk;
     function GetOrCreateAgent(AType: TAgentType): TAgent;
   public
@@ -53,7 +54,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils, uACPClient, FMX.Dialogs, uFileExplorer, Winapi.ShellAPI;
+  System.IOUtils, uACPClient, FMX.Dialogs, uFileExplorer, Winapi.ShellAPI, uFileViewer;
 
 { TAgentTypeHelper }
 
@@ -76,6 +77,7 @@ begin
   FAgents := TDictionary<TAgentType, TAgent>.Create;
   FUIControl := TUIControl.Create;
   FUIControl.OnOpenExplorer := DoOpenExplorer;
+  FUIControl.OnOpenFileViewer := DoOpenFileViewer;
   FAgentControl := TAgentControl.Create(WebBrowserMain, FSessionMgr);
   FAgentControl.OnNewChat := DoNewChat;
 end;
@@ -100,6 +102,26 @@ begin
     frmFileExplorer.Explore(LPath);
     
   frmFileExplorer.Show;
+end;
+
+procedure TS.DoOpenFileViewer(Sender: TObject; const APath: string);
+var
+  LFullPath: string;
+  LActive: TSessionInfo;
+begin
+  LFullPath := APath;
+  if not TPath.IsPathRooted(LFullPath) then
+  begin
+    LActive := FSessionMgr.ActiveSession;
+    if Assigned(LActive) and (LActive.Cwd <> '') then
+      LFullPath := TPath.Combine(LActive.Cwd, APath);
+  end;
+
+  if not Assigned(frmFileViewer) then
+    frmFileViewer := TfrmFileViewer.Create(Application);
+    
+  frmFileViewer.ViewFile(LFullPath);
+  frmFileViewer.Show;
 end;
 
 function TS.GetOrCreateAgent(AType: TAgentType): TAgent;
@@ -227,10 +249,21 @@ var
   LRole, LActualText, LStopReason: string;
   LSessionInfo, LFound: TSessionInfo;
   LSessions: TList<TSessionInfo>;
+  LIdx: Integer;
 begin
   LRole := 'ai'; LActualText := FullText;
   LStopReason := '';
-  
+
+  if LActualText.StartsWith('USER:') then 
+  begin 
+    LRole := 'user'; 
+    LActualText := LActualText.Substring(5); 
+  end;
+
+  LIdx := LActualText.IndexOf('--- Content from');
+  if LIdx >= 0 then
+    LActualText := LActualText.Substring(0, LIdx).Trim;
+
   LFound := nil;
   if Assigned(FSessionMgr) then begin
     LSessions := FSessionMgr.GetSessionListSnapshot;

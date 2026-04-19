@@ -400,7 +400,18 @@
                     let rendered = content;
                     // FIX: Stylize @filename patterns as Pill UI
                     rendered = rendered.replace(/(@(?:"[^"]+"|[^\s\xa0\n]+))/g, (match) => {
-                        return `<span class="text-primary font-medium px-1.5 py-0.5 bg-primary/10 rounded mx-0.5" contenteditable="false">${match}</span>`;
+                        let rawPath = match.substring(1).replace(/(^"|"$)/g, '');
+                        let displayPath = rawPath;
+                        let fullPath = rawPath;
+                        
+                        if (rawPath.startsWith('file:///')) {
+                            fullPath = decodeURIComponent(rawPath.substring(8));
+                            let lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+                            displayPath = fullPath.substring(lastSlash + 1);
+                        }
+                        
+                        let safeFullPath = encodeURIComponent(fullPath);
+                        return `<span class="text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors" contenteditable="false" onclick="window.sendUi('open-file-viewer?path=' + '${safeFullPath}')">@${displayPath}</span>`;
                     });
 
                     if (window.marked) targetDiv.innerHTML = marked.parse(rendered);
@@ -564,7 +575,9 @@
             applyCommand: (name) => { window.ACP.replaceTriggerRange('/', '/' + name); window.ACP.showCommands(false); },
             applyFile: (path) => { 
                 const pill = document.createElement('span');
-                pill.className = 'text-primary font-medium px-1.5 py-0.5 bg-primary/10 rounded mx-0.5';
+                let safeFullPath = encodeURIComponent(path);
+                pill.className = 'text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors';
+                pill.setAttribute('onclick', `window.sendUi('open-file-viewer?path=' + '${safeFullPath}')`);
                 pill.contentEditable = 'false'; 
                 const label = path.includes(' ') ? `@"${path}"` : `@${path}`;
                 pill.innerText = label;

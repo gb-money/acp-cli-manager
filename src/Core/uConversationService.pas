@@ -93,6 +93,16 @@ begin
         LBase.Free;
       end;
     end;
+
+    // Apply CleanContent AFTER all chunks have been assembled into full messages
+    for I := 0 to Result.Count - 1 do
+    begin
+      if Result.Items[I].Typ = jdtObject then
+      begin
+        Result.O[I].S['content'] := CleanContent(Result.O[I].S['content']);
+      end;
+    end;
+    
   finally
     LLines.Free;
   end;
@@ -101,7 +111,7 @@ end;
 class procedure TConversationService.ProcessLogEntry(ALogEntry: TJsonObject; LMessages: TJsonArray; var LLastMsg: TJsonObject);
 var
   LEntryData, LParamsObj, LUpdateObj, LResObj: TJsonObject;
-  LUpdateType, LChunkText, LRole, LPrompt, LUri, LFileName: string;
+  LUpdateType, LChunkText, LRole, LPrompt, LUri: string;
   K: Integer;
 begin
   if (ALogEntry = nil) or not ALogEntry.Contains('data') then Exit;
@@ -117,7 +127,7 @@ begin
     if LParamsObj.IndexOf('prompt') >= 0 then
     begin
       case LParamsObj.Items[LParamsObj.IndexOf('prompt')].Typ of
-        jdtString: LLastMsg.S['content'] := CleanContent(LParamsObj.S['prompt']);
+        jdtString: LLastMsg.S['content'] := LParamsObj.S['prompt'];
         jdtArray: 
         begin
           LPrompt := '';
@@ -131,13 +141,11 @@ begin
               else if LResObj.S['type'] = 'resource' then
               begin
                 LUri := LResObj.O['resource'].S['uri'];
-                LUri := LUri.Replace('file:///', '').Replace('/', PathDelim);
-                LFileName := TPath.GetFileName(LUri);
-                LPrompt := LPrompt + '@' + LFileName;
+                LPrompt := LPrompt + '@"' + LUri + '" ';
               end;
             end;
           end;
-          LLastMsg.S['content'] := CleanContent(LPrompt);
+          LLastMsg.S['content'] := LPrompt;
         end;
       end;
     end;
@@ -180,9 +188,6 @@ begin
 
         if LChunkText <> '' then
         begin
-          LChunkText := CleanContent(LChunkText);
-          if LChunkText = '' then Exit;
-
           if (LUpdateType <> 'full_message') and Assigned(LLastMsg) and (LLastMsg.S['role'] = LRole) then
             LLastMsg.S['content'] := LLastMsg.S['content'] + LChunkText
           else

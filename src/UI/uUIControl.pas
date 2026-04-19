@@ -7,18 +7,22 @@ uses
 
 type
   TOpenExplorerEvent = procedure(Sender: TObject) of object;
+  TOpenFileViewerEvent = procedure(Sender: TObject; const APath: string) of object;
 
   TUIControl = class
   private
     FCommandHandler: TWebACPCommandHandler;
     FOnOpenExplorer: TOpenExplorerEvent;
+    FOnOpenFileViewer: TOpenFileViewerEvent;
     procedure HandleInternalCommand(Sender: TObject; const Action: string; const Params: TDictionary<string, string>);
     procedure HandleOpenExplorer(const Params: TDictionary<string, string>);
+    procedure HandleOpenFileViewer(const Params: TDictionary<string, string>);
   public
     constructor Create;
     destructor Destroy; override;
     function HandleRequest(const AUrl: string): Boolean;
     property OnOpenExplorer: TOpenExplorerEvent read FOnOpenExplorer write FOnOpenExplorer;
+    property OnOpenFileViewer: TOpenFileViewerEvent read FOnOpenFileViewer write FOnOpenFileViewer;
   end;
 
 implementation
@@ -42,13 +46,23 @@ end;
 
 procedure TUIControl.HandleInternalCommand(Sender: TObject; const Action: string; const Params: TDictionary<string, string>);
 begin
-  if Action = 'open-explorer' then HandleOpenExplorer(Params);
+  if Action = 'open-explorer' then HandleOpenExplorer(Params)
+  else if Action = 'open-file-viewer' then HandleOpenFileViewer(Params);
 end;
 
 procedure TUIControl.HandleOpenExplorer(const Params: TDictionary<string, string>);
 begin
   if Assigned(FOnOpenExplorer) then
     FOnOpenExplorer(Self);
+end;
+
+procedure TUIControl.HandleOpenFileViewer(const Params: TDictionary<string, string>);
+var
+  LPath: string;
+begin
+  if Params.TryGetValue('path', LPath) then
+    if Assigned(FOnOpenFileViewer) then
+      FOnOpenFileViewer(Self, LPath);
 end;
 
 end.
