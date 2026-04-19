@@ -18,6 +18,8 @@ uses
   uGeminiAgent in 'src\Agents\Gemini\uGeminiAgent.pas',
   uFileExplorer in 'src\UI\uFileExplorer.pas' {frmFileExplorer},
   uExplorerControl in 'src\UI\uExplorerControl.pas',
+  uFileViewer in 'src\UI\uFileViewer.pas' {frmFileViewer},
+  uFileViewerControl in 'src\UI\uFileViewerControl.pas',
   uUIControl in 'src\UI\uUIControl.pas',
   JsonDataObjects in 'src\modules\JsonDataObjects\Source\JsonDataObjects.pas';
 

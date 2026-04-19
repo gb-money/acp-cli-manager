@@ -7,34 +7,16 @@
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-    
-    <!-- PrismJS Assets -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism-tomorrow.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
-    
-    <!-- GitHub Markdown CSS (for Markdown rendering) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.1/github-markdown-dark.min.css">
-
     <script>
         tailwind.config = {
             darkMode: "class",
             theme: {
                 extend: {
-                    colors: {
-                        "background": "#0e0e0e",
-                        "surface": "#0e0e0e",
-                        "on-surface": "#ffffff",
-                        "primary": "#3fff8b",
-                        "surface-container-highest": "#262626",
-                        "surface-container-low": "#131313",
-                        "outline-variant": "#484847",
-                        "on-surface-variant": "#adaaaa",
-                    },
-                    fontFamily: {
-                        mono: ["'Fira Code'", "monospace"],
-                        headline: ["Manrope", "sans-serif"],
-                        body: ["Inter", "sans-serif"]
-                    }
+                    colors: { "background": "#0e0e0e", "surface": "#0e0e0e", "on-surface": "#ffffff", "primary": "#3fff8b", "surface-container-highest": "#262626", "surface-container-low": "#131313", "outline-variant": "#484847", "on-surface-variant": "#adaaaa" },
+                    fontFamily: { mono: ["'Fira Code'", "monospace"], headline: ["Manrope", "sans-serif"], body: ["Inter", "sans-serif"] }
                 }
             }
         }
@@ -42,134 +24,60 @@
     <style>
         .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-thumb { background: #262626; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #484847; }
-        
-        pre[class*="language-"] {
-            margin: 0 !important;
-            padding: 1.5rem !important;
-            background: transparent !important;
-            height: 100%;
-        }
-        code[class*="language-"] {
-            font-family: 'Fira Code', monospace !important;
-            font-size: 0.875rem !important;
-        }
-
-        .markdown-body {
-            background-color: transparent !important;
-            padding: 2rem;
-            font-family: 'Inter', sans-serif;
-        }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #444; }
+        pre[class*="language-"] { margin: 0 !important; padding: 1.5rem !important; background: transparent !important; height: 100%; }
+        code[class*="language-"] { font-family: 'Fira Code', monospace !important; font-size: 0.875rem !important; }
+        .markdown-body { background-color: transparent !important; padding: 2rem; font-family: 'Inter', sans-serif; }
         .hidden { display: none !important; }
     </style>
 </head>
 <body class="bg-surface text-on-surface font-body h-screen flex flex-col overflow-hidden antialiased">
-    
-    <!-- Header -->
     <header class="h-14 flex items-center justify-between px-6 bg-surface/80 backdrop-blur-md border-b border-outline-variant/10 shrink-0">
         <div class="flex items-center gap-4">
             <span id="fileIcon" class="material-symbols-outlined text-primary text-xl">description</span>
-            <div>
-                <h2 id="fileName" class="font-headline font-semibold text-sm tracking-tight">Select a file</h2>
-                <p id="filePath" class="text-[10px] text-on-surface-variant font-mono">No file selected</p>
-            </div>
+            <div><h2 id="fileName" class="font-headline font-semibold text-sm tracking-tight">Select a file</h2><p id="filePath" class="text-[10px] text-on-surface-variant font-mono">No file selected</p></div>
         </div>
-        <div id="fileInfo" class="text-[11px] text-on-surface-variant"></div>
     </header>
-
-    <!-- Content Area -->
     <main class="flex-1 overflow-hidden relative">
-        <!-- Code Viewer -->
-        <div id="codeViewer" class="absolute inset-0 overflow-auto hidden">
-            <pre id="codeContainer" class="line-numbers"><code id="codeElement"></code></pre>
-        </div>
-
-        <!-- Markdown Viewer -->
-        <div id="markdownViewer" class="absolute inset-0 overflow-auto hidden">
-            <div id="markdownContent" class="markdown-body"></div>
-        </div>
-
-        <!-- Empty State -->
+        <div id="codeViewer" class="absolute inset-0 overflow-auto hidden"><pre id="codeContainer" class="line-numbers"><code id="codeElement"></code></pre></div>
+        <div id="markdownViewer" class="absolute inset-0 overflow-auto hidden"><div id="markdownContent" class="markdown-body"></div></div>
         <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center bg-surface z-20">
-            <div class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center border border-outline-variant/20 mb-4">
-                <span class="material-symbols-outlined text-primary text-3xl">terminal</span>
-            </div>
+            <div class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center border border-outline-variant/20 mb-4"><span class="material-symbols-outlined text-primary text-3xl">terminal</span></div>
             <p class="text-sm text-on-surface-variant">Select a file to view its content.</p>
         </div>
     </main>
-
-    <!-- JS Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-pascal.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    
     <script>
         const Viewer = {
             loadFile: (filename, path, content) => {
                 document.getElementById('emptyState').classList.add('hidden');
                 document.getElementById('fileName').innerText = filename;
                 document.getElementById('filePath').innerText = path;
-                
                 const ext = filename.split('.').pop().toLowerCase();
-                
-                if (ext === 'md') {
-                    this.showMarkdown(content);
-                } else {
-                    this.showCode(content, ext);
-                }
+                if (ext === 'md') { Viewer.showMarkdown(content); } 
+                else { Viewer.showCode(content, ext); }
             },
-
             showCode: (content, ext) => {
-                const cv = document.getElementById('codeViewer');
-                const mv = document.getElementById('markdownViewer');
-                const codeEl = document.getElementById('codeElement');
-                
-                cv.classList.remove('hidden');
-                mv.classList.add('hidden');
-                
-                // Extension mapping
-                const langMap = {
-                    'pas': 'pascal',
-                    'dfm': 'pascal',
-                    'fmx': 'pascal',
-                    'dpr': 'pascal',
-                    'ts': 'typescript',
-                    'js': 'javascript',
-                    'html': 'markup',
-                    'css': 'css',
-                    'json': 'json'
-                };
-                
+                const cv = document.getElementById('codeViewer'); const mv = document.getElementById('markdownViewer'); const codeEl = document.getElementById('codeElement');
+                cv.classList.remove('hidden'); mv.classList.add('hidden');
+                const langMap = { 'pas': 'pascal', 'dfm': 'pascal', 'fmx': 'pascal', 'dpr': 'pascal', 'ts': 'typescript', 'js': 'javascript', 'html': 'markup', 'css': 'css', 'json': 'json' };
                 const lang = langMap[ext] || 'clike';
-                codeEl.className = `language-${lang}`;
-                codeEl.textContent = content;
-                
-                Prism.highlightElement(codeEl);
+                codeEl.className = `language-${lang}`; codeEl.textContent = content; Prism.highlightElement(codeEl);
             },
-
             showMarkdown: (content) => {
-                const cv = document.getElementById('codeViewer');
-                const mv = document.getElementById('markdownViewer');
-                const mdContent = document.getElementById('markdownContent');
-                
-                cv.classList.add('hidden');
-                mv.classList.remove('hidden');
-                
-                mdContent.innerHTML = marked.parse(content);
-                document.getElementById('fileIcon').innerText = 'article';
+                const cv = document.getElementById('codeViewer'); const mv = document.getElementById('markdownViewer'); const mdContent = document.getElementById('markdownContent');
+                cv.classList.add('hidden'); mv.classList.remove('hidden');
+                mdContent.innerHTML = marked.parse(content); document.getElementById('fileIcon').innerText = 'article';
             }
         };
-
         window.ACP_FILE_VIEWER = Viewer;
-
-        // --- Delphi Integration Test (Optionally) ---
-        // ViewerAPI.loadFile('README.md', 'C:/Projects/README.md', '# Hello World\nThis is a test.');
     </script>
 </body>
 </html>

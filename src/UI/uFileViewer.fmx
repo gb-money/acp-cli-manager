@@ -3,23 +3,22 @@ object frmFileViewer: TfrmFileViewer
   Top = 0
   Caption = 'File Viewer'
   ClientHeight = 800
-  ClientWidth = 900
-  Fill.Color = xCC000000
-  Fill.Kind = Solid
+  ClientWidth = 1200
   FormFactor.Width = 320
   FormFactor.Height = 480
   FormFactor.Devices = [Desktop]
   OnCreate = FormCreate
   OnShow = FormShow
   OnClose = FormClose
+  OnDestroy = FormDestroy
   DesignerMasterStyle = 0
   object WebBrowserMain: TWebBrowser
-    Align = Contents
-    Size.Width = 900.000000000000000000
+    Align = Client
+    Size.Width = 1200.000000000000000000
     Size.Height = 800.000000000000000000
     Size.PlatformDefault = False
-    WindowsEngine = EdgeIfAvailable
-    OnShouldStartLoadWithRequest = WebBrowserMainShouldStartLoadWithRequest
+    WindowsEngine = EdgeOnly
     OnDidFinishLoad = WebBrowserMainDidFinishLoad
+    OnShouldStartLoadWithRequest = WebBrowserMainShouldStartLoadWithRequest
   end
 end

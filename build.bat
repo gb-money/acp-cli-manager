@@ -20,6 +20,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo Copying HTML Files...
 copy /Y "src\UI\index.html" "Win32\Debug\index.html"
 copy /Y "src\UI\explorer.html" "Win32\Debug\explorer.html"
+copy /Y "src\UI\file_viewer.html" "Win32\Debug\file_viewer.html"
 
 echo Syncing Assets Folder...
 if not exist "Win32\Debug\assets" mkdir "Win32\Debug\assets"

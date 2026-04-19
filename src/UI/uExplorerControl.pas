@@ -7,10 +7,13 @@ uses
   System.NetEncoding, JsonDataObjects;
 
 type
+  TViewFileEvent = procedure(Sender: TObject; const APath: string) of object;
+
   TExplorerControl = class
   private
     FWebBrowser: TWebBrowser;
     FCurrentPath: string;
+    FOnViewFile: TViewFileEvent;
     procedure HandleOpen(const AParams: string);
     procedure HandleGetPreview(const AParams: string);
     procedure HandleViewExternal(const AParams: string);
@@ -22,6 +25,7 @@ type
     function HandleRequest(const AUrl: string): Boolean;
     procedure UpdateFileList(const APath: string);
     property CurrentPath: string read FCurrentPath write FCurrentPath;
+    property OnViewFile: TViewFileEvent read FOnViewFile write FOnViewFile;
   end;
 
 implementation
@@ -119,7 +123,6 @@ begin
     try
       LContent := TFile.ReadAllText(LPath, TEncoding.UTF8);
       LExt := TPath.GetExtension(LPath).Replace('.', '').ToLower;
-      // JS로 내용 전달 (Escape 처리 필요할 수 있음 - 여기서는 ToJSON 활용 권장하나 단순 텍스트로 전달)
       FWebBrowser.EvaluateJavaScript(Format('window.ACP_EXPLORER.setPreviewContent(%s, "%s")', 
         [TJsonObject.Parse('"' + LContent.Replace('\', '\\').Replace('"', '\"').Replace(#13, '\r').Replace(#10, '\n') + '"').ToJSON, LExt]));
     except
@@ -133,7 +136,8 @@ var
   LPath: string;
 begin
   LPath := GetParamValue(AParams, 'path');
-  // TODO: 외부 폼 오픈 로직 호출 (이벤트 등을 통해 처리)
+  if (LPath <> '') and Assigned(FOnViewFile) then
+    FOnViewFile(Self, LPath);
 end;
 
 procedure TExplorerControl.HandleRefresh;
@@ -147,7 +151,6 @@ var
   LFileArray: TJsonArray;
   LDirs, LFiles: TStringDynArray;
   S: string;
-  LAttr: TFileAttributes;
   LSize: Int64;
   LTime: TDateTime;
 begin
@@ -157,8 +160,6 @@ begin
   LRootObj := TJsonObject.Create;
   try
     LFileArray := LRootObj.A['files'];
-    
-    // 디렉토리 목록
     LDirs := TDirectory.GetDirectories(APath);
     for S in LDirs do
     begin
@@ -170,7 +171,6 @@ begin
       LFileObj.S['type'] := 'File folder';
     end;
 
-    // 파일 목록
     LFiles := TDirectory.GetFiles(APath);
     for S in LFiles do
     begin
@@ -178,12 +178,9 @@ begin
       LFileObj.S['name'] := TPath.GetFileName(S);
       LFileObj.S['path'] := S;
       LFileObj.B['isDir'] := False;
-      
       LTime := TFile.GetLastWriteTime(S);
       LFileObj.S['date'] := DateTimeToStr(LTime);
       LFileObj.S['type'] := TPath.GetExtension(S).ToUpper.Replace('.', '') + ' File';
-      
-      // 파일 크기 계산
       try
         LSize := TFile.GetSize(S);
         LFileObj.S['size'] := FormatSize(LSize);

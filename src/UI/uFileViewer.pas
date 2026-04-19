@@ -15,6 +15,7 @@ type
     procedure WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
     procedure WebBrowserMainDidFinishLoad(ASender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure FormDestroy(Sender: TObject);
   private
     FViewerCtrl: TFileViewerControl;
     FInitialized: Boolean;
@@ -39,10 +40,14 @@ begin
   FViewerCtrl := TFileViewerControl.Create(WebBrowserMain);
 end;
 
+procedure TfrmFileViewer.FormDestroy(Sender: TObject);
+begin
+  FViewerCtrl.Free;
+  frmFileViewer := nil;
+end;
+
 procedure TfrmFileViewer.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
-  // 창을 닫을 때 메모리 해제 및 액션 설정 (Free를 할지 Hide를 할지 선택 가능)
-  // 여기서는 동적 생성 시나리오를 위해 Free로 설정
   Action := TCloseAction.caFree;
 end;
 
@@ -78,9 +83,13 @@ end;
 
 procedure TfrmFileViewer.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
+  if URL.StartsWith('file://', True) then Exit;
+  
   if FViewerCtrl.HandleRequest(URL) then
-    // 커스텀 액션인 경우 내비게이션 중단
-    ;
+    Exit;
+
+  // Block any external navigation (http, https, etc.)
+  WebBrowserMain.Stop;
 end;
 
 end.

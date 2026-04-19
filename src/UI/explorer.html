@@ -102,24 +102,27 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-pascal.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     <script>
+        function sendExplorerAction(url) {
+            const finalUrl = url.startsWith('explorer-action://') ? url : 'explorer-action://' + url;
+            let iframe = document.getElementById('explorer-comm-frame');
+            if (!iframe) {
+                iframe = document.createElement('iframe'); iframe.id = 'explorer-comm-frame';
+                iframe.style.display = 'none'; document.body.appendChild(iframe);
+            }
+            iframe.src = finalUrl + (finalUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+        }
         const Explorer = {
             currentPath: '', currentView: 'grid', currentData: [], historyStack: [], forwardStack: [], sortKey: 'name', sortOrder: 'asc', selectedPath: null, searchQuery: '', isInternalNav: false,
             updateFileList(json) {
                 const data = typeof json === 'string' ? JSON.parse(json) : json;
                 this.currentData = (data.files || []).map(f => ({ ...f, selected: false }));
                 const newPath = data.currentPath || (this.currentData.length > 0 ? this.currentData[0].path.split(/[\\\/]/).slice(0,-1).join('\\') : '');
-                
                 if (newPath && newPath !== this.currentPath) {
-                    if (this.isInternalNav) {
-                        this.isInternalNav = false;
-                    } else {
-                        if (this.currentPath) {
-                            this.historyStack.push(this.currentPath);
-                            this.forwardStack = [];
-                        }
-                    }
+                    if (this.isInternalNav) { this.isInternalNav = false; } 
+                    else { if (this.currentPath) { this.historyStack.push(this.currentPath); this.forwardStack = []; } }
                     this.currentPath = newPath;
                 }
                 this.updateUI(); this.render();
@@ -130,20 +133,10 @@
                 document.getElementById('btn-back').disabled = this.historyStack.length === 0;
                 document.getElementById('btn-forward').disabled = this.forwardStack.length === 0;
             },
-            goBack() { 
-                if (this.historyStack.length === 0) return; 
-                this.isInternalNav = true;
-                this.forwardStack.push(this.currentPath); 
-                this.navigateTo(this.historyStack.pop()); 
-            },
-            goForward() { 
-                if (this.forwardStack.length === 0) return; 
-                this.isInternalNav = true;
-                this.historyStack.push(this.currentPath); 
-                this.navigateTo(this.forwardStack.pop()); 
-            },
+            goBack() { if (this.historyStack.length === 0) return; this.isInternalNav = true; this.forwardStack.push(this.currentPath); this.navigateTo(this.historyStack.pop()); },
+            goForward() { if (this.forwardStack.length === 0) return; this.isInternalNav = true; this.historyStack.push(this.currentPath); this.navigateTo(this.forwardStack.pop()); },
             goUp() { if (!this.currentPath) return; const parent = this.currentPath.split(/[\\\/]/).slice(0, -1).join('\\'); if (parent) this.navigateTo(parent); },
-            navigateTo(path) { window.location.href = `explorer-action://open?path=${encodeURIComponent(path)}&isDir=true`; },
+            navigateTo(path) { sendExplorerAction(`open?path=${encodeURIComponent(path)}&isDir=true`); },
             switchView(view) {
                 this.currentView = view;
                 document.getElementById('explorer-grid-view').classList.toggle('hidden', view !== 'grid');
@@ -161,35 +154,39 @@
                     const isSel = item.path === this.selectedPath;
                     const gItem = document.createElement('div');
                     gItem.className = `group flex flex-col items-center gap-3 p-3 rounded-xl transition-colors cursor-pointer ${isSel ? 'bg-surface-container-high ring-1 ring-primary/40' : 'hover:bg-surface-container-high'}`;
-                    gItem.onclick = (e) => this.onItemClick(item, e); gItem.ondblclick = () => this.navigateTo(item.path);
+                    gItem.onclick = (e) => Explorer.onItemClick(item, e); gItem.ondblclick = () => Explorer.onItemDoubleClick(item);
                     gItem.innerHTML = `<div class="w-16 h-16 bg-surface-container-highest rounded-lg flex items-center justify-center shadow-lg border border-outline-variant/10 group-hover:-translate-y-1 transition-all"><span class="material-symbols-outlined text-4xl ${item.isDir ? 'text-primary' : 'text-tertiary-fixed-dim'}" style="font-variation-settings: 'FILL' 1;">${item.isDir ? 'folder' : 'description'}</span></div><span class="text-xs font-medium text-center truncate w-full">${item.name}</span>`;
                     gridContainer.appendChild(gItem);
                     const row = document.createElement('tr');
                     row.className = `hover:bg-surface-container-highest transition-colors cursor-pointer ${isSel ? 'bg-surface-container-highest border-l-4 border-primary' : 'border-l-4 border-transparent'}`;
-                    row.onclick = (e) => this.onItemClick(item, e); row.ondblclick = () => this.navigateTo(item.path);
+                    row.onclick = (e) => Explorer.onItemClick(item, e); row.ondblclick = () => Explorer.onItemDoubleClick(item);
                     row.innerHTML = `<td class="px-6 py-3 text-center"><input type="checkbox" class="rounded border-outline-variant/30 bg-surface-container-lowest text-primary"/></td><td class="px-6 py-3"><div class="flex items-center gap-3"><span class="material-symbols-outlined ${item.isDir ? 'text-primary' : 'text-secondary'}" style="font-variation-settings: 'FILL' 1;">${item.isDir ? 'folder' : 'description'}</span><span>${item.name}</span></div></td><td class="px-6 py-3 text-xs opacity-60">${item.date}</td><td class="px-6 py-3 text-xs opacity-60">${item.type}</td><td class="px-6 py-3 text-right text-xs opacity-60">${item.size || '--'}</td>`;
                     listBody.appendChild(row);
                 });
                 document.getElementById('status-bar-info').innerText = `${filtered.length} items`;
             },
             onItemClick(item, e) {
-                this.selectedPath = item.path; this.render();
+                Explorer.selectedPath = item.path; Explorer.render();
                 if (!item.isDir) {
                     document.getElementById('explorer-main').classList.add('split');
                     document.getElementById('preview-pane').classList.add('active');
                     document.getElementById('preview-filename').innerText = item.name;
-                    window.location.href = `explorer-action://get-preview?path=${encodeURIComponent(item.path)}`;
-                }
+                    sendExplorerAction(`get-preview?path=${encodeURIComponent(item.path)}`);
+                } else { Explorer.closePreview(); }
+            },
+            onItemDoubleClick(item) {
+                if (item.isDir) { Explorer.navigateTo(item.path); } 
+                else { sendExplorerAction(`view-external?path=${encodeURIComponent(item.path)}`); }
             },
             setPreviewContent(content, ext) {
                 const codeEl = document.getElementById('preview-code-element');
                 const langMap = { 'pas': 'pascal', 'ts': 'typescript', 'json': 'json', 'js': 'javascript' };
                 codeEl.className = `language-${langMap[ext] || 'clike'}`; codeEl.textContent = content; Prism.highlightElement(codeEl);
             },
-            closePreview() { document.getElementById('explorer-main').classList.remove('split'); document.getElementById('preview-pane').classList.remove('active'); this.selectedPath = null; this.render(); },
+            closePreview() { document.getElementById('explorer-main').classList.remove('split'); document.getElementById('preview-pane').classList.remove('active'); Explorer.selectedPath = null; Explorer.render(); },
             toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); },
-            refresh() { window.location.href = `explorer-action://refresh`; },
-            sortBy(key) { if (this.sortKey === key) this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc'; else { this.sortKey = key; this.sortOrder = 'asc'; } this.render(); },
+            refresh() { sendExplorerAction(`refresh`); },
+            sortBy(key) { if (Explorer.sortKey === key) Explorer.sortOrder = Explorer.sortOrder === 'asc' ? 'desc' : 'asc'; else { Explorer.sortKey = key; Explorer.sortOrder = 'asc'; } Explorer.render(); },
             toggleAll(checked) { /* Logic for bulk selection */ }
         };
         window.ACP_EXPLORER = Explorer;

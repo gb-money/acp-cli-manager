@@ -181,11 +181,16 @@ end;
 
 procedure TS.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
+  if URL.StartsWith('file://', True) then Exit;
+
   if Assigned(FUIControl) and FUIControl.HandleRequest(URL) then
     Exit;
     
-  if Assigned(FAgentControl) then
-    FAgentControl.HandleRequest(URL);
+  if Assigned(FAgentControl) and FAgentControl.HandleRequest(URL) then
+    Exit;
+
+  // Block any external browsing in the main window
+  WebBrowserMain.Stop;
 end;
 
 procedure TS.DoResponse(Sender: TObject; const SessionId, Text: string);

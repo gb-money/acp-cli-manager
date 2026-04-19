@@ -20,6 +20,7 @@ type
     FExplorerCtrl: TExplorerControl;
     FInitialized: Boolean;
     FInitialPath: string;
+    procedure DoViewFile(Sender: TObject; const APath: string);
   public
     procedure Explore(const APath: string);
   end;
@@ -32,12 +33,22 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils;
+  System.IOUtils, uFileViewer;
 
 procedure TfrmFileExplorer.FormCreate(Sender: TObject);
 begin
   FInitialized := False;
   FExplorerCtrl := TExplorerControl.Create(WebBrowserMain);
+  FExplorerCtrl.OnViewFile := DoViewFile;
+end;
+
+procedure TfrmFileExplorer.DoViewFile(Sender: TObject; const APath: string);
+begin
+  if not Assigned(frmFileViewer) then
+    frmFileViewer := TfrmFileViewer.Create(Application);
+    
+  frmFileViewer.ViewFile(APath);
+  frmFileViewer.Show;
 end;
 
 procedure TfrmFileExplorer.FormDestroy(Sender: TObject);
@@ -82,9 +93,13 @@ end;
 
 procedure TfrmFileExplorer.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
+  if URL.StartsWith('file://', True) then Exit;
+
   if FExplorerCtrl.HandleRequest(URL) then
-    // 브라우저 내부 내비게이션 중단 (커스텀 액션인 경우)
-    ;
+    Exit;
+
+  // Block any external navigation
+  WebBrowserMain.Stop;
 end;
 
 end.
