@@ -131,7 +131,11 @@
             },
             toggleHistory: () => {
                 const sidebar = document.getElementById('historySidebar');
-                if (sidebar) sidebar.classList.toggle('hidden');
+                if (sidebar) {
+                    const isHidden = sidebar.classList.contains('hidden');
+                    if (isHidden) window.sendAcp('get-file-history');
+                    sidebar.classList.toggle('hidden');
+                }
             },
 
             showProcessing: (show) => {
@@ -164,10 +168,15 @@
                 const input = document.getElementById('userInput');
                 const text = input.innerText.trim();
                 if (text) {
-                    window.ACP.addMessageToUI('me', text);
                     input.innerHTML = '';
-                    window.ACP.lastAiMsgId = ''; window.ACP.lastAiThoughtId = null; window.ACP.lastBlockType = ''; window.ACP.lastMessageRole = '';
+                    window.ACP.lastAiMsgId = ''; 
+                    window.ACP.lastAiThoughtId = null; 
+                    window.ACP.lastBlockType = ''; 
+                    window.ACP.lastMessageRole = '';
                     window.ACP.accumulatedThought = '';
+                    
+                    window.ACP.streamMessage({content: text, role: 'user', stopReason: ''});
+                    
                     window.ACP.showProcessing(true);
                     window.sendAcp('send-message?text=' + encodeURIComponent(text));
                 }
@@ -411,7 +420,7 @@
                         }
                         
                         let safeFullPath = encodeURIComponent(fullPath);
-                        return `<span class="text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors" contenteditable="false" onclick="window.sendUi('open-file-viewer?path=' + '${safeFullPath}')">@${displayPath}</span>`;
+                        return `<span class="text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors" contenteditable="false" onclick="if(event.detail===1){window.sendUi('open-file-viewer?path=' + '${safeFullPath}')}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}">@${displayPath}</span>`;
                     });
 
                     if (window.marked) targetDiv.innerHTML = marked.parse(rendered);
@@ -446,6 +455,75 @@
                     const outer = document.getElementById('mainChatCanvas');
                     outer.scrollTop = outer.scrollHeight;
                 } catch (e) { console.error('Permission render error:', e); }
+            },
+
+            updateFileHistoryBase64: (base64) => {
+                try {
+                    const binary = window.atob(base64);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    const json = new TextDecoder().decode(bytes);
+                    const history = JSON.parse(json);
+                    
+                    const container = document.getElementById('fileHistoryContainer');
+                    if (!container) return;
+                    
+                    if (!history || history.length === 0) {
+                        container.innerHTML = '<div class="p-8 text-center text-xs text-on-surface-variant italic opacity-30">No history available</div>';
+                        return;
+                    }
+                    
+                    // Group by filename
+                    const grouped = {};
+                    history.forEach(item => {
+                        const file = item.path.split(/[\/\\]/).pop();
+                        if (!grouped[file]) grouped[file] = { path: item.path, entries: [] };
+                        grouped[file].entries.push(item);
+                    });
+                    
+                    container.innerHTML = Object.keys(grouped).map(file => {
+                        const data = grouped[file];
+                        const lastTime = data.entries[0].timestamp.split(' ')[1]; // Assuming sorted desc
+                        const isTarget = false;
+                        const expandClass = 'hidden';
+                        const chevronIcon = 'chevron_right';
+                        const entriesHtml = data.entries.map((e, idx) => {
+                            const time = e.timestamp.split(' ')[1];
+                            const isFirst = idx === 0;
+                            const colorClass = isFirst ? 'bg-primary' : 'bg-on-surface-variant';
+                            const safePath = encodeURIComponent(e.path);
+                            return `
+                                <div class="relative cursor-pointer hover:bg-white/5 p-1 rounded" onclick="window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=${safePath}&hashId=${e.id}')">
+                                    <span class="absolute -left-[21px] top-2 w-2 h-2 rounded-full ${colorClass} border-2 border-surface-container-low"></span>
+                                    <p class="text-xs text-on-surface hover:text-primary transition-colors">Diff: ${e.id || 'Snap'}</p>
+                                    <p class="text-[10px] text-on-surface-variant font-mono mt-0.5">${time}</p>
+                                </div>
+                            `;
+                        }).join('');
+                        
+                        const safeDataPath = encodeURIComponent(data.path);
+                        return `
+                            <div class="bg-surface-container rounded-xl border border-outline-variant/10 overflow-hidden mb-2 select-none">
+                                <div onclick="this.nextElementSibling.classList.toggle('hidden'); const icon = this.querySelector('.chevron'); icon.innerText = icon.innerText === 'expand_more' ? 'chevron_right' : 'expand_more';" 
+                                     ondblclick="window.sendUi('open-file-viewer?path=${safeDataPath}')"
+                                     class="p-3 flex items-start gap-3 cursor-pointer hover:bg-surface-container-high transition-colors">
+                                    <span class="material-symbols-outlined text-primary mt-0.5 text-[18px]">description</span>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium ${isTarget ? 'text-primary' : 'text-on-surface'} truncate" title="${data.path}">${file}</p>
+                                        <p class="text-xs text-on-surface-variant mt-0.5">Last Modified ${lastTime}</p>
+                                    </div>
+                                    <span class="material-symbols-outlined text-on-surface-variant text-[16px] chevron">${chevronIcon}</span>
+                                </div>
+                                <div class="${expandClass} px-4 pb-3 pt-1 border-t border-outline-variant/5 bg-surface-container-low/50">
+                                    <div class="relative pl-4 mt-2 space-y-3 before:absolute before:inset-y-0 before:left-[7px] before:w-px before:bg-outline-variant/20">
+                                        ${entriesHtml}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                } catch (e) { console.error('File History render error:', e); }
             },
 
             loadHistoryBase64: (base64) => {
@@ -577,13 +655,12 @@
                 const pill = document.createElement('span');
                 let safeFullPath = encodeURIComponent(path);
                 pill.className = 'text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors';
-                pill.setAttribute('onclick', `window.sendUi('open-file-viewer?path=' + '${safeFullPath}')`);
+                pill.setAttribute('onclick', `if(window.pillTimer) clearTimeout(window.pillTimer); if(event.detail===1){window.pillTimer=setTimeout(()=>window.sendUi('open-file-viewer?path=' + '${safeFullPath}'), 250);}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}`);
                 pill.contentEditable = 'false'; 
                 const label = path.includes(' ') ? `@"${path}"` : `@${path}`;
                 pill.innerText = label;
                 window.ACP.replaceTriggerRange('@', pill); window.ACP.showFiles(false);
-            },
-            setWorkspaceFiles: (files) => { window.ACP.workspaceFiles = files; },
+            },            setWorkspaceFiles: (files) => { window.ACP.workspaceFiles = files; },
             showTyping: (show) => { window.ACP.showProcessing(show); },
             parseStructuredPrompt: async (text) => { return text; }
         };

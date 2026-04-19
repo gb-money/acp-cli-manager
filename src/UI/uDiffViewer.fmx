@@ -12,6 +12,7 @@ object frmDiffViewer: TfrmDiffViewer
   OnCreate = FormCreate
   OnShow = FormShow
   OnClose = FormClose
+  OnDestroy = FormDestroy
   DesignerMasterStyle = 0
   object WebBrowserMain: TWebBrowser
     Align = Contents

@@ -5,7 +5,7 @@ interface
 uses
   System.SysUtils, System.Classes, FMX.WebBrowser, uSessionManager, uAgent,
   System.NetEncoding, FMX.Dialogs, System.Actions, FMX.ActnList, System.IOUtils,
-  System.UITypes, System.Generics.Collections, uWebACPCommandHandler;
+  System.UITypes, System.Generics.Collections, System.Generics.Defaults, uWebACPCommandHandler;
 
 type
   TNewChatEvent = procedure(Sender: TObject; const AgentName: string) of object;
@@ -31,6 +31,7 @@ type
     procedure HandleResumeSession(const Params: TDictionary<string, string>);
     procedure HandleGetFileContent(const Params: TDictionary<string, string>);
     procedure HandleOpenFileDialog(const Params: TDictionary<string, string>);
+    procedure HandleGetFileHistory(const Params: TDictionary<string, string>);
     function IsIgnoredDir(const ADirName: string): Boolean;
     function GetWorkspaceDisplayText(const ACwd: string): string;
   public
@@ -95,6 +96,7 @@ begin
   else if Action = 'cancel-prompt' then HandleCancelPrompt(Params)
   else if Action = 'get-file-content' then HandleGetFileContent(Params)
   else if Action = 'open-file-dialog' then HandleOpenFileDialog(Params)
+  else if Action = 'get-file-history' then HandleGetFileHistory(Params)
   else if Action = 'action' then HandleAction(Params);
 end;
 
@@ -158,6 +160,7 @@ begin
       var
         LInnerMsg: TJsonArray;
         LInnerJson: string;
+        LBytes: TBytes;
       begin
         if not Assigned(LTargetSession) then Exit;
         
@@ -165,8 +168,10 @@ begin
         LInnerMsg := TConversationService.GetConversationsBySessionId(LTargetSession);
         try
           LInnerJson := LInnerMsg.ToJSON(False);
-          LInnerJson := TNetEncoding.Base64.Encode(LInnerJson).Replace(#13, '').Replace(#10, '');
+          LBytes := TEncoding.UTF8.GetBytes(LInnerJson);
+          LInnerJson := TNetEncoding.Base64.EncodeBytesToString(LBytes).Replace(#13, '').Replace(#10, '');
           FWebBrowser.EvaluateJavaScript('window.ACP.loadHistoryBase64("' + LInnerJson + '")');
+          FWebBrowser.EvaluateJavaScript('if (document.getElementById("historySidebar") && !document.getElementById("historySidebar").classList.contains("hidden")) window.sendAcp("get-file-history");');
         finally
           LInnerMsg.Free;
         end;
@@ -308,6 +313,65 @@ begin
     end;
   finally
     LDialog.Free;
+  end;
+end;
+
+procedure TAgentControl.HandleGetFileHistory(const Params: TDictionary<string, string>);
+var
+  LActiveSession: TSessionInfo;
+  LFiles: TStringDynArray;
+  LPath, LJsonText: string;
+  LArray: TJsonArray;
+  LObj, LItem: TJsonObject;
+  LList: TList<TJsonObject>;
+  I: Integer;
+begin
+  LActiveSession := FSessionMgr.ActiveSession;
+  if not Assigned(LActiveSession) or (LActiveSession.DiffsPath = '') then Exit;
+
+  LArray := TJsonArray.Create;
+  LList := TList<TJsonObject>.Create;
+  try
+    if TDirectory.Exists(LActiveSession.DiffsPath) then
+    begin
+      LFiles := TDirectory.GetFiles(LActiveSession.DiffsPath, '*.json', TSearchOption.soTopDirectoryOnly);
+      for LPath in LFiles do
+      begin
+        try
+          LJsonText := TFile.ReadAllText(LPath, TEncoding.UTF8);
+          LObj := TJsonObject.Parse(LJsonText) as TJsonObject;
+          if Assigned(LObj) then LList.Add(LObj);
+        except
+        end;
+      end;
+      
+      // Sort by timestamp descending
+      LList.Sort(TComparer<TJsonObject>.Construct(
+        function(const Left, Right: TJsonObject): Integer
+        begin
+          Result := CompareText(Right.S['timestamp'], Left.S['timestamp']);
+        end));
+        
+      for I := 0 to LList.Count - 1 do
+      begin
+        LItem := LArray.AddObject;
+        LItem.Assign(LList[I]);
+      end;
+    end;
+    
+    // Send to UI
+    LJsonText := LArray.ToJSON(False);
+    System.Classes.TThread.Queue(nil, procedure
+    var
+      LBase64: string;
+    begin
+      LBase64 := TNetEncoding.Base64.Encode(LJsonText).Replace(#13, '').Replace(#10, '');
+      FWebBrowser.EvaluateJavaScript('window.ACP.updateFileHistoryBase64("' + LBase64 + '")');
+    end);
+  finally
+    for I := 0 to LList.Count - 1 do LList[I].Free;
+    LList.Free;
+    LArray.Free;
   end;
 end;
 

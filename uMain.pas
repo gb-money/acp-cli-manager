@@ -36,11 +36,13 @@ type
     procedure DoStateChange(Sender: TObject; const OldState, NewState: TAgentState);
     procedure DoMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
     procedure DoThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+    procedure DoFSWrite(Sender: TObject; const SessionId, Path, OldContent, NewContent: string);
     procedure DoRawData(Sender: TObject; const Direction, RawText: string);
     procedure DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
     procedure DoSessionMetadataUpdate(Sender: TObject; const SessionId: string);
     procedure DoOpenExplorer(Sender: TObject);
     procedure DoOpenFileViewer(Sender: TObject; const APath: string);
+    procedure DoOpenDiffViewer(Sender: TObject; const ASessionId, APath, AHashId: string);
     procedure LoadSessionsFromDisk;
     function GetOrCreateAgent(AType: TAgentType): TAgent;
   public
@@ -54,7 +56,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils, uACPClient, FMX.Dialogs, uFileExplorer, Winapi.ShellAPI, uFileViewer;
+  System.IOUtils, uACPClient, FMX.Dialogs, uFileExplorer, Winapi.ShellAPI, uFileViewer, uDiffViewer, System.RegularExpressions;
 
 { TAgentTypeHelper }
 
@@ -78,6 +80,7 @@ begin
   FUIControl := TUIControl.Create;
   FUIControl.OnOpenExplorer := DoOpenExplorer;
   FUIControl.OnOpenFileViewer := DoOpenFileViewer;
+  FUIControl.OnOpenDiffViewer := DoOpenDiffViewer;
   FAgentControl := TAgentControl.Create(WebBrowserMain, FSessionMgr);
   FAgentControl.OnNewChat := DoNewChat;
 end;
@@ -124,6 +127,15 @@ begin
   frmFileViewer.Show;
 end;
 
+procedure TS.DoOpenDiffViewer(Sender: TObject; const ASessionId, APath, AHashId: string);
+begin
+  if not Assigned(frmDiffViewer) then
+    frmDiffViewer := TfrmDiffViewer.Create(Application);
+    
+  frmDiffViewer.ViewDiffSession(FSessionMgr, ASessionId, APath, AHashId);
+  frmDiffViewer.Show;
+end;
+
 function TS.GetOrCreateAgent(AType: TAgentType): TAgent;
 var
   LAgent: TAgent;
@@ -139,6 +151,7 @@ begin
       LGemini.OnResponse := DoResponse;
       LGemini.OnMessageChunk := DoMessageChunk;
       LGemini.OnThoughtChunk := DoThoughtChunk;
+      LGemini.OnFSWrite := DoFSWrite;
       LGemini.OnRawData := DoRawData;
       LGemini.OnPermissionRequest := DoPermissionRequest;
       LGemini.OnSessionMetadataUpdate := DoSessionMetadataUpdate;
@@ -294,6 +307,27 @@ begin
     if Assigned(FAgentControl) then 
       FAgentControl.UpdateThoughtStreaming(SessionId, FullText); 
   end);
+end;
+
+procedure TS.DoFSWrite(Sender: TObject; const SessionId, Path, OldContent, NewContent: string);
+var
+  LSessionInfo, LFound: TSessionInfo;
+  LSessions: TList<TSessionInfo>;
+begin
+  LFound := nil;
+  if Assigned(FSessionMgr) then begin
+    LSessions := FSessionMgr.GetSessionListSnapshot;
+    try
+      for LSessionInfo in LSessions do
+        if LSessionInfo.SessionId = SessionId then begin
+          LFound := LSessionInfo;
+          Break;
+        end;
+    finally LSessions.Free; end;
+  end;
+
+  if Assigned(LFound) then
+    TConversationService.SaveFileDiff(LFound, Path, OldContent, NewContent);
 end;
 
 procedure TS.DoRawData(Sender: TObject; const Direction, RawText: string);

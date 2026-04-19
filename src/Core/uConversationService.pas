@@ -3,7 +3,7 @@ unit uConversationService;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, JsonDataObjects, uSessionManager;
+  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, System.Hash, JsonDataObjects, uSessionManager;
 
 type
   TConversationService = class
@@ -13,6 +13,7 @@ type
   public
     class function GetConversationsBySessionId(ASession: TSessionInfo): TJsonArray;
     class procedure AppendLog(ASession: TSessionInfo; const ADirection, ARawText: string);
+    class procedure SaveFileDiff(ASession: TSessionInfo; const APath, AOldText, ANewText: string);
     class procedure StartRestoration(ASession: TSessionInfo);
     class procedure FinalizeRestoration(ASession: TSessionInfo);
   end;
@@ -236,6 +237,36 @@ begin
     end;
   finally
     LLogObj.Free;
+  end;
+end;
+
+class procedure TConversationService.SaveFileDiff(ASession: TSessionInfo; const APath, AOldText, ANewText: string);
+var
+  LObj: TJsonObject;
+  LFileName, LFilePath, LHash: string;
+begin
+  if (ASession = nil) or (ASession.DiffsPath = '') then Exit;
+  if not TDirectory.Exists(ASession.DiffsPath) then Exit;
+
+  LFileName := FormatDateTime('yyyymmddhhnnsszzz', Now) + '_' + TPath.GetFileName(APath) + '.json';
+  LFilePath := TPath.Combine(ASession.DiffsPath, LFileName);
+
+  LObj := TJsonObject.Create;
+  try
+    try
+      LHash := Copy(THashMD5.GetHashString(ANewText + FormatDateTime('yyyymmddhhnnsszzz', Now) + IntToStr(Random(MaxInt))), 1, 8);
+      LObj.S['id'] := LHash;
+      LObj.S['timestamp'] := FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
+      LObj.S['path'] := APath;
+      LObj.S['oldContent'] := AOldText;
+      LObj.S['newContent'] := ANewText;
+      
+      TFile.WriteAllText(LFilePath, LObj.ToJSON(False), TEncoding.UTF8);
+    except
+      on E: Exception do ;
+    end;
+  finally
+    LObj.Free;
   end;
 end;
 

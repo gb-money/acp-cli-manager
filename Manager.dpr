@@ -20,6 +20,8 @@ uses
   uExplorerControl in 'src\UI\uExplorerControl.pas',
   uFileViewer in 'src\UI\uFileViewer.pas' {frmFileViewer},
   uFileViewerControl in 'src\UI\uFileViewerControl.pas',
+  uDiffViewer in 'src\UI\uDiffViewer.pas' {frmDiffViewer},
+  uDiffViewerControl in 'src\UI\uDiffViewerControl.pas',
   uUIControl in 'src\UI\uUIControl.pas',
   JsonDataObjects in 'src\modules\JsonDataObjects\Source\JsonDataObjects.pas';
 

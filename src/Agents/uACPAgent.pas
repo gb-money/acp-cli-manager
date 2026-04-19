@@ -199,10 +199,12 @@ end;
 
 procedure TACPAgent.HandleFSWrite(const ID, Method: string; Params: TJsonObject);
 var
-  Path, Content: string;
+  Path, Content, SessionId: string;
 begin
   Path := Params.S['path'];
   Content := Params.S['content'];
+  SessionId := Params.S['sessionId'];
+
   try
     TFile.WriteAllText(Path, Content, TEncoding.UTF8);
     ACPClient.SendResponse(ID, nil); 
@@ -255,6 +257,22 @@ begin
       FSessions.AddOrSetValue(SessionId, Data);
       if Assigned(FOnSessionMetadataUpdate) then
         FOnSessionMetadataUpdate(Self, SessionId);
+    end;
+    Exit;
+  end;
+
+  if UpdateType = 'tool_call_update' then
+  begin
+    if UpdateObj.Contains('content') and (UpdateObj.Items[UpdateObj.IndexOf('content')].Typ = jdtArray) then
+    begin
+      for I := 0 to UpdateObj.A['content'].Count - 1 do
+      begin
+        if (UpdateObj.A['content'].Items[I].Typ = jdtObject) and (UpdateObj.A['content'].O[I].S['type'] = 'diff') then
+        begin
+          ContentObj := UpdateObj.A['content'].O[I];
+          DoFSWrite(SessionId, ContentObj.S['path'], ContentObj.S['oldText'], ContentObj.S['newText']);
+        end;
+      end;
     end;
     Exit;
   end;

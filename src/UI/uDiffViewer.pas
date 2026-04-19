@@ -5,7 +5,7 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.WebBrowser,
-  uDiffViewerControl;
+  uDiffViewerControl, uSessionManager;
 
 type
   TfrmDiffViewer = class(TForm)
@@ -15,14 +15,15 @@ type
     procedure WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
     procedure WebBrowserMainDidFinishLoad(ASender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure FormDestroy(Sender: TObject);
   private
     FDiffCtrl: TDiffViewerControl;
     FInitialized: Boolean;
-    FPendingFileName: string;
-    FPendingPath: string;
-    FPendingDiffData: TArray<TDiffRow>;
+    FPendingSessionId: string;
+    FPendingTargetPath: string;
+    FPendingHashId: string;
   public
-    procedure ViewDiff(const AFileName, APath: string; const ADiffData: TArray<TDiffRow>);
+    procedure ViewDiffSession(ASessionMgr: TSessionManager; const ASessionId, ATargetPath, AHashId: string);
   end;
 
 var
@@ -38,7 +39,13 @@ uses
 procedure TfrmDiffViewer.FormCreate(Sender: TObject);
 begin
   FInitialized := False;
-  FDiffCtrl := TDiffViewerControl.Create(WebBrowserMain);
+  FDiffCtrl := nil;
+end;
+
+procedure TfrmDiffViewer.FormDestroy(Sender: TObject);
+begin
+  if Assigned(FDiffCtrl) then FDiffCtrl.Free;
+  frmDiffViewer := nil;
 end;
 
 procedure TfrmDiffViewer.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -53,36 +60,41 @@ begin
   if not FInitialized then
   begin
     FInitialized := True;
-    LHtmlPath := TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'diff_viewer.html');
+    LHtmlPath := TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'diff_view.html');
     if TFile.Exists(LHtmlPath) then
       WebBrowserMain.Navigate('file://' + LHtmlPath);
   end;
 end;
 
-procedure TfrmDiffViewer.ViewDiff(const AFileName, APath: string; const ADiffData: TArray<TDiffRow>);
+procedure TfrmDiffViewer.ViewDiffSession(ASessionMgr: TSessionManager; const ASessionId, ATargetPath, AHashId: string);
 begin
+  if not Assigned(FDiffCtrl) then
+    FDiffCtrl := TDiffViewerControl.Create(WebBrowserMain, ASessionMgr);
+
   if not FInitialized then
   begin
-    FPendingFileName := AFileName;
-    FPendingPath := APath;
-    FPendingDiffData := ADiffData;
+    FPendingSessionId := ASessionId;
+    FPendingTargetPath := ATargetPath;
+    FPendingHashId := AHashId;
   end
   else
-    FDiffCtrl.LoadDiff(AFileName, APath, ADiffData);
+    FDiffCtrl.InitDiffSession(ASessionId, ATargetPath, AHashId);
 end;
 
 procedure TfrmDiffViewer.WebBrowserMainDidFinishLoad(ASender: TObject);
 begin
-  if Length(FPendingDiffData) > 0 then
+  if Assigned(FDiffCtrl) and (FPendingSessionId <> '') then
   begin
-    FDiffCtrl.LoadDiff(FPendingFileName, FPendingPath, FPendingDiffData);
-    SetLength(FPendingDiffData, 0);
+    FDiffCtrl.InitDiffSession(FPendingSessionId, FPendingTargetPath, FPendingHashId);
+    FPendingSessionId := '';
+    FPendingTargetPath := '';
+    FPendingHashId := '';
   end;
 end;
 
 procedure TfrmDiffViewer.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
-  if FDiffCtrl.HandleRequest(URL) then
+  if Assigned(FDiffCtrl) and FDiffCtrl.HandleRequest(URL) then
     ;
 end;
 

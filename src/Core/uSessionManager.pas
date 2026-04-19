@@ -15,6 +15,7 @@ type
     IsLoading: Boolean;
     IsPinned: Boolean;
     LogPath: string;
+    DiffsPath: string; // Directory for diff blocks
     Cwd: string; // Workspace directory
     constructor Create(AAgent: TAgent; const ASessionId, AName: string; const ACwd: string = '');
     procedure SaveMetadata;
@@ -198,10 +199,16 @@ begin
       TDirectory.CreateDirectory(LSessionDir);
       
     Result.LogPath := TPath.Combine(LSessionDir, 'history.json');
+    Result.DiffsPath := TPath.Combine(LSessionDir, 'diffs');
+    if not TDirectory.Exists(Result.DiffsPath) then
+      TDirectory.CreateDirectory(Result.DiffsPath);
     Result.LoadMetadata; 
   end
   else
+  begin
     Result.LogPath := '';
+    Result.DiffsPath := '';
+  end;
     
   Lock;
   try

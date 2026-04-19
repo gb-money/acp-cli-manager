@@ -12,6 +12,7 @@ type
   TAgentStateChangeEvent = procedure(Sender: TObject; const OldState, NewState: TAgentState) of object;
   TAgentResponseEvent = procedure(Sender: TObject; const SessionId, Text: string) of object;
   TAgentChunkEvent = procedure(Sender: TObject; const SessionId, Chunk, FullText: string) of object;
+  TAgentFSWriteEvent = procedure(Sender: TObject; const SessionId, Path, OldContent, NewContent: string) of object;
 
   TAgent = class(TComponent)
   private
@@ -23,6 +24,7 @@ type
     FOnResponse: TAgentResponseEvent;
     FOnMessageChunk: TAgentChunkEvent;
     FOnThoughtChunk: TAgentChunkEvent;
+    FOnFSWrite: TAgentFSWriteEvent;
     procedure SetState(const Value: TAgentState);
   protected
     procedure DoStatusChange(const Msg: string);
@@ -30,6 +32,7 @@ type
     procedure DoResponse(const SessionId, Text: string);
     procedure DoMessageChunk(const SessionId, Chunk, FullText: string);
     procedure DoThoughtChunk(const SessionId, Chunk, FullText: string);
+    procedure DoFSWrite(const SessionId, Path, OldContent, NewContent: string);
   public
     constructor Create(AOwner: TComponent); override;
     procedure Connect; virtual; abstract;
@@ -45,6 +48,7 @@ type
     property OnResponse: TAgentResponseEvent read FOnResponse write FOnResponse;
     property OnMessageChunk: TAgentChunkEvent read FOnMessageChunk write FOnMessageChunk;
     property OnThoughtChunk: TAgentChunkEvent read FOnThoughtChunk write FOnThoughtChunk;
+    property OnFSWrite: TAgentFSWriteEvent read FOnFSWrite write FOnFSWrite;
   end;
 
 implementation
@@ -80,6 +84,11 @@ end;
 procedure TAgent.DoThoughtChunk(const SessionId, Chunk, FullText: string);
 begin
   if Assigned(FOnThoughtChunk) then FOnThoughtChunk(Self, SessionId, Chunk, FullText);
+end;
+
+procedure TAgent.DoFSWrite(const SessionId, Path, OldContent, NewContent: string);
+begin
+  if Assigned(FOnFSWrite) then FOnFSWrite(Self, SessionId, Path, OldContent, NewContent);
 end;
 
 procedure TAgent.SetState(const Value: TAgentState);
