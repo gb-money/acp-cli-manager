@@ -110,19 +110,49 @@
                 const data = typeof json === 'string' ? JSON.parse(json) : json;
                 this.currentData = (data.files || []).map(f => ({ ...f, selected: false }));
                 const newPath = data.currentPath || (this.currentData.length > 0 ? this.currentData[0].path.split(/[\\\/]/).slice(0,-1).join('\\') : '');
-                if (newPath && newPath !== this.currentPath) { if (this.currentPath) this.historyStack.push(this.currentPath); this.currentPath = newPath; this.forwardStack = []; }
+                
+                // History Management
+                const isNavAction = window.location.href.includes('noHistory=true');
+                if (newPath && newPath !== this.currentPath) {
+                    if (!isNavAction && this.currentPath) {
+                        this.historyStack.push(this.currentPath);
+                        this.forwardStack = []; // Reset forward on new manual navigation
+                    }
+                    this.currentPath = newPath;
+                }
+                
                 this.updateUI(); this.render();
             },
             updateUI() {
                 document.getElementById('current-path-display').innerText = this.currentPath || 'Project Root';
                 document.getElementById('main-title').innerText = this.currentPath ? this.currentPath.split(/[\\\/]/).pop() : 'Project Root';
-                document.getElementById('btn-back').disabled = this.historyStack.length === 0;
-                document.getElementById('btn-forward').disabled = this.forwardStack.length === 0;
+                
+                // Update Button Active States
+                const btnBack = document.getElementById('btn-back');
+                const btnForward = document.getElementById('btn-forward');
+                if (btnBack) btnBack.disabled = this.historyStack.length === 0;
+                if (btnForward) btnForward.disabled = this.forwardStack.length === 0;
             },
-            goBack() { if (this.historyStack.length === 0) return; this.forwardStack.push(this.currentPath); this.navigateTo(this.historyStack.pop(), true); },
-            goForward() { if (this.forwardStack.length === 0) return; this.historyStack.push(this.currentPath); this.navigateTo(this.forwardStack.pop(), true); },
-            goUp() { if (!this.currentPath) return; const parent = this.currentPath.split(/[\\\/]/).slice(0, -1).join('\\'); if (parent) this.navigateTo(parent); },
-            navigateTo(path, silent = false) { window.location.href = `explorer-action://open?path=${encodeURIComponent(path)}&isDir=true${silent ? '&noHistory=true' : ''}`; },
+            goBack() { 
+                if (this.historyStack.length === 0) return; 
+                this.forwardStack.push(this.currentPath); 
+                const prev = this.historyStack.pop();
+                this.navigateTo(prev, true); 
+            },
+            goForward() { 
+                if (this.forwardStack.length === 0) return; 
+                this.historyStack.push(this.currentPath); 
+                const next = this.forwardStack.pop();
+                this.navigateTo(next, true); 
+            },
+            goUp() { 
+                if (!this.currentPath) return; 
+                const parent = this.currentPath.split(/[\\\/]/).slice(0, -1).join('\\'); 
+                if (parent) this.navigateTo(parent); 
+            },
+            navigateTo(path, silent = false) { 
+                window.location.href = `explorer-action://open?path=${encodeURIComponent(path)}&isDir=true${silent ? '&noHistory=true' : ''}`; 
+            },
             switchView(view) {
                 this.currentView = view;
                 document.getElementById('explorer-grid-view').classList.toggle('hidden', view !== 'grid');
