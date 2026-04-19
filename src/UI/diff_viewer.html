@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html class="dark" lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Diff Viewer</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "background": "#0e0e0e",
+                        "surface": "#0e0e0e",
+                        "on-surface": "#ffffff",
+                        "primary": "#3fff8b",
+                        "error": "#ff716c",
+                        "surface-container-highest": "#262626",
+                        "surface-container-low": "#131313",
+                        "outline-variant": "#484847",
+                        "on-surface-variant": "#adaaaa",
+                    },
+                    fontFamily: {
+                        mono: ["'Fira Code'", "monospace"],
+                        headline: ["Manrope", "sans-serif"],
+                        body: ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: #262626; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #484847; }
+        
+        .diff-row { display: grid; grid-template-columns: 3.5rem 1fr 3.5rem 1fr; border-bottom: 1px solid rgba(72, 72, 71, 0.1); }
+        .diff-num { color: #484847; text-align: right; padding-right: 1rem; user-select: none; font-size: 0.75rem; border-right: 1px solid rgba(72, 72, 71, 0.2); background: rgba(26, 26, 26, 0.3); }
+        .diff-content { padding-left: 1rem; white-space: pre-wrap; word-break: break-all; font-family: 'Fira Code', monospace; font-size: 0.825rem; min-height: 1.5rem; line-height: 1.5rem; }
+        .diff-added { background-color: rgba(63, 255, 139, 0.08); }
+        .diff-added .diff-content { color: #3fff8b; }
+        .diff-removed { background-color: rgba(255, 113, 108, 0.08); opacity: 0.8; }
+        .diff-removed .diff-content { color: #ff716c; text-decoration: line-through; }
+        
+        .sticky-header { position: sticky; top: 0; z-index: 20; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body h-screen flex flex-col overflow-hidden antialiased">
+    
+    <!-- Header -->
+    <header class="h-14 flex items-center justify-between px-6 bg-surface/80 backdrop-blur-md border-b border-outline-variant/10 shrink-0">
+        <div class="flex items-center gap-4">
+            <span class="material-symbols-outlined text-primary text-xl">difference</span>
+            <div>
+                <h2 id="fileName" class="font-headline font-semibold text-sm tracking-tight">Compare Changes</h2>
+                <p id="filePath" class="text-[10px] text-on-surface-variant font-mono">No file selected</p>
+            </div>
+        </div>
+        <div id="diffSummary" class="text-[11px] font-medium flex gap-3">
+            <span id="addCount" class="text-primary">+0</span>
+            <span id="removeCount" class="text-error">-0</span>
+        </div>
+    </header>
+
+    <!-- Content Area -->
+    <main class="flex-1 overflow-auto relative">
+        <div class="min-w-[900px]">
+            <!-- Table Header -->
+            <div class="sticky-header grid grid-cols-[3.5rem_1fr_3.5rem_1fr] bg-surface-container-highest/95 backdrop-blur-sm border-b border-outline-variant/20 py-2 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                <div class="text-center border-right border-outline-variant/20">OLD</div>
+                <div class="pl-4">Original Source</div>
+                <div class="text-center border-right border-outline-variant/20">NEW</div>
+                <div class="pl-4">Modified Content</div>
+            </div>
+            
+            <!-- Diff Rows -->
+            <div id="diffContent" class="flex flex-col">
+                <!-- Rows injected here -->
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center bg-surface z-30">
+            <div class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center border border-outline-variant/20 mb-4">
+                <span class="material-symbols-outlined text-primary text-3xl">unfold_more</span>
+            </div>
+            <p class="text-sm text-on-surface-variant">No differences to display.</p>
+        </div>
+    </main>
+
+    <script>
+        const DiffViewer = {
+            loadDiff: (filename, path, diffData) => {
+                document.getElementById('emptyState').classList.add('hidden');
+                document.getElementById('fileName').innerText = filename;
+                document.getElementById('filePath').innerText = path;
+                
+                const container = document.getElementById('diffContent');
+                container.innerHTML = '';
+                
+                let adds = 0;
+                let removes = 0;
+                
+                diffData.forEach(row => {
+                    if (row.type === 'added') adds++;
+                    if (row.type === 'removed') removes++;
+
+                    const rowEl = document.createElement('div');
+                    rowEl.className = `diff-row ${row.type === 'added' ? 'diff-added' : row.type === 'removed' ? 'diff-removed' : ''}`;
+                    
+                    const content = row.content || '';
+                    const escapedContent = this.escapeHtml(content);
+
+                    rowEl.innerHTML = `
+                        <div class="diff-num">${row.oldLine || ''}</div>
+                        <div class="diff-content">${row.type === 'added' ? '' : escapedContent}</div>
+                        <div class="diff-num">${row.newLine || ''}</div>
+                        <div class="diff-content">${row.type === 'removed' ? '' : escapedContent}</div>
+                    `;
+                    container.appendChild(rowEl);
+                });
+
+                document.getElementById('addCount').innerText = `+${adds}`;
+                document.getElementById('removeCount').innerText = `-${removes}`;
+            },
+
+            escapeHtml: (unsafe) => {
+                return unsafe
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+        };
+
+        window.ACP_DIFF_VIEWER = DiffViewer;
+
+        // --- Test Code ---
+        // setTimeout(() => {
+        //     ACP_DIFF_VIEWER.loadDiff('uMain.pas', 'src/uMain.pas', [
+        //         { oldLine: 1, newLine: 1, type: 'unchanged', content: 'unit uMain;' },
+        //         { oldLine: 2, newLine: null, type: 'removed', content: 'uses System.SysUtils;' },
+        //         { oldLine: null, newLine: 2, type: 'added', content: 'uses System.SysUtils, System.Classes;' }
+        //     ]);
+        // }, 500);
+    </script>
+</body>
+</html>

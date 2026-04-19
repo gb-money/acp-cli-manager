@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACP Chat Viewer</title>
+    <!-- CSS 로드 -->
+    <link rel="stylesheet" href="../css/github-markdown.min.css">
+    <link rel="stylesheet" href="../css/prism.min.css">
+    <style>
+        body {
+            padding: 20px;
+            background-color: var(--color-canvas-default);
+            margin: 0;
+            overflow-x: hidden;
+        }
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 980px;
+            margin: 0 auto;
+        }
+        /* 다크모드 대응 (GitHub Markdown CSS 기본값 활용) */
+        @media (max-width: 767px) {
+            .markdown-body {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body class="markdown-body">
+    <div id="content"></div>
+
+    <!-- JS 로드 -->
+    <script src="../js/marked.min.js"></script>
+    <script src="../js/prism.min.js"></script>
+    <script>
+        // Marked 설정: 하이라이팅 연동
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (Prism.languages[lang]) {
+                    return Prism.highlight(code, Prism.languages[lang], lang);
+                } else {
+                    return code;
+                }
+            },
+            breaks: true,
+            gfm: true
+        });
+
+        /**
+         * Delphi에서 호출할 메인 함수
+         * @param {string} markdown - 누적된 마크다운 텍스트
+         */
+        function updateContent(markdown) {
+            const contentDiv = document.getElementById('content');
+            
+            // 마크다운 변환 및 삽입
+            contentDiv.innerHTML = marked.parse(markdown);
+            
+            // 코드 하이라이팅 적용
+            Prism.highlightAllUnder(contentDiv);
+            
+            // 하단으로 자동 스크롤
+            window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        // 초기화 확인용
+        console.log('Chat Viewer Initialized');
+    </script>
+</body>
+</html>

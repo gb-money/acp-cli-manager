@@ -1,0 +1,35 @@
+[
+  {
+    "_direction": "outgoing",
+    "_type": "request",
+    "id": 3,
+    "method": "session/prompt",
+    "params": {
+      "sessionId": "703a8005-01c2-49dc-88df-2c449f9a12c1",
+      "prompt": [
+        {
+          "type": "text",
+          "text": "대화를 취소하는 방법을 알려줘"
+        }
+      ]
+    }
+  },
+  {
+    "_direction": "outgoing",
+    "_type": "notification",
+    "id": null,
+    "method": "session/cancel",
+    "params": {
+      "sessionId": "703a8005-01c2-49dc-88df-2c449f9a12c1"
+    }
+  },
+  {
+    "_direction": "incoming",
+    "_type": "response",
+    "id": 3,
+    "method": "session/prompt",
+    "params": {
+      "stopReason": "cancelled"
+    }
+  }
+]

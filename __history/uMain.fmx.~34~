@@ -1,0 +1,26 @@
+object S: TS
+  Left = 0
+  Top = 0
+  Caption = 'ACP Multi-Agent Manager'
+  ClientHeight = 581
+  ClientWidth = 1082
+  Fill.Color = xCC000000
+  Fill.Kind = Solid
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop]
+  OnCreate = FormCreate
+  OnClose = FormClose
+  OnCloseQuery = FormCloseQuery
+  OnShow = FormShow
+  DesignerMasterStyle = 0
+  object WebBrowserMain: TWebBrowser
+    Align = Contents
+    Size.Width = 1082.000000000000000000
+    Size.Height = 581.000000000000000000
+    Size.PlatformDefault = False
+    WindowsEngine = EdgeIfAvailable
+    OnShouldStartLoadWithRequest = WebBrowserMainShouldStartLoadWithRequest
+    OnDidFinishLoad = WebBrowserMainDidFinishLoad
+  end
+end

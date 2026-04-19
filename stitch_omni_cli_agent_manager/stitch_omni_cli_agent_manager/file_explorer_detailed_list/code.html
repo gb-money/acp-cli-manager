@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Explorer - src/components</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "error": "#ff716c",
+                      "surface-container": "#1a1a1a",
+                      "inverse-on-surface": "#565555",
+                      "on-primary-fixed-variant": "#006832",
+                      "primary-fixed": "#3fff8b",
+                      "on-tertiary-fixed-variant": "#005361",
+                      "on-error-container": "#ffa8a3",
+                      "on-tertiary": "#005360",
+                      "error-container": "#9f0519",
+                      "on-primary-fixed": "#004820",
+                      "on-secondary-container": "#bfd2e9",
+                      "on-primary-container": "#004f24",
+                      "outline": "#767575",
+                      "tertiary-container": "#00dcfd",
+                      "error-dim": "#d7383b",
+                      "surface-container-lowest": "#000000",
+                      "tertiary-dim": "#00cdec",
+                      "secondary-fixed-dim": "#bed1e7",
+                      "tertiary-fixed-dim": "#00cdec",
+                      "on-secondary-fixed-variant": "#485a6d",
+                      "secondary-container": "#36485b",
+                      "surface-dim": "#0e0e0e",
+                      "primary-container": "#13ea79",
+                      "on-error": "#490006",
+                      "secondary-dim": "#bed1e7",
+                      "surface-container-high": "#20201f",
+                      "on-background": "#ffffff",
+                      "surface-tint": "#3fff8b",
+                      "tertiary-fixed": "#00dcfd",
+                      "background": "#0e0e0e",
+                      "tertiary": "#7ae6ff",
+                      "surface": "#0e0e0e",
+                      "on-surface": "#ffffff",
+                      "surface-variant": "#262626",
+                      "surface-container-low": "#131313",
+                      "secondary": "#ccdff6",
+                      "inverse-primary": "#006e35",
+                      "primary-fixed-dim": "#24f07e",
+                      "primary-dim": "#24f07e",
+                      "on-tertiary-fixed": "#00343d",
+                      "inverse-surface": "#fcf9f8",
+                      "outline-variant": "#484847",
+                      "surface-bright": "#2c2c2c",
+                      "on-primary": "#005d2c",
+                      "on-secondary": "#3e5063",
+                      "surface-container-highest": "#262626",
+                      "on-secondary-fixed": "#2b3d4f",
+                      "secondary-fixed": "#ccdff6",
+                      "on-surface-variant": "#adaaaa",
+                      "on-tertiary-container": "#004955",
+                      "primary": "#3fff8b"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {},
+              "fontFamily": {
+                      "headline": [
+                              "Manrope"
+                      ],
+                      "body": [
+                              "Inter"
+                      ],
+                      "label": [
+                              "Inter"
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+</head>
+<body class="bg-surface text-on-surface font-body h-screen flex flex-col overflow-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-6 h-16 dark:bg-zinc-950/60 backdrop-blur-xl docked full-width top-0 shadow-lg shadow-black/20 z-50">
+<div class="flex items-center gap-6">
+<h1 class="text-xl font-bold text-white tracking-tighter font-headline">Explorer</h1>
+<nav class="hidden md:flex gap-4">
+<a class="font-manrope text-sm font-medium tracking-wide text-zinc-400 hover:bg-zinc-800/50 hover:text-white transition-all active:scale-95 px-3 py-2 rounded-md" href="#">Home</a>
+<a class="font-manrope text-sm font-medium tracking-wide text-[#3fff8b] font-bold border-b-2 border-[#3fff8b] hover:bg-zinc-800/50 hover:text-white transition-all active:scale-95 px-3 py-2" href="#">View</a>
+<a class="font-manrope text-sm font-medium tracking-wide text-zinc-400 hover:bg-zinc-800/50 hover:text-white transition-all active:scale-95 px-3 py-2 rounded-md" href="#">Manage</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="bg-surface-container-lowest border border-outline-variant/20 rounded-full py-1.5 pl-9 pr-4 text-sm font-body focus:outline-none focus:border-primary text-on-surface placeholder:text-on-surface-variant w-64 transition-colors" placeholder="Search src/components..." type="text"/>
+</div>
+<button class="text-zinc-400 hover:bg-zinc-800/50 hover:text-white transition-all active:scale-95 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="text-zinc-400 hover:bg-zinc-800/50 hover:text-white transition-all active:scale-95 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined">info</span>
+</button>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar (Collapsed/Minimal for this view) -->
+<aside class="hidden md:flex flex-col gap-2 pt-4 dark:bg-zinc-950/40 backdrop-blur-2xl fixed left-0 top-16 h-[calc(100vh-104px)] w-20 items-center bg-zinc-900/50 flat no shadows z-40 border-r border-outline-variant/10">
+<button class="p-3 mb-4 rounded-full bg-surface-container-highest hover:bg-primary-container hover:text-on-primary-container transition-colors group" title="New Folder">
+<span class="material-symbols-outlined text-primary group-hover:text-on-primary-container">create_new_folder</span>
+</button>
+<a class="text-zinc-500 py-3 px-4 border-l-4 border-transparent hover:bg-zinc-800/60 hover:text-zinc-200 transition-colors active:translate-x-1 flex flex-col items-center justify-center w-full group" href="#" title="Quick Access">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">grade</span>
+</a>
+<a class="border-l-4 border-[#3fff8b] bg-zinc-800/40 text-[#3fff8b] font-bold py-3 px-4 hover:bg-zinc-800/60 transition-colors active:translate-x-1 flex flex-col items-center justify-center w-full" href="#" title="This PC">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">desktop_windows</span>
+</a>
+<a class="text-zinc-500 py-3 px-4 border-l-4 border-transparent hover:bg-zinc-800/60 hover:text-zinc-200 transition-colors active:translate-x-1 flex flex-col items-center justify-center w-full group" href="#" title="Network">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">lan</span>
+</a>
+<a class="text-zinc-500 py-3 px-4 border-l-4 border-transparent hover:bg-zinc-800/60 hover:text-zinc-200 transition-colors active:translate-x-1 flex flex-col items-center justify-center w-full group" href="#" title="External">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">usb</span>
+</a>
+<a class="text-zinc-500 py-3 px-4 border-l-4 border-transparent hover:bg-zinc-800/60 hover:text-zinc-200 transition-colors active:translate-x-1 flex flex-col items-center justify-center w-full group" href="#" title="Cloud">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">cloud_queue</span>
+</a>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 overflow-y-auto md:ml-20 bg-surface flex flex-col h-full relative">
+<!-- Breadcrumbs & View Toggles -->
+<div class="flex items-center justify-between py-4 border-b border-outline-variant/10 bg-surface-container-low/50 sticky top-0 z-30 backdrop-blur-md"><!-- Sub-Toolbar (Breadcrumbs & Navigation Controls) -->
+<div class="flex items-center gap-2 w-full">
+<div class="flex items-center gap-1 mr-4">
+<button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-xl">arrow_back</span>
+</button>
+<button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant hover:text-on-surface transition-colors opacity-50 cursor-not-allowed">
+<span class="material-symbols-outlined text-xl">arrow_forward</span>
+</button>
+<button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-xl">arrow_upward</span>
+</button>
+</div>
+<div class="flex-1 bg-surface-container-lowest rounded-md border border-outline-variant/20 flex items-center px-3 h-8 text-sm">
+<span class="material-symbols-outlined text-on-surface-variant mr-2 text-lg">folder</span>
+<div class="flex items-center text-on-surface-variant space-x-1">
+<span class="hover:text-on-surface cursor-pointer transition-colors">Documents</span>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="hover:text-on-surface cursor-pointer transition-colors">Projects</span>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="text-on-surface font-medium">src/components</span>
+</div>
+</div>
+<div class="flex items-center bg-surface-container-lowest rounded-md p-1 border border-outline-variant/20 ml-4">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Grid View">
+<span class="material-symbols-outlined text-sm">grid_view</span>
+</button>
+<button class="p-1 rounded bg-surface-container-highest text-primary shadow-sm" title="List View">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">view_list</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Gallery View">
+<span class="material-symbols-outlined text-sm">gallery_thumbnail</span>
+</button>
+</div>
+</div></div>
+<!-- Detailed List Table -->
+<div class="px-8 py-6 w-full max-w-7xl mx-auto flex-1">
+<div class="bg-surface-container-high rounded-lg border border-outline-variant/10 overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
+<table class="w-full text-left font-body text-sm">
+<thead class="bg-surface-container-low border-b border-outline-variant/20 text-on-surface-variant text-xs uppercase tracking-wider font-semibold font-headline">
+<tr>
+<th class="px-6 py-4 w-12 text-center">
+<input class="rounded border-outline-variant/30 bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-surface-container-high" type="checkbox"/>
+</th>
+<th class="px-6 py-4 cursor-pointer hover:text-on-surface transition-colors group">
+<div class="flex items-center gap-1">Name <span class="material-symbols-outlined text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span></div>
+</th>
+<th class="px-6 py-4 cursor-pointer hover:text-on-surface transition-colors group">
+<div class="flex items-center gap-1">Date Modified <span class="material-symbols-outlined text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span></div>
+</th>
+<th class="px-6 py-4 cursor-pointer hover:text-on-surface transition-colors group">
+<div class="flex items-center gap-1">Type <span class="material-symbols-outlined text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span></div>
+</th>
+<th class="px-6 py-4 text-right cursor-pointer hover:text-on-surface transition-colors group">
+<div class="flex items-center justify-end gap-1">Size <span class="material-symbols-outlined text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span></div>
+</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<!-- Folder Row -->
+<tr class="hover:bg-surface-container-highest transition-colors group cursor-default">
+<td class="px-6 py-3 text-center">
+<input class="rounded border-outline-variant/30 bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-surface-container-high opacity-0 group-hover:opacity-100 transition-opacity" type="checkbox"/>
+</td>
+<td class="px-6 py-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">folder</span>
+<span class="font-medium text-on-surface">ui</span>
+</div>
+</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">Today, 10:42 AM</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">File folder</td>
+<td class="px-6 py-3 text-right text-on-surface-variant text-xs">--</td>
+</tr>
+<!-- Selected Row -->
+<tr class="bg-surface-container-highest border-l-2 border-primary transition-colors cursor-default">
+<td class="px-6 py-3 text-center">
+<input checked="" class="rounded border-outline-variant/30 bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-surface-container-highest" type="checkbox"/>
+</td>
+<td class="px-6 py-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-tertiary-fixed" style="font-variation-settings: 'FILL' 1;">description</span>
+<span class="font-medium text-primary">Button.tsx</span>
+</div>
+</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">Yesterday, 4:15 PM</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">TypeScript JSX</td>
+<td class="px-6 py-3 text-right text-on-surface-variant text-xs">4.2 KB</td>
+</tr>
+<!-- File Rows -->
+<tr class="hover:bg-surface-container-highest transition-colors group cursor-default">
+<td class="px-6 py-3 text-center">
+<input class="rounded border-outline-variant/30 bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-surface-container-high opacity-0 group-hover:opacity-100 transition-opacity" type="checkbox"/>
+</td>
+<td class="px-6 py-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">description</span>
+<span class="font-medium text-on-surface">Card.tsx</span>
+</div>
+</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">Oct 24, 2023</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">TypeScript JSX</td>
+<td class="px-6 py-3 text-right text-on-surface-variant text-xs">8.1 KB</td>
+</tr>
+<tr class="hover:bg-surface-container-highest transition-colors group cursor-default">
+<td class="px-6 py-3 text-center">
+<input class="rounded border-outline-variant/30 bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-surface-container-high opacity-0 group-hover:opacity-100 transition-opacity" type="checkbox"/>
+</td>
+<td class="px-6 py-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">description</span>
+<span class="font-medium text-on-surface">Navigation.tsx</span>
+</div>
+</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">Oct 22, 2023</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">TypeScript JSX</td>
+<td class="px-6 py-3 text-right text-on-surface-variant text-xs">12.5 KB</td>
+</tr>
+<tr class="hover:bg-surface-container-highest transition-colors group cursor-default">
+<td class="px-6 py-3 text-center">
+<input class="rounded border-outline-variant/30 bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-surface-container-high opacity-0 group-hover:opacity-100 transition-opacity" type="checkbox"/>
+</td>
+<td class="px-6 py-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-error-container" style="font-variation-settings: 'FILL' 1;">style</span>
+<span class="font-medium text-on-surface">globals.css</span>
+</div>
+</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">Oct 20, 2023</td>
+<td class="px-6 py-3 text-on-surface-variant text-xs">Cascading Style Sheet</td>
+<td class="px-6 py-3 text-right text-on-surface-variant text-xs">2.8 KB</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Padding for footer -->
+<div class="h-12 w-full"></div>
+</main>
+</div>
+<!-- Footer -->
+<footer class="flex justify-between items-center px-6 fixed bottom-0 w-full h-10 dark:bg-zinc-950 border-t border-zinc-800/20 flat z-50">
+<div class="font-inter text-[11px] font-medium text-zinc-400">
+            12 items | 2 selected | 44.2 GB free
+        </div>
+<div class="flex gap-4">
+<a class="font-inter text-[11px] font-medium text-zinc-500 hover:text-white cursor-default transition-colors" href="#">Properties</a>
+<a class="font-inter text-[11px] font-medium text-zinc-500 hover:text-white cursor-default transition-colors" href="#">Refresh</a>
+</div>
+</footer>
+</body></html>

@@ -1,0 +1,25 @@
+object frmDiffViewer: TfrmDiffViewer
+  Left = 0
+  Top = 0
+  Caption = 'Diff Viewer'
+  ClientHeight = 700
+  ClientWidth = 1100
+  Fill.Color = xCC000000
+  Fill.Kind = Solid
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop]
+  OnCreate = FormCreate
+  OnShow = FormShow
+  OnClose = FormClose
+  DesignerMasterStyle = 0
+  object WebBrowserMain: TWebBrowser
+    Align = Contents
+    Size.Width = 1100.000000000000000000
+    Size.Height = 700.000000000000000000
+    Size.PlatformDefault = False
+    WindowsEngine = EdgeIfAvailable
+    OnShouldStartLoadWithRequest = WebBrowserMainShouldStartLoadWithRequest
+    OnDidFinishLoad = WebBrowserMainDidFinishLoad
+  end
+end

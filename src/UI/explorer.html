@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Explorer - Project Root</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "error": "#ff716c",
+                        "surface-container": "#1a1a1a",
+                        "inverse-on-surface": "#565555",
+                        "on-primary-fixed-variant": "#006832",
+                        "primary-fixed": "#3fff8b",
+                        "on-tertiary-fixed-variant": "#005361",
+                        "on-error-container": "#ffa8a3",
+                        "on-tertiary": "#005360",
+                        "error-container": "#9f0519",
+                        "on-primary-fixed": "#004820",
+                        "on-secondary-container": "#bfd2e9",
+                        "on-primary-container": "#004f24",
+                        "outline": "#767575",
+                        "tertiary-container": "#00dcfd",
+                        "error-dim": "#d7383b",
+                        "surface-container-lowest": "#000000",
+                        "tertiary-dim": "#00cdec",
+                        "secondary-fixed-dim": "#bed1e7",
+                        "tertiary-fixed-dim": "#00cdec",
+                        "on-secondary-fixed-variant": "#485a6d",
+                        "secondary-container": "#36485b",
+                        "surface-dim": "#0e0e0e",
+                        "primary-container": "#13ea79",
+                        "on-error": "#490006",
+                        "secondary-dim": "#bed1e7",
+                        "surface-container-high": "#20201f",
+                        "on-background": "#ffffff",
+                        "surface-tint": "#3fff8b",
+                        "tertiary-fixed": "#00dcfd",
+                        "background": "#0e0e0e",
+                        "tertiary": "#7ae6ff",
+                        "surface": "#0e0e0e",
+                        "on-surface": "#ffffff",
+                        "surface-variant": "#262626",
+                        "surface-container-low": "#131313",
+                        "secondary": "#ccdff6",
+                        "inverse-primary": "#006e35",
+                        "primary-fixed-dim": "#24f07e",
+                        "primary-dim": "#24f07e",
+                        "on-tertiary-fixed": "#00343d",
+                        "inverse-surface": "#fcf9f8",
+                        "outline-variant": "#484847",
+                        "surface-bright": "#2c2c2c",
+                        "on-primary": "#005d2c",
+                        "on-secondary": "#3e5063",
+                        "surface-container-highest": "#262626",
+                        "on-secondary-fixed": "#2b3d4f",
+                        "secondary-fixed": "#ccdff6",
+                        "on-surface-variant": "#adaaaa",
+                        "on-tertiary-container": "#004955",
+                        "primary": "#3fff8b"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- PrismJS Assets -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .hidden { display: none !important; }
+        
+        /* 사이드바 전환 애니메이션 */
+        aside { 
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            overflow-x: hidden;
+        }
+        aside.collapsed { width: 4.5rem; }
+        aside.collapsed .sidebar-label, 
+        aside.collapsed .sidebar-header { 
+            display: none; 
+        }
+        aside.collapsed nav a { 
+            justify-content: center; 
+            padding-left: 4px;
+            padding-right: 0;
+        }
+        aside.collapsed nav a span.material-symbols-outlined { 
+            font-size: 1.5rem; 
+        }
+
+        /* 프리뷰 영역 레이아웃 */
+        #main-container { display: flex; flex: 1; overflow: hidden; }
+        #explorer-main { transition: flex 0.3s ease; flex: 1; }
+        #explorer-main.split { flex: 0.7; border-right: 1px solid rgba(72, 72, 71, 0.2); }
+        #preview-pane { flex: 0.3; display: none; flex-direction: column; background: #0e0e0e; }
+        #preview-pane.active { display: flex; }
+        
+        pre[class*="language-"] {
+            margin: 0 !important;
+            padding: 1rem !important;
+            background: transparent !important;
+            font-size: 0.75rem !important;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body overflow-hidden h-screen flex flex-col">
+    <!-- TopAppBar -->
+    <header class="dark:bg-zinc-950/60 backdrop-blur-xl docked full-width top-0 shadow-lg shadow-black/20 flex justify-between items-center w-full px-6 h-16 z-50">
+        <div class="flex items-center gap-6">
+            <h1 class="text-xl font-bold text-white tracking-tighter font-headline">Explorer</h1>
+            <nav class="hidden md:flex items-center gap-4">
+                <a class="text-[#3fff8b] font-bold border-b-2 border-[#3fff8b] font-manrope text-sm font-medium tracking-wide pb-1" href="#">Home</a>
+                <a class="text-zinc-400 font-manrope text-sm font-medium tracking-wide hover:bg-zinc-800/50 hover:text-white transition-all rounded px-2 py-1" href="#">View</a>
+                <a class="text-zinc-400 font-manrope text-sm font-medium tracking-wide hover:bg-zinc-800/50 hover:text-white transition-all rounded px-2 py-1" href="#">Manage</a>
+            </nav>
+        </div>
+        <div class="flex items-center gap-4 flex-1 justify-end max-w-md">
+            <div class="relative w-full max-w-xs flex-1">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+                <input id="search-input" class="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-full py-1.5 pl-9 pr-4 text-sm focus:outline-none focus:border-primary text-on-surface placeholder:text-on-surface-variant transition-colors" placeholder="Search Project Root..." type="text"/>
+            </div>
+            <button aria-label="Settings" class="p-2 rounded-full hover:bg-zinc-800/50 hover:text-white transition-all active:scale-95 text-zinc-400">
+                <span class="material-symbols-outlined">settings</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Sub-Toolbar (Breadcrumbs) -->
+    <div class="h-12 bg-surface-container-low flex items-center px-4 gap-2 border-b border-surface-container z-40 relative">
+        <div class="flex items-center gap-1 mr-4">
+            <button onclick="ACP_EXPLORER.toggleSidebar()" class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant hover:text-on-surface transition-colors">
+                <span class="material-symbols-outlined text-xl">menu</span>
+            </button>
+            <button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant hover:text-on-surface transition-colors">
+                <span class="material-symbols-outlined text-xl">arrow_back</span>
+            </button>
+            <button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant hover:text-on-surface transition-colors opacity-50 cursor-not-allowed">
+                <span class="material-symbols-outlined text-xl">arrow_forward</span>
+            </button>
+            <button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant hover:text-on-surface transition-colors">
+                <span class="material-symbols-outlined text-xl">arrow_upward</span>
+            </button>
+        </div>
+        <div class="flex-1 bg-surface-container-lowest rounded-md border border-outline-variant/20 flex items-center px-3 h-8 text-sm overflow-hidden">
+            <span class="material-symbols-outlined text-on-surface-variant mr-2 text-lg">folder</span>
+            <div id="breadcrumb-container" class="flex items-center text-on-surface-variant space-x-1 whitespace-nowrap overflow-hidden">
+                <span class="text-on-surface font-medium" id="current-path-display">Project Root</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <!-- SideNavBar -->
+        <aside id="sidebar" class="dark:bg-zinc-950/40 backdrop-blur-2xl w-64 flex flex-col gap-2 pt-4 flex-shrink-0 overflow-y-auto border-r border-surface-container relative z-30">
+            <nav class="flex-1 font-manrope text-xs font-semibold uppercase tracking-widest">
+                <a class="border-l-4 border-[#3fff8b] bg-zinc-800/40 text-white font-bold py-3 px-4 flex items-center gap-3 hover:bg-zinc-800/60 transition-colors" href="#" title="Workspace">
+                    <span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">desktop_windows</span>
+                    <span class="sidebar-label">Workspace</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Explorer Main Area -->
+        <main id="explorer-main" class="bg-surface-container-low p-6 overflow-y-auto relative z-20">
+            <div class="mb-8 flex justify-between items-end border-b border-surface-container pb-4">
+                <div>
+                    <h2 id="main-title" class="text-3xl font-headline font-bold text-on-surface tracking-tight">Project Root</h2>
+                    <p id="main-subtitle" class="text-on-surface-variant text-sm mt-1">Local Development Environment</p>
+                </div>
+                <div class="flex gap-2 bg-surface-container-lowest p-1 rounded-lg border border-outline-variant/20">
+                    <button id="view-toggle-grid" onclick="ACP_EXPLORER.switchView('grid')" class="p-2 rounded bg-surface-variant text-on-surface hover:bg-surface-bright transition-colors shadow-md">
+                        <span class="material-symbols-outlined text-sm">grid_view</span>
+                    </button>
+                    <button id="view-toggle-list" onclick="ACP_EXPLORER.switchView('list')" class="p-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+                        <span class="material-symbols-outlined text-sm">view_list</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Grid View Container -->
+            <div id="explorer-grid-view" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-6">
+                <!-- Dynamically populated -->
+            </div>
+
+            <!-- List View Container -->
+            <div id="explorer-list-view" class="hidden w-full overflow-hidden rounded-lg border border-outline-variant/10 bg-surface-container-high shadow-lg">
+                <table class="w-full text-left font-body text-sm border-collapse">
+                    <thead class="bg-surface-container-low border-b border-outline-variant/20 text-on-surface-variant text-xs uppercase tracking-wider font-semibold font-headline">
+                        <tr>
+                            <th class="px-6 py-4 w-12 text-center">
+                                <input type="checkbox" id="check-all" onclick="ACP_EXPLORER.toggleAll(this.checked)" class="rounded border-outline-variant/30 bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-surface-container-high"/>
+                            </th>
+                            <th class="px-6 py-4 cursor-pointer hover:text-on-surface transition-colors group" onclick="ACP_EXPLORER.sortBy('name')">
+                                <div class="flex items-center gap-1">Name <span id="sort-icon-name" class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span></div>
+                            </th>
+                            <th class="px-6 py-4 cursor-pointer hover:text-on-surface transition-colors group" onclick="ACP_EXPLORER.sortBy('date')">
+                                <div class="flex items-center gap-1">Date Modified <span id="sort-icon-date" class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span></div>
+                            </th>
+                            <th class="px-6 py-4 cursor-pointer hover:text-on-surface transition-colors group" onclick="ACP_EXPLORER.sortBy('type')">
+                                <div class="flex items-center gap-1">Type <span id="sort-icon-type" class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span></div>
+                            </th>
+                            <th class="px-6 py-4 text-right cursor-pointer hover:text-on-surface transition-colors group" onclick="ACP_EXPLORER.sortBy('size')">
+                                <div class="flex items-center justify-end gap-1">Size <span id="sort-icon-size" class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span></div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="explorer-list-body" class="divide-y divide-outline-variant/10 text-on-surface">
+                        <!-- Dynamically populated -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <!-- Preview Pane -->
+        <section id="preview-pane" class="relative">
+            <header class="h-12 flex items-center justify-between px-4 border-b border-outline-variant/10 bg-surface-container-low">
+                <span id="preview-filename" class="text-xs font-semibold text-on-surface">Preview</span>
+                <button onclick="ACP_EXPLORER.closePreview()" class="p-1 rounded hover:bg-surface-variant text-on-surface-variant">
+                    <span class="material-symbols-outlined text-sm">close</span>
+                </button>
+            </header>
+            <div id="preview-content" class="flex-1 overflow-auto">
+                <pre id="preview-code" class="line-numbers"><code id="preview-code-element"></code></pre>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="dark:bg-zinc-950 h-10 border-t border-zinc-800/20 flex justify-between items-center px-6 z-50">
+        <div id="status-bar-info" class="font-inter text-[11px] font-medium text-zinc-400">0 items</div>
+        <div class="flex gap-4">
+            <button onclick="ACP_EXPLORER.refresh()" class="font-inter text-[11px] font-medium text-zinc-500 hover:text-white transition-colors">Refresh</button>
+        </div>
+    </footer>
+
+    <!-- PrismJS Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-pascal.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+
+    <script>
+        const Explorer = {
+            currentView: 'grid',
+            currentData: [],
+            sortKey: 'name',
+            sortOrder: 'asc',
+            selectedPath: null,
+
+            switchView(view) {
+                this.currentView = view;
+                const gridView = document.getElementById('explorer-grid-view');
+                const listView = document.getElementById('explorer-list-view');
+                const btnGrid = document.getElementById('view-toggle-grid');
+                const btnList = document.getElementById('view-toggle-list');
+
+                if (view === 'grid') {
+                    gridView.classList.remove('hidden');
+                    listView.classList.add('hidden');
+                    btnGrid.classList.add('bg-surface-variant', 'text-on-surface', 'shadow-md');
+                    btnGrid.classList.remove('text-on-surface-variant');
+                    btnList.classList.remove('bg-surface-variant', 'text-on-surface', 'shadow-md');
+                    btnList.classList.add('text-on-surface-variant');
+                } else {
+                    gridView.classList.add('hidden');
+                    listView.classList.remove('hidden');
+                    btnList.classList.add('bg-surface-variant', 'text-on-surface', 'shadow-md');
+                    btnList.classList.remove('text-on-surface-variant');
+                    btnGrid.classList.remove('bg-surface-variant', 'text-on-surface', 'shadow-md');
+                    btnGrid.classList.add('text-on-surface-variant');
+                }
+            },
+
+            sortBy(key) {
+                if (this.sortKey === key) {
+                    this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.sortKey = key;
+                    this.sortOrder = 'asc';
+                }
+                
+                const keys = ['name', 'date', 'type', 'size'];
+                keys.forEach(k => {
+                    const icon = document.getElementById(`sort-icon-${k}`);
+                    if (k === key) {
+                        icon.innerText = this.sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward';
+                        icon.classList.remove('opacity-0');
+                        icon.classList.add('opacity-100', 'text-primary');
+                    } else {
+                        icon.innerText = 'arrow_downward';
+                        icon.classList.add('opacity-0');
+                        icon.classList.remove('opacity-100', 'text-primary');
+                    }
+                });
+
+                this.render();
+            },
+
+            updateFileList(json) {
+                const data = typeof json === 'string' ? JSON.parse(json) : json;
+                this.currentData = (data.files || []).map(f => ({ ...f, selected: false }));
+                this.updateStatusBar();
+                this.render();
+            },
+
+            updateStatusBar() {
+                const total = this.currentData.length;
+                const selected = this.currentData.filter(f => f.selected).length;
+                let info = `${total} items`;
+                if (selected > 0) info += ` | ${selected} selected`;
+                document.getElementById('status-bar-info').innerText = info;
+            },
+
+            toggleAll(checked) {
+                this.currentData.forEach(f => f.selected = checked);
+                this.updateStatusBar();
+                this.render();
+            },
+
+            toggleItem(index, event) {
+                event.stopPropagation();
+                this.currentData[index].selected = !this.currentData[index].selected;
+                const allSelected = this.currentData.every(f => f.selected);
+                document.getElementById('check-all').checked = allSelected;
+                this.updateStatusBar();
+                this.render();
+            },
+
+            render() {
+                const gridContainer = document.getElementById('explorer-grid-view');
+                const listBody = document.getElementById('explorer-list-body');
+                
+                gridContainer.innerHTML = '';
+                listBody.innerHTML = '';
+
+                const sorted = [...this.currentData].sort((a, b) => {
+                    let valA = a[this.sortKey] || '';
+                    let valB = b[this.sortKey] || '';
+                    if (this.sortKey === 'name') {
+                        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+                    }
+                    if (this.sortKey === 'size') {
+                        const parseSize = (s) => {
+                            if (!s || s === '--') return -1;
+                            const num = parseFloat(s);
+                            if (s.includes('GB')) return num * 1024 * 1024 * 1024;
+                            if (s.includes('MB')) return num * 1024 * 1024;
+                            if (s.includes('KB')) return num * 1024;
+                            return num;
+                        };
+                        valA = parseSize(valA);
+                        valB = parseSize(valB);
+                    }
+                    if (valA < valB) return this.sortOrder === 'asc' ? -1 : 1;
+                    if (valA > valB) return this.sortOrder === 'asc' ? 1 : -1;
+                    return 0;
+                });
+
+                sorted.forEach((item, idx) => {
+                    const originalIdx = this.currentData.findIndex(f => f.path === item.path);
+                    const isSelected = item.path === this.selectedPath;
+
+                    // Render Grid Item
+                    const gridItem = document.createElement('div');
+                    const gridActive = isSelected ? 'bg-surface-container-high ring-1 ring-primary/40' : 'hover:bg-surface-container-high';
+                    gridItem.className = `group flex flex-col items-center gap-3 p-3 rounded-xl transition-colors cursor-pointer relative ${gridActive}`;
+                    gridItem.onclick = (e) => this.onItemClick(item, e);
+                    gridItem.ondblclick = () => this.onItemDoubleClick(item);
+                    
+                    const icon = item.isDir ? 'folder' : 'description';
+                    const iconColor = item.isDir ? (isSelected ? 'text-primary' : 'text-secondary-container') : 'text-tertiary-fixed-dim';
+                    
+                    gridItem.innerHTML = `
+                        <div class="w-16 h-16 bg-surface-container-highest rounded-lg flex items-center justify-center shadow-lg shadow-black/40 border border-outline-variant/10 group-hover:border-primary/30 transition-all group-hover:-translate-y-1 ${isSelected ? 'border-primary/40' : ''}">
+                            <span class="material-symbols-outlined text-4xl ${iconColor}" style="font-variation-settings: 'FILL' 1;">${icon}</span>
+                        </div>
+                        <span class="text-xs font-medium text-center ${isSelected ? 'text-primary' : 'text-on-surface-variant'} group-hover:text-on-surface line-clamp-2">${item.name}</span>
+                    `;
+                    gridContainer.appendChild(gridItem);
+// Render List Row
+const row = document.createElement('tr');
+const isSelected = item.selected;
+row.className = `${isSelected ? 'bg-surface-container-highest' : 'hover:bg-surface-container-highest'} transition-colors cursor-pointer`;
+row.onclick = (e) => this.onItemClick(item, e);
+row.ondblclick = () => this.onItemDoubleClick(item);
+                    
+                    const borderClass = isSelected ? 'border-l-4 border-primary' : 'border-l-4 border-transparent';
+
+                    row.innerHTML = `
+                        <td class="px-6 py-3 text-center ${borderClass}">
+                            <input type="checkbox" ${item.selected ? 'checked' : ''} onclick="ACP_EXPLORER.toggleItem(${originalIdx}, event)" class="rounded border-outline-variant/30 bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-surface-container-high"/>
+                        </td>
+                        <td class="px-6 py-3">
+                            <div class="flex items-center gap-3">
+                                <span class="material-symbols-outlined ${item.isDir ? 'text-primary' : 'text-secondary'}" style="font-variation-settings: 'FILL' 1;">${icon}</span>
+                                <span class="font-medium ${isSelected ? 'text-primary' : 'text-on-surface'}">${item.name}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-3 text-on-surface-variant text-xs">${item.date || '--'}</td>
+                        <td class="px-6 py-3 text-on-surface-variant text-xs">${item.type || (item.isDir ? 'File folder' : 'File')}</td>
+                        <td class="px-6 py-3 text-right text-on-surface-variant text-xs">${item.size || '--'}</td>
+                    `;
+                    listBody.appendChild(row);
+                });
+            },
+
+            onItemClick(item, event) {
+                if (event && event.ctrlKey) {
+                    const idx = this.currentData.findIndex(f => f.path === item.path);
+                    this.toggleItem(idx, event);
+                    return;
+                }
+                
+                this.selectedPath = item.path;
+                this.render();
+
+                if (item.isDir) {
+                    this.closePreview();
+                } else {
+                    this.showPreview(item);
+                }
+            },
+
+            onItemDoubleClick(item) {
+                if (item.isDir) {
+                    window.location.href = `explorer-action://open?path=${encodeURIComponent(item.path)}&isDir=true`;
+                } else {
+                    window.location.href = `explorer-action://view-external?path=${encodeURIComponent(item.path)}`;
+                }
+            },
+
+            showPreview(item) {
+                document.getElementById('explorer-main').classList.add('split');
+                document.getElementById('preview-pane').classList.add('active');
+                document.getElementById('preview-filename').innerText = item.name;
+                
+                // Delphi에 파일 내용 요청
+                window.location.href = `explorer-action://get-preview?path=${encodeURIComponent(item.path)}`;
+            },
+
+            setPreviewContent(content, ext) {
+                const codeEl = document.getElementById('preview-code-element');
+                const langMap = { 'pas': 'pascal', 'ts': 'typescript', 'json': 'json', 'js': 'javascript' };
+                const lang = langMap[ext] || 'clike';
+                
+                codeEl.className = `language-${lang}`;
+                codeEl.textContent = content;
+                Prism.highlightElement(codeEl);
+            },
+
+            closePreview() {
+                document.getElementById('explorer-main').classList.remove('split');
+                document.getElementById('preview-pane').classList.remove('active');
+                this.selectedPath = null;
+                this.render();
+            },
+
+            toggleSidebar() {
+                const sidebar = document.getElementById('sidebar');
+                sidebar.classList.toggle('collapsed');
+            },
+
+            refresh() {
+                window.location.href = `explorer-action://refresh`;
+            }
+        };
+
+        window.ACP_EXPLORER = Explorer;
+        
+        // Sample Data for Testing
+        setTimeout(() => {
+            Explorer.updateFileList({
+                files: [
+                    { name: 'src', path: 'src', isDir: true, date: '2024-04-19 10:00', type: 'File folder', size: '--' },
+                    { name: 'public', path: 'public', isDir: true, date: '2024-04-18 15:30', type: 'File folder', size: '--' },
+                    { name: 'package.json', path: 'package.json', isDir: false, date: '2024-04-19 09:15', type: 'JSON File', size: '1.2 KB' },
+                    { name: 'README.md', path: 'README.md', isDir: false, date: '2024-04-17 11:20', type: 'Markdown File', size: '4.5 KB' },
+                    { name: 'main.pas', path: 'main.pas', isDir: false, date: '2024-04-19 12:45', type: 'Pascal File', size: '12.8 KB' }
+                ]
+            });
+        }, 100);
+    </script>
+</body>
+</html>

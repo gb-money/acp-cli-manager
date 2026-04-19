@@ -1,0 +1,71 @@
+object frmTestGemini: TfrmTestGemini
+  Left = 0
+  Top = 0
+  Caption = 'Gemini Agent Test'
+  ClientHeight = 600
+  ClientWidth = 800
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop]
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  DesignerMasterStyle = 0
+  object PanelTop: TPanel
+    Align = Top
+    Size.Width = 800.000000000000000000
+    Size.Height = 81.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    object btnConnect: TButton
+      Position.X = 16.000000000000000000
+      Position.Y = 16.000000000000000000
+      Text = '1. Connect Agent'
+      TabOrder = 0
+      OnClick = btnConnectClick
+    end
+    object btnCreateSession: TButton
+      Position.X = 136.000000000000000000
+      Position.Y = 16.000000000000000000
+      Text = '2. Create Session'
+      TabOrder = 1
+      OnClick = btnCreateSessionClick
+    end
+    object EditPrompt: TEdit
+      Touch.InteractiveGestures = [LongTap, DoubleTap]
+      TabOrder = 2
+      Position.X = 16.000000000000000000
+      Position.Y = 48.000000000000000000
+      Size.Width = 641.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      TextPrompt = 'Enter prompt here...'
+    end
+    object btnSend: TButton
+      Enabled = False
+      Position.X = 664.000000000000000000
+      Position.Y = 46.000000000000000000
+      Text = 'Send'
+      TabOrder = 3
+      OnClick = btnSendClick
+    end
+  end
+  object MemoChat: TMemo
+    Touch.InteractiveGestures = [Pan, LongTap, DoubleTap]
+    DataDetectorTypes = []
+    Align = Client
+    Size.Width = 800.000000000000000000
+    Size.Height = 494.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 1
+    Viewport.Width = 796.000000000000000000
+    Viewport.Height = 490.000000000000000000
+  end
+  object lblStatus: TLabel
+    Align = Bottom
+    Size.Width = 800.000000000000000000
+    Size.Height = 25.000000000000000000
+    Size.PlatformDefault = False
+    Text = 'Ready'
+    TabOrder = 2
+  end
+end

@@ -1,0 +1,144 @@
+﻿unit uTestGemini;
+
+interface
+
+uses
+  System.Classes, System.SysUtils, System.Types, System.UITypes, System.Variants,
+  FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Memo.Types,
+  FMX.ScrollBox, FMX.Memo, FMX.StdCtrls, FMX.Controls.Presentation, FMX.Edit,
+  uGeminiAgent, uAgent, uACPAgent, JsonDataObjects, System.NetEncoding;
+
+type
+  TfrmTestGemini = class(TForm)
+    PanelTop: TPanel;
+    btnConnect: TButton;
+    btnCreateSession: TButton;
+    EditPrompt: TEdit;
+    btnSend: TButton;
+    MemoChat: TMemo;
+    lblStatus: TLabel;
+    procedure btnConnectClick(Sender: TObject);
+    procedure btnCreateSessionClick(Sender: TObject);
+    procedure btnSendClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
+  private
+    FAgent: TGeminiAgent;
+    FCurrentSessionId: string;
+    procedure DoStatusChange(Sender: TObject; const Msg: string);
+    procedure DoResponse(Sender: TObject; const SessionId, Text: string);
+    procedure DoThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+    procedure DoMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+    procedure DoRawData(Sender: TObject; const Direction, RawText: string);
+    procedure AddMemoLine(const ATxt: string);
+  public
+  end;
+
+var
+  frmTestGemini: TfrmTestGemini;
+
+implementation
+
+{$R *.fmx}
+
+procedure TfrmTestGemini.FormCreate(Sender: TObject);
+begin
+  FAgent := TGeminiAgent.Create(Self);
+  FAgent.OnStatusChange := DoStatusChange;
+  FAgent.OnResponse := DoResponse;
+  FAgent.OnThoughtChunk := DoThoughtChunk;
+  FAgent.OnMessageChunk := DoMessageChunk;
+  FAgent.OnRawData := DoRawData;
+end;
+
+procedure TfrmTestGemini.FormDestroy(Sender: TObject);
+begin
+  FAgent.Free;
+end;
+
+procedure TfrmTestGemini.AddMemoLine(const ATxt: string);
+begin
+  // 반드시 메인 스레드에서 실행되도록 보장
+  System.Classes.TThread.Queue(nil, procedure 
+  begin
+    MemoChat.Lines.BeginUpdate;
+    try
+      MemoChat.Lines.Add(ATxt);
+    finally
+      MemoChat.Lines.EndUpdate;
+    end;
+    MemoChat.GoToTextEnd;
+  end);
+end;
+
+procedure TfrmTestGemini.DoRawData(Sender: TObject; const Direction, RawText: string);
+begin
+  AddMemoLine(Format('[%s] %s', [Direction, RawText]));
+end;
+
+procedure TfrmTestGemini.btnConnectClick(Sender: TObject);
+begin
+  FCurrentSessionId := '';
+  btnSend.Enabled := False;
+  lblStatus.Text := 'Connecting to Gemini...';
+  FAgent.Connect;
+end;
+
+procedure TfrmTestGemini.btnCreateSessionClick(Sender: TObject);
+begin
+  lblStatus.Text := 'Requesting new session...';
+  FAgent.CreateNewSession('', procedure(const SessionId: string)
+    begin
+      TThread.Queue(nil, procedure
+      begin
+        FCurrentSessionId := SessionId;
+        if FCurrentSessionId <> '' then
+        begin
+          AddMemoLine('>>> SESSION READY: ' + FCurrentSessionId);
+          btnSend.Enabled := True;
+          btnSend.Repaint;
+          EditPrompt.SetFocus;
+          lblStatus.Text := 'Session Ready.';
+        end
+        else
+        begin
+          AddMemoLine('>>> Session Creation Failed (Empty ID)');
+          ShowMessage('Failed to create session.');
+        end;
+      end);
+    end);
+end;
+
+procedure TfrmTestGemini.btnSendClick(Sender: TObject);
+begin
+  if (FCurrentSessionId <> '') and (EditPrompt.Text <> '') then
+  begin
+    AddMemoLine('ME: ' + EditPrompt.Text);
+    FAgent.SendPrompt(FCurrentSessionId, EditPrompt.Text);
+    EditPrompt.Text := '';
+    lblStatus.Text := 'Sending prompt...';
+  end;
+end;
+
+procedure TfrmTestGemini.DoStatusChange(Sender: TObject; const Msg: string);
+begin
+  System.Classes.TThread.Queue(nil, procedure begin lblStatus.Text := Msg; end);
+end;
+
+procedure TfrmTestGemini.DoThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+begin
+  System.Classes.TThread.Queue(nil, procedure begin lblStatus.Text := 'Thinking... (' + IntToStr(Length(FullText)) + ')'; end);
+end;
+
+procedure TfrmTestGemini.DoMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+begin
+  System.Classes.TThread.Queue(nil, procedure begin lblStatus.Text := 'Receiving... (' + IntToStr(Length(FullText)) + ')'; end);
+end;
+
+procedure TfrmTestGemini.DoResponse(Sender: TObject; const SessionId, Text: string);
+begin
+  AddMemoLine('AI: ' + Text);
+  System.Classes.TThread.Queue(nil, procedure begin lblStatus.Text := 'Ready'; end);
+end;
+
+end.
