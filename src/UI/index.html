@@ -179,7 +179,7 @@
                                 <span class="font-medium">Thinking...</span>
                                 <span class="material-icons text-sm">expand_more</span>
                             </div>
-                            <div id="${id}" class="pl-5 border-l border-gray-200 dark:border-border-dark ml-2 space-y-2 text-xs text-gray-500 dark:text-text-muted markdown-body hidden">
+                            <div id="${id}" class="pl-5 border-l border-gray-200 dark:border-border-dark ml-2 space-y-2 hidden">
                             </div>
                         </div>
                     </div>`;
@@ -187,6 +187,29 @@
                 const outer = document.getElementById('mainChatCanvas');
                 outer.scrollTop = outer.scrollHeight;
                 return { contentId: id, headerId: hdrId };
+            },
+
+            parseAndRenderThought: (text, containerId) => {
+                const div = document.getElementById(containerId);
+                if (!div) return;
+                const parts = text.split(/\*\*([^*]+)\*\*/g);
+                let html = '';
+                if (parts[0] && parts[0].trim()) {
+                    html += `<div class="text-[11px] text-gray-500 dark:text-text-muted/60 mb-2 italic px-1">${marked.parseInline(parts[0])}</div>`;
+                }
+                for (let i = 1; i < parts.length; i += 2) {
+                    const subject = parts[i].trim();
+                    const content = parts[i+1] ? parts[i+1].trim() : '';
+                    html += `
+                        <div class="flex flex-col space-y-1 mb-2.5 last:mb-0">
+                            <div class="flex items-center space-x-2 text-xs text-gray-500 dark:text-text-muted">
+                                <span class="material-icons text-[14px]">check</span>
+                                <span class="font-medium">${subject}</span>
+                            </div>
+                            ${content ? `<div class="pl-5 text-[11px] text-gray-500/70 dark:text-text-muted/60 leading-relaxed markdown-body !bg-transparent !p-0 !m-0 border-none shadow-none opacity-80">${marked.parse(content)}</div>` : ''}
+                        </div>`;
+                }
+                div.innerHTML = html;
             },
 
             finalizeThought: () => {
@@ -200,14 +223,19 @@
                         hdr.querySelector('.material-icons').classList.remove('text-primary');
                         hdr.querySelector('.material-icons').classList.add('text-gray-400', 'dark:text-gray-500');
                         hdr.querySelector('.font-medium').innerText = `Thought Process (${duration}s)`;
-                        hdr.querySelector('.material-icons:last-child').innerText = 'expand_less';
+                        
+                        const arrow = hdr.querySelector('.material-icons:last-child');
+                        if (arrow) arrow.innerText = 'expand_more';
+                        
+                        // Set to collapsed by default
+                        if (cnt) cnt.classList.add('hidden');
+                        
                         hdr.onclick = () => {
                             const isHidden = cnt.classList.contains('hidden');
                             cnt.classList.toggle('hidden');
-                            hdr.querySelector('.material-icons:last-child').innerText = isHidden ? 'expand_less' : 'expand_more';
+                            if (arrow) arrow.innerText = isHidden ? 'expand_less' : 'expand_more';
                         };
                     }
-                    if (cnt) cnt.classList.remove('hidden');
                 }
             },
 
@@ -312,10 +340,10 @@
                     window.ACP.accumulatedThought = '';
                 }
                 window.ACP.accumulatedThought += data.content;
+                window.ACP.parseAndRenderThought(window.ACP.accumulatedThought, window.ACP.lastAiThoughtId.contentId);
                 const div = document.getElementById(window.ACP.lastAiThoughtId.contentId);
-                if (div) {
-                    div.innerHTML = marked.parse(window.ACP.accumulatedThought);
-                }
+                if (div) div.classList.remove('hidden'); 
+                
                 const outer = document.getElementById('mainChatCanvas');
                 outer.scrollTop = outer.scrollHeight;
             },
@@ -364,10 +392,11 @@
                     data.forEach(msg => {
                         const r = msg.role;
                         if (r === 'thought') {
-                            window.ACP.lastAiThoughtId = window.ACP.createThoughtContainer();
+                            const tIds = window.ACP.createThoughtContainer();
                             window.ACP.lastBlockType = 'thought';
                             window.ACP.accumulatedThought = msg.content;
-                            document.getElementById(window.ACP.lastAiThoughtId.contentId).innerHTML = marked.parse(msg.content);
+                            window.ACP.lastAiThoughtId = tIds;
+                            window.ACP.parseAndRenderThought(msg.content, tIds.contentId);
                             window.ACP.finalizeThought();
                         } else {
                             window.ACP.streamMessage({content: msg.content, role: r});
