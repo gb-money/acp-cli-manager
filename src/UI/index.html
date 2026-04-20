@@ -82,12 +82,12 @@
         }
 
         @keyframes focus-highlight {
-            0% { background-color: rgba(63, 255, 139, 0.25); }
-            100% { background-color: transparent; }
+            0% { background-color: rgba(63, 255, 139, 0.25); filter: brightness(1.2); box-shadow: 0 0 20px rgba(63, 255, 139, 0.15); }
+            100% { background-color: transparent; filter: brightness(1); box-shadow: none; }
         }
         .focus-highlight {
             animation: focus-highlight 2.5s cubic-bezier(0.4, 0.2, 0, 1) forwards;
-            border-radius: 1rem;
+            border-radius: 0.75rem;
         }
     </style>
 
@@ -165,6 +165,7 @@
             toggleSearchSessionMenu: (force) => {
                 const menu = document.getElementById('searchSessionMenu');
                 const isShow = (force !== undefined) ? force : menu.classList.contains('hidden');
+                if (isShow) window.ACP.renderSearchSessionMenu(); 
                 menu.classList.toggle('hidden', !isShow);
             },
 
@@ -286,12 +287,25 @@
                     const target = Array.from(document.querySelectorAll('[data-timestamp]')).find(el => el.getAttribute('data-timestamp') === timestamp);
                     if (target) {
                         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        // Apply natural highlight effect
-                        const wrapper = target.closest('[id^="wrapper-"]');
-                        if (wrapper) {
-                            wrapper.classList.remove('focus-highlight');
-                            void wrapper.offsetWidth; 
-                            wrapper.classList.add('focus-highlight');
+                        
+                        let highlightTarget = null;
+                        
+                        // Check if it's a thought content
+                        if (target.id && target.id.startsWith('thought-')) {
+                            const header = target.previousElementSibling; // The "Thought Process" header
+                            if (header) {
+                                highlightTarget = header;
+                                // Automatically expand if collapsed
+                                if (target.classList.contains('hidden')) header.click();
+                            }
+                        } else if (target.parentElement) {
+                            highlightTarget = target.parentElement; // The chat bubble
+                        }
+                        
+                        if (highlightTarget) {
+                            highlightTarget.classList.remove('focus-highlight');
+                            void highlightTarget.offsetWidth; 
+                            highlightTarget.classList.add('focus-highlight');
                         }
                     } else if (count < 20) {
                         setTimeout(() => tryScroll(count + 1), 200);
@@ -404,7 +418,7 @@
 
                 let html = role === 'me' ? `
                     <div id="wrapper-${id}" class="flex flex-col items-end gap-1.5 max-w-3xl ml-auto mb-8 px-4">
-                        <div class="bg-secondary-container text-on-surface px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-xl shadow-black/20 border border-white/5">
+                        <div class="bg-secondary-container text-on-surface px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-xl shadow-black/20 border border-white/5 transition-all">
                             <div id="${id}" data-timestamp="${timestamp}" class="markdown-body text-sm leading-relaxed"></div>
                         </div>
                         <div class="flex items-center gap-2 mr-1">
@@ -417,7 +431,7 @@
                             <span class="text-[11px] font-headline font-semibold text-primary">Gemini-CLI</span>
                             <span class="text-[11px] text-on-surface-variant font-medium">${time}</span>
                         </div>
-                        <div class="bg-surface-container-highest text-on-surface px-5 py-4 rounded-2xl rounded-tl-sm shadow-xl shadow-black/20 border border-outline-variant/10 w-full relative">
+                        <div class="bg-surface-container-highest text-on-surface px-5 py-4 rounded-2xl rounded-tl-sm shadow-xl shadow-black/20 border border-outline-variant/10 w-full relative transition-all">
                             <div id="${id}" data-timestamp="${timestamp}" class="markdown-body min-h-[1.5rem]"></div>
                             <div id="${id}-actions" class="mt-4 pt-4 border-t border-outline-variant/10 hidden flex-wrap gap-2"></div>
                         </div>
@@ -438,12 +452,12 @@
                 const html = `
                     <div class="flex justify-start mb-4 px-4">
                         <div class="w-full max-w-3xl flex flex-col space-y-2">
-                            <div id="${hdrId}" class="flex items-center space-x-2 text-xs text-gray-500 dark:text-text-muted cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none w-max group py-1">
+                            <div id="${hdrId}" class="flex items-center space-x-2 text-xs text-gray-500 dark:text-text-muted cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none w-max group py-1 px-3 rounded-lg">
                                 <span class="material-icons text-sm text-primary">psychology</span>
                                 <span class="font-medium">Thinking...</span>
                                 <span class="material-icons text-sm">expand_more</span>
                             </div>
-                            <div id="${id}" class="pl-5 border-l border-gray-200 dark:border-border-dark ml-2 space-y-2 hidden">
+                            <div id="${id}" data-timestamp="${window.ACP.thoughtStartTime}" class="pl-5 border-l border-gray-200 dark:border-border-dark ml-2 space-y-2 hidden transition-all">
                             </div>
                         </div>
                     </div>`;
@@ -963,7 +977,6 @@
                         <span class="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40 text-[16px]">search</span>
                     </div>
 
-                    <!-- Search Options Accordion (Expanded by default) -->
                     <div class="bg-surface-container-low/50 rounded-xl border border-outline-variant/10 overflow-visible">
                         <button onclick="window.ACP.toggleSearchOptionsAccordion()" class="w-full flex items-center justify-between p-3 text-left hover:bg-surface-container-high transition-colors rounded-t-xl">
                             <span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">Search Options</span>

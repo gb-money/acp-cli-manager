@@ -522,29 +522,10 @@ begin
 end;
 
 function TAgentControl.GetWorkspaceDisplayText(const ACwd: string): string;
-var
-  LFolderName, LOtherFolderName: string;
-  LSessionInfo: TSessionInfo;
-  LIsDuplicate: Boolean;
-  LSessions: TList<TSessionInfo>;
 begin
   if ACwd = '' then Exit('');
-  LFolderName := TPath.GetFileName(ACwd);
-  LIsDuplicate := False;
-  
-  LSessions := FSessionMgr.GetSessionListSnapshot;
-  try
-    for LSessionInfo in LSessions do
-    begin
-      if LSessionInfo.Cwd = ACwd then Continue;
-      if LSessionInfo.Cwd = '' then Continue;
-      LOtherFolderName := TPath.GetFileName(LSessionInfo.Cwd);
-      if SameText(LFolderName, LOtherFolderName) then begin LIsDuplicate := True; Break; end;
-    end;
-  finally
-    LSessions.Free;
-  end;
-  if LIsDuplicate then Result := ACwd else Result := LFolderName;
+  // Use ExcludeTrailingPathDelimiter and TPath.GetFileName to reliably get only the folder name
+  Result := TPath.GetFileName(ExcludeTrailingPathDelimiter(ACwd));
 end;
 
 procedure TAgentControl.UpdateSessionList;
