@@ -518,6 +518,15 @@
                 }
             },
 
+            toggleSessionMenu: (e, sessionId) => {
+                if (e) { e.stopPropagation(); e.preventDefault(); }
+                const menus = document.querySelectorAll('[id^="session-menu-"]');
+                menus.forEach(m => { if (m.id !== `session-menu-${sessionId}`) m.classList.add('hidden'); });
+                
+                const menu = document.getElementById(`session-menu-${sessionId}`);
+                if (menu) menu.classList.toggle('hidden');
+            },
+
             updateSessionList: (data) => {
                 const sessions = typeof data === 'string' ? JSON.parse(data) : data;
                 window.ACP.allSessions = sessions;
@@ -602,22 +611,53 @@
 
                 container.innerHTML = sessions.map(s => `
                     <div onclick="window.sendAcp('select-session?id=${s.id}')" 
-                        class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer group relative overflow-hidden ${s.active ? 'bg-surface-container-high border-l-[3px] border-primary' : 'hover:bg-surface-container-high/50 text-on-surface-variant hover:text-on-surface border-l-[3px] border-transparent'}">
-                        <div class="relative z-10">
+                        class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer group relative overflow-visible ${s.active ? 'bg-surface-container-high border-l-[3px] border-primary' : 'hover:bg-surface-container-high/50 text-on-surface-variant hover:text-on-surface border-l-[3px] border-transparent'}">
+                        <div class="relative z-10 shrink-0">
                             <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/20">
                                 <span class="material-icons text block ${s.active ? 'text-primary' : ''}">${s.active ? 'forum' : 'chat_bubble_outline'}</span>
                             </div>
                             <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 ${s.online ? 'bg-primary' : 'bg-gray-400'} rounded-full border-2 border-surface-container-lowest"></div>
                         </div>
-                        <div class="flex-1 min-w-0 z-10">
-                            <div class="text-sm font-headline ${s.active ? 'font-semibold text-primary' : 'font-medium'} truncate">${s.name}</div>
+                        <div class="flex-1 min-w-0 z-10 pr-2">
+                            <div class="text-sm font-headline ${s.active ? 'font-semibold text-primary' : 'font-medium'} truncate flex items-center gap-1.5">
+                                <span class="truncate">${s.name}</span>
+                                ${s.pinned ? '<span class="material-symbols-outlined text-[12px] text-primary shrink-0">push_pin</span>' : ''}
+                            </div>
                             <div class="text-xs ${s.active ? 'text-on-surface-variant' : 'opacity-60'} truncate">${s.workspace || ''}</div>
                         </div>
-                        <span class="material-symbols-outlined text-on-surface-variant text-[16px] z-10 ${s.pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}" data-weight="fill">push_pin</span>
-                    </div>`).join('');
+                        
+                        <div class="relative z-20 shrink-0">
+                            <button onclick="window.ACP.toggleSessionMenu(event, '${s.id}')" 
+                                class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-highest transition-all opacity-0 group-hover:opacity-100 focus:opacity-100">
+                                <span class="material-icons text-[20px] leading-none">more_vert</span>
+                            </button>
+                            <div id="session-menu-${s.id}" class="hidden absolute right-0 top-full mt-1 w-52 bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[100] py-1.5 overflow-hidden">
+                                <button onclick="event.stopPropagation(); window.sendAcp('pin-session?id=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
+                                    <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">push_pin</span></div>
+                                    <span class="flex-1">${s.pinned ? 'Unpin Session' : 'Pin Session'}</span>
+                                </button>
+                                <button onclick="event.stopPropagation(); window.sendUi('open-explorer?path=' + encodeURIComponent('${s.workspace || ''}'));" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
+                                    <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">folder</span></div>
+                                    <span class="flex-1">Open Explorer</span>
+                                </button>
+                                <button onclick="event.stopPropagation(); window.sendUi('open-diff-viewer?sessionId=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
+                                    <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">text_compare</span></div>
+                                    <span class="flex-1">Open Diff Viewer</span>
+                                </button>
+                                <div class="h-px bg-outline-variant/10 my-1 mx-2"></div>
+                                <button onclick="event.stopPropagation(); if(confirm('Delete this session?')) window.sendAcp('delete-session?id=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-error hover:bg-error/10 transition-colors text-left">
+                                    <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px] text-error">delete</span></div>
+                                    <span class="flex-1">Delete Session</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>`).join('') + '<div class="h-32"></div>';
             },
 
             streamThought: (data) => {
+                if (window.ACP.lastBlockType === 'message') {
+                    window.ACP.breakGrouping();
+                }
                 if (window.ACP.lastBlockType !== 'thought' || !window.ACP.lastAiThoughtId) {
                     window.ACP.lastAiThoughtId = window.ACP.createThoughtContainer(data.timestamp);
                     window.ACP.lastBlockType = 'thought';
@@ -652,7 +692,10 @@
                 const { content, role, stopReason, timestamp } = data;
                 const targetRole = role === 'user' ? 'me' : 'ai';
                 
-                if (window.ACP.lastBlockType === 'thought') window.ACP.finalizeThought();
+                if (window.ACP.lastBlockType === 'thought') {
+                    window.ACP.finalizeThought();
+                    window.ACP.lastAiThoughtId = null;
+                }
                 
                 if (!window.ACP.lastAiMsgId || window.ACP.lastBlockType !== 'message' || window.ACP.lastMessageRole !== targetRole) {
                     window.ACP.lastAiMsgId = window.ACP.addMessageToUI(targetRole, '', timestamp);
@@ -759,6 +802,11 @@
                     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
                     const json = new TextDecoder().decode(bytes);
                     const data = JSON.parse(json);
+                    
+                    const outer = document.getElementById('mainChatCanvas');
+                    const wasSmooth = outer.classList.contains('scroll-smooth');
+                    if (wasSmooth) outer.classList.remove('scroll-smooth');
+
                     document.getElementById('mainChatCanvasInner').innerHTML = '';
                     window.ACP.breakGrouping(); 
                     
@@ -776,8 +824,14 @@
                             const div = document.getElementById(id);
                             if (div) div.innerHTML = window.ACP.renderContent(msg.content);
                         }
-                        window.ACP.breakGrouping(); // Ensure each history entry is its own bubble
+                        window.ACP.breakGrouping(); 
                     });
+
+                    setTimeout(() => {
+                        outer.scrollTop = outer.scrollHeight;
+                        if (wasSmooth) outer.classList.add('scroll-smooth');
+                    }, 50);
+
                 } catch (e) { console.error('History load error:', e); }
             },
 
@@ -946,9 +1000,18 @@
             </div>
         </div>
         <div id="sessionListContainer" class="flex-1 overflow-y-auto px-3 space-y-1 pb-6"></div>
-        <div class="p-4 mt-auto border-t border-white/5 flex items-center justify-between">
-            <button onclick="window.sendUi('open-explorer')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="File Explorer"><span class="material-symbols-outlined text-lg">folder</span></button>
-            <button class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="Settings"><span class="material-symbols-outlined text-lg group-hover:rotate-45 transition-transform duration-300">settings</span></button>
+        <div class="p-4 mt-auto border-t border-white/5 flex items-center justify-between gap-1">
+            <div class="flex items-center gap-1">
+                <button onclick="window.sendUi('open-explorer')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="File Explorer">
+                    <span class="material-symbols-outlined text-lg">folder</span>
+                </button>
+                <button onclick="window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId)" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="Diff Viewer">
+                    <span class="material-symbols-outlined text-lg">text_compare</span>
+                </button>
+            </div>
+            <button class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="Settings">
+                <span class="material-symbols-outlined text-lg group-hover:rotate-45 transition-transform duration-300">settings</span>
+            </button>
         </div>
     </nav>
 
@@ -1138,6 +1201,9 @@
             window.shortcutManager.init();
 
             document.addEventListener('click', (e) => {
+                if (!e.target.closest('[id^="session-menu-"]') && !e.target.closest('button[onclick*="toggleSessionMenu"]')) {
+                    document.querySelectorAll('[id^="session-menu-"]').forEach(m => m.classList.add('hidden'));
+                }
                 if (!e.target.closest('#newChatDropdown') && !e.target.closest('button[onclick*="toggleDropdown"]')) {
                     const d = document.getElementById('newChatDropdown');
                     if (d) { d.classList.add('opacity-0', 'invisible'); setTimeout(() => d.classList.add('hidden'), 200); }

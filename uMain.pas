@@ -93,6 +93,8 @@ begin
   FSearchService := TSearchService.Create;
   FSearchService.BaseConfigPath := FSessionMgr.BaseConfigPath;
   FSearchService.OnSearchComplete := DoSearchComplete;
+
+  Self.WindowState := TWindowState.wsMaximized;
 end;
 
 procedure TS.DoSessionRestored(Sender: TObject; ASession: TSessionInfo);
@@ -293,7 +295,6 @@ begin
     FSessionMgr.SelectSession(nil); 
     LHtmlPath := TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'index.html');
     if TFile.Exists(LHtmlPath) then WebBrowserMain.Navigate('file://' + LHtmlPath);
-    if Assigned(frmDebugRPC) then frmDebugRPC.Show;
   end;
 end;
 
@@ -479,7 +480,7 @@ begin
                 // Break grouping if not a chunk to ensure new bubble for next content
                 if not (SameText(LUpdateType, 'agent_message_chunk') or 
                         SameText(LUpdateType, 'user_message_chunk') or 
-                        SameText(LUpdateType, 'thought_chunk')) then
+                        SameText(LUpdateType, 'agent_thought_chunk')) then
                 begin
                    System.Classes.TThread.Queue(nil, procedure begin
                      if Assigned(FAgentControl) then FAgentControl.BreakGrouping;

@@ -33,13 +33,14 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils, uFileViewer, Winapi.ShellAPI, Winapi.Windows;
+  System.IOUtils, uFileViewer, Winapi.ShellAPI, Winapi.Windows, FMX.Platform.Win;
 
 procedure TfrmFileExplorer.FormCreate(Sender: TObject);
 begin
   FInitialized := False;
   FExplorerCtrl := TExplorerControl.Create(WebBrowserMain);
   FExplorerCtrl.OnViewFile := DoViewFile;
+  Self.WindowState := TWindowState.wsMaximized;
 end;
 
 procedure TfrmFileExplorer.DoViewFile(Sender: TObject; const APath: string);
@@ -65,7 +66,12 @@ end;
 procedure TfrmFileExplorer.FormShow(Sender: TObject);
 var
   LHtmlPath: string;
+  LHandle: HWND;
 begin
+  // Show in taskbar
+  LHandle := FMX.Platform.Win.WindowHandleToPlatform(Self.Handle).Wnd;
+  SetWindowLong(LHandle, GWL_EXSTYLE, GetWindowLong(LHandle, GWL_EXSTYLE) or WS_EX_APPWINDOW);
+
   if not FInitialized then
   begin
     FInitialized := True;

@@ -34,12 +34,13 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils;
+  System.IOUtils, Winapi.Windows, FMX.Platform.Win;
 
 procedure TfrmDiffViewer.FormCreate(Sender: TObject);
 begin
   FInitialized := False;
   FDiffCtrl := nil;
+  Self.WindowState := TWindowState.wsMaximized;
 end;
 
 procedure TfrmDiffViewer.FormDestroy(Sender: TObject);
@@ -56,7 +57,12 @@ end;
 procedure TfrmDiffViewer.FormShow(Sender: TObject);
 var
   LHtmlPath: string;
+  LHandle: HWND;
 begin
+  // Show in taskbar
+  LHandle := FMX.Platform.Win.WindowHandleToPlatform(Self.Handle).Wnd;
+  SetWindowLong(LHandle, GWL_EXSTYLE, GetWindowLong(LHandle, GWL_EXSTYLE) or WS_EX_APPWINDOW);
+
   if not FInitialized then
   begin
     FInitialized := True;

@@ -32,12 +32,13 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils, Winapi.ShellAPI, Winapi.Windows;
+  System.IOUtils, Winapi.ShellAPI, Winapi.Windows, FMX.Platform.Win;
 
 procedure TfrmFileViewer.FormCreate(Sender: TObject);
 begin
   FInitialized := False;
   FViewerCtrl := TFileViewerControl.Create(WebBrowserMain);
+  Self.WindowState := TWindowState.wsMaximized;
 end;
 
 procedure TfrmFileViewer.FormDestroy(Sender: TObject);
@@ -54,7 +55,12 @@ end;
 procedure TfrmFileViewer.FormShow(Sender: TObject);
 var
   LHtmlPath: string;
+  LHandle: HWND;
 begin
+  // Show in taskbar
+  LHandle := FMX.Platform.Win.WindowHandleToPlatform(Self.Handle).Wnd;
+  SetWindowLong(LHandle, GWL_EXSTYLE, GetWindowLong(LHandle, GWL_EXSTYLE) or WS_EX_APPWINDOW);
+
   if not FInitialized then
   begin
     FInitialized := True;

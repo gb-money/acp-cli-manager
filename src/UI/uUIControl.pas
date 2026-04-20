@@ -74,8 +74,9 @@ procedure TUIControl.HandleOpenDiffViewer(const Params: TDictionary<string, stri
 var
   LSessionId, LPath, LHashId: string;
 begin
-  if Params.TryGetValue('sessionId', LSessionId) and Params.TryGetValue('path', LPath) then
+  if Params.TryGetValue('sessionId', LSessionId) then
   begin
+    Params.TryGetValue('path', LPath);     // Optional
     Params.TryGetValue('hashId', LHashId); // Optional
     if Assigned(FOnOpenDiffViewer) then
       FOnOpenDiffViewer(Self, LSessionId, LPath, LHashId);
