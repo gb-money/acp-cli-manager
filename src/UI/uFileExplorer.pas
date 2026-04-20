@@ -93,16 +93,20 @@ end;
 
 procedure TfrmFileExplorer.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
-  // 1. Allow initial UI file
+  // 1. Filter out internal browser URLs and javascript
+  if URL.IsEmpty or URL.ToLower.StartsWith('about:') or URL.ToLower.StartsWith('javascript:') then
+    Exit;
+
+  // 2. Allow initial UI file
   if URL.ToLower.Contains('explorer.html') then Exit;
 
-  // 2. Handle Custom Actions
+  // 3. Handle Custom Actions
   if FExplorerCtrl.HandleRequest(URL) then Exit;
 
-  // 3. Open everything else in system default app
+  // 4. Open everything else (external links) in system default app
   ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWNORMAL);
 
-  // 4. Block internal navigation
+  // 5. Block internal navigation
   WebBrowserMain.Stop;
 end;
 

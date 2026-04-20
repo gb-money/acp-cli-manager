@@ -257,6 +257,9 @@ begin
     if UpdateObj.Contains('availableCommands') then
     begin
       Data.CommandsJson := UpdateObj.A['availableCommands'].ToJSON(False);
+      // Reset grouping on metadata update
+      Data.CurrentBlockText := '';
+      Data.LastChunkType := '';
       FSessions.AddOrSetValue(SessionId, Data);
       if Assigned(FOnSessionMetadataUpdate) then
         FOnSessionMetadataUpdate(Self, SessionId);
@@ -264,9 +267,14 @@ begin
     Exit;
   end;
 
-  if UpdateType = 'tool_call_update' then
+  if (UpdateType = 'tool_call_update') or (UpdateType = 'tool_call') then
   begin
-    if UpdateObj.Contains('content') and (UpdateObj.Items[UpdateObj.IndexOf('content')].Typ = jdtArray) then
+    // Reset grouping on tool call events
+    Data.CurrentBlockText := '';
+    Data.LastChunkType := '';
+    FSessions.AddOrSetValue(SessionId, Data);
+
+    if (UpdateType = 'tool_call_update') and UpdateObj.Contains('content') and (UpdateObj.Items[UpdateObj.IndexOf('content')].Typ = jdtArray) then
     begin
       for I := 0 to UpdateObj.A['content'].Count - 1 do
       begin

@@ -25,9 +25,6 @@ implementation
 class function TConversationService.CleanContent(const AContent: string): string;
 var
   LIdx: Integer;
-  LMatches: TMatchCollection;
-  LMatch: TMatch;
-  LRaw, LPath, LFile: string;
 begin
   Result := AContent;
   
@@ -36,19 +33,6 @@ begin
   if LIdx < 0 then LIdx := Result.ToLower.IndexOf('--- context from');
   if LIdx >= 0 then
     Result := Result.Substring(0, LIdx).Trim;
-
-  // 2. Normalize @file:/// paths to @filename for UI
-  try
-    LMatches := TRegEx.Matches(Result, '@file:///[^\s\xa0\n]+');
-    for LMatch in LMatches do
-    begin
-      LRaw := LMatch.Value;
-      LPath := LRaw.Replace('@file:///', '').Replace('/', PathDelim);
-      LFile := TPath.GetFileName(LPath);
-      Result := Result.Replace(LRaw, '@' + LFile);
-    end;
-  except
-  end;
 end;
 
 class function TConversationService.GetConversationsBySessionId(ASession: TSessionInfo): TJsonArray;
@@ -162,6 +146,7 @@ begin
       if (LUpdateType = 'agent_thought_chunk') or (LUpdateType = 'agent_message_chunk') or 
          (LUpdateType = 'user_message_chunk') or (LUpdateType = 'full_message') then
       begin
+        // ... (existing chunk processing logic remains same inside)
         if LUpdateType = 'full_message' then
         begin
           LRole := LUpdateObj.S['role'];
@@ -193,7 +178,6 @@ begin
           if (LUpdateType <> 'full_message') and Assigned(LLastMsg) and (LLastMsg.S['role'] = LRole) then
           begin
             LLastMsg.S['content'] := LLastMsg.S['content'] + LChunkText;
-            // Always update timestamp to the latest chunk's time for accurate display
             LLastMsg.S['timestamp'] := ALogEntry.S['timestamp'];
           end
           else
@@ -204,6 +188,11 @@ begin
             LLastMsg.S['timestamp'] := ALogEntry.S['timestamp'];
           end;
         end;
+      end
+      else
+      begin
+        // IMPORTANT: Any update that is NOT a chunk (like tool_call) breaks the grouping
+        LLastMsg := nil;
       end;
     end;
   end;

@@ -42,6 +42,7 @@ type
     procedure UpdateSessionList;
     procedure UpdateMessageStreaming(const ASessionId, AContent: string; const ARole: string = 'ai'; const AStopReason: string = '');
     procedure UpdateThoughtStreaming(const ASessionId, AContent: string);
+    procedure BreakGrouping;
     procedure UpdateFileList(const ARootPath: string = '');
     procedure RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
     procedure ShowTyping(const AShow: Boolean);
@@ -457,10 +458,19 @@ begin
   try
     LObj.S['sessionId'] := ASessionId;
     LObj.S['content'] := AContent;
+    LObj.S['timestamp'] := FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
     FWebBrowser.EvaluateJavaScript('window.ACP.streamThought(' + LObj.ToJSON(False) + ')');
   finally
     LObj.Free;
   end;
+end;
+
+procedure TAgentControl.BreakGrouping;
+begin
+  System.Classes.TThread.Queue(nil, procedure
+  begin
+    FWebBrowser.EvaluateJavaScript('window.ACP.breakGrouping()');
+  end);
 end;
 
 function TAgentControl.IsIgnoredDir(const ADirName: string): Boolean;

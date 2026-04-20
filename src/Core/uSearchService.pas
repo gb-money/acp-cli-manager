@@ -147,20 +147,32 @@ begin
       LBase: JsonDataObjects.TJsonBaseObject;
 
       procedure FlushCurrentMessage;
-      var LInclude: Boolean;
+      var LInclude: Boolean; LCleanText: string; LMarkerIdx: Integer;
       begin
         if (LCurrentText <> '') and (LCurrentRole <> '') then
         begin
+          LCleanText := LCurrentText;
+          // Exclude referenced file content from user messages
+          if LCurrentRole = 'user' then
+          begin
+            LMarkerIdx := LCleanText.IndexOf('--- Content from referenced context ---');
+            if LMarkerIdx >= 0 then LCleanText := LCleanText.Substring(0, LMarkerIdx).Trim;
+          end;
+
+          if LCleanText = '' then begin
+            LCurrentText := ''; LCurrentRole := ''; Exit;
+          end;
+
           LInclude := False;
           if (LCurrentRole = 'user') and LSearchOpts.IncludeUser then LInclude := True
           else if (LCurrentRole = 'ai') and LSearchOpts.IncludeAgent then LInclude := True
           else if (LCurrentRole = 'thought') and LSearchOpts.IncludeThought then LInclude := True;
 
-          if LInclude and MatchesText(LCurrentText, LSearchQuery, LSearchOpts) then
+          if LInclude and MatchesText(LCleanText, LSearchQuery, LSearchOpts) then
           begin
             LMatch.Timestamp := LCurrentTimestamp;
             LMatch.Role := LCurrentRole;
-            LMatch.Snippet := CreateSnippet(LCurrentText, LSearchQuery, LSearchOpts);
+            LMatch.Snippet := CreateSnippet(LCleanText, LSearchQuery, LSearchOpts);
             LMatch.MessageIndex := LCurrentFirstIndex;
             LMatches.Add(LMatch);
           end;

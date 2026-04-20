@@ -10,6 +10,7 @@
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
     <link href="https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg" rel="icon">
+    <link href="https://fonts.googleapis.com" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
     
@@ -82,8 +83,8 @@
         }
 
         @keyframes focus-highlight {
-            0% { background-color: rgba(63, 255, 139, 0.25); filter: brightness(1.2); box-shadow: 0 0 20px rgba(63, 255, 139, 0.15); }
-            100% { background-color: transparent; filter: brightness(1); box-shadow: none; }
+            0% { filter: brightness(1.6); box-shadow: 0 0 30px rgba(63, 255, 139, 0.3); outline: 2px solid rgba(63, 255, 139, 0.5); background-color: rgba(63, 255, 139, 0.1); }
+            100% { filter: brightness(1); box-shadow: none; outline: 2px solid transparent; background-color: transparent; }
         }
         .focus-highlight {
             animation: focus-highlight 2.5s cubic-bezier(0.4, 0.2, 0, 1) forwards;
@@ -284,35 +285,41 @@
                 }
                 
                 const tryScroll = (count) => {
-                    const target = Array.from(document.querySelectorAll('[data-timestamp]')).find(el => el.getAttribute('data-timestamp') === timestamp);
+                    const searchTs = timestamp.trim();
+                    const elements = Array.from(document.querySelectorAll('[data-timestamp]'));
+                    const target = elements.find(el => {
+                        const elTs = el.getAttribute('data-timestamp').trim();
+                        return elTs === searchTs || elTs.includes(searchTs) || searchTs.includes(elTs);
+                    });
+
                     if (target) {
-                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        
+                        const container = document.getElementById('mainChatCanvas');
                         let highlightTarget = null;
                         
-                        // Check if it's a thought content
-                        if (target.id && target.id.startsWith('thought-')) {
-                            const header = target.previousElementSibling; // The "Thought Process" header
-                            if (header) {
-                                highlightTarget = header;
-                                // Automatically expand if collapsed
-                                if (target.classList.contains('hidden')) header.click();
-                            }
-                        } else if (target.parentElement) {
-                            highlightTarget = target.parentElement; // The chat bubble
+                        const thoughtHeader = target.querySelector('[id^="thought-hdr-"]');
+                        if (thoughtHeader) {
+                            highlightTarget = thoughtHeader;
+                        } else {
+                            highlightTarget = target.querySelector('.bg-secondary-container, .bg-surface-container-highest');
                         }
+                        
+                        const containerRect = container.getBoundingClientRect();
+                        const targetRect = target.getBoundingClientRect();
+                        const relativeTop = targetRect.top - containerRect.top + container.scrollTop;
+                        const targetScrollTop = relativeTop - (container.clientHeight / 2);
+                        
+                        container.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
                         
                         if (highlightTarget) {
                             highlightTarget.classList.remove('focus-highlight');
                             void highlightTarget.offsetWidth; 
                             highlightTarget.classList.add('focus-highlight');
                         }
-                    } else if (count < 20) {
-                        setTimeout(() => tryScroll(count + 1), 200);
+                    } else if (count < 60) {
+                        setTimeout(() => tryScroll(count + 1), 100);
                     }
                 };
                 tryScroll(0);
-                window.ACP.toggleSearch(false);
             },
             
             toggleDropdown: (e, force) => {
@@ -368,11 +375,7 @@
                 const text = input.innerText.trim();
                 if (text) {
                     input.innerHTML = '';
-                    window.ACP.lastAiMsgId = ''; 
-                    window.ACP.lastAiThoughtId = null; 
-                    window.ACP.lastBlockType = ''; 
-                    window.ACP.lastMessageRole = '';
-                    window.ACP.accumulatedThought = '';
+                    window.ACP.breakGrouping(); 
                     
                     window.ACP.streamMessage({content: text, role: 'user', stopReason: '', timestamp: new Date().toISOString()});
                     
@@ -417,22 +420,22 @@
                 const id = 'msg-' + Date.now() + Math.random().toString(36).substr(2, 5);
 
                 let html = role === 'me' ? `
-                    <div id="wrapper-${id}" class="flex flex-col items-end gap-1.5 max-w-3xl ml-auto mb-8 px-4">
-                        <div class="bg-secondary-container text-on-surface px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-xl shadow-black/20 border border-white/5 transition-all">
-                            <div id="${id}" data-timestamp="${timestamp}" class="markdown-body text-sm leading-relaxed"></div>
+                    <div id="wrapper-${id}" data-timestamp="${timestamp}" class="flex flex-col items-end gap-1.5 max-w-3xl ml-auto mb-8 px-4 transition-all">
+                        <div class="bg-secondary-container text-on-surface px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-xl shadow-black/20 border border-white/5">
+                            <div id="${id}" class="markdown-body text-sm leading-relaxed"></div>
                         </div>
                         <div class="flex items-center gap-2 mr-1">
                             <span class="text-[11px] text-on-surface-variant font-medium">${time}</span>
                             <span class="material-symbols-outlined text-[14px] text-on-surface-variant">check_circle</span>
                         </div>
                     </div>` : `
-                    <div id="wrapper-${id}" class="flex flex-col items-start gap-1.5 max-w-3xl mr-auto group mb-8 px-4">
+                    <div id="wrapper-${id}" data-timestamp="${timestamp}" class="flex flex-col items-start gap-1.5 max-w-3xl mr-auto group mb-8 px-4 transition-all">
                         <div class="flex items-center gap-3 mb-1 ml-1 transition-opacity">
                             <span class="text-[11px] font-headline font-semibold text-primary">Gemini-CLI</span>
                             <span class="text-[11px] text-on-surface-variant font-medium">${time}</span>
                         </div>
-                        <div class="bg-surface-container-highest text-on-surface px-5 py-4 rounded-2xl rounded-tl-sm shadow-xl shadow-black/20 border border-outline-variant/10 w-full relative transition-all">
-                            <div id="${id}" data-timestamp="${timestamp}" class="markdown-body min-h-[1.5rem]"></div>
+                        <div class="bg-surface-container-highest text-on-surface px-5 py-4 rounded-2xl rounded-tl-sm shadow-xl shadow-black/20 border border-outline-variant/10 w-full relative">
+                            <div id="${id}" class="markdown-body min-h-[1.5rem]"></div>
                             <div id="${id}-actions" class="mt-4 pt-4 border-t border-outline-variant/10 hidden flex-wrap gap-2"></div>
                         </div>
                     </div>`;
@@ -443,21 +446,22 @@
                 return id;
             },
 
-            createThoughtContainer: () => {
+            createThoughtContainer: (timestamp) => {
                 const container = document.getElementById('mainChatCanvasInner');
                 const id = 'thought-' + Date.now();
                 const hdrId = 'thought-hdr-' + Date.now();
+                const actualTimestamp = timestamp || new Date().toISOString().replace('T', ' ').split('.')[0];
                 window.ACP.thoughtStartTime = Date.now();
                 
                 const html = `
-                    <div class="flex justify-start mb-4 px-4">
+                    <div class="flex flex-col justify-start mb-4 px-4" data-timestamp="${actualTimestamp}">
                         <div class="w-full max-w-3xl flex flex-col space-y-2">
-                            <div id="${hdrId}" class="flex items-center space-x-2 text-xs text-gray-500 dark:text-text-muted cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none w-max group py-1 px-3 rounded-lg">
+                            <div id="${hdrId}" class="flex items-center space-x-2 text-xs text-gray-500 dark:text-text-muted cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none w-max group py-1.5 px-3 rounded-lg border border-transparent transition-all">
                                 <span class="material-icons text-sm text-primary">psychology</span>
                                 <span class="font-medium">Thinking...</span>
                                 <span class="material-icons text-sm">expand_more</span>
                             </div>
-                            <div id="${id}" data-timestamp="${window.ACP.thoughtStartTime}" class="pl-5 border-l border-gray-200 dark:border-border-dark ml-2 space-y-2 hidden transition-all">
+                            <div id="${id}" class="pl-5 border-l border-gray-200 dark:border-border-dark ml-2 space-y-2 hidden transition-all">
                             </div>
                         </div>
                     </div>`;
@@ -497,8 +501,8 @@
                     const cnt = document.getElementById(window.ACP.lastAiThoughtId.contentId);
                     if (hdr) {
                         const duration = Math.round((Date.now() - window.ACP.thoughtStartTime) / 1000);
-                        hdr.classList.remove('py-1');
-                        hdr.classList.add('py-1.5');
+                        hdr.classList.remove('py-1.5');
+                        hdr.classList.add('py-2');
                         hdr.querySelector('.material-icons').classList.remove('text-primary');
                         hdr.querySelector('.material-icons').classList.add('text-gray-400', 'dark:text-gray-500');
                         hdr.querySelector('.font-medium').innerText = `Thought Process (${duration}s)`;
@@ -614,12 +618,12 @@
             },
 
             streamThought: (data) => {
-                if (window.ACP.lastBlockType !== 'thought') {
-                    window.ACP.lastAiThoughtId = window.ACP.createThoughtContainer();
+                if (window.ACP.lastBlockType !== 'thought' || !window.ACP.lastAiThoughtId) {
+                    window.ACP.lastAiThoughtId = window.ACP.createThoughtContainer(data.timestamp);
                     window.ACP.lastBlockType = 'thought';
                     window.ACP.accumulatedThought = '';
                 }
-                window.ACP.accumulatedThought += data.content;
+                window.ACP.accumulatedThought = data.content;
                 window.ACP.parseAndRenderThought(window.ACP.accumulatedThought, window.ACP.lastAiThoughtId.contentId);
                 const div = document.getElementById(window.ACP.lastAiThoughtId.contentId);
                 if (div) div.classList.remove('hidden'); 
@@ -627,11 +631,30 @@
                 outer.scrollTop = outer.scrollHeight;
             },
 
+            renderContent: (content) => {
+                let rendered = content;
+                rendered = rendered.replace(/(@(?:"[^"]+"|[^\s\xa0\n]+))/g, (match) => {
+                    let rawPath = match.substring(1).replace(/(^"|"$)/g, '');
+                    let displayPath = rawPath;
+                    let fullPath = rawPath;
+                    if (rawPath.startsWith('file:///')) {
+                        fullPath = decodeURIComponent(rawPath.substring(8));
+                        let lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+                        displayPath = fullPath.substring(lastSlash + 1);
+                    }
+                    let safeFullPath = encodeURIComponent(fullPath);
+                    return `<span class="text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors" contenteditable="false" onclick="if(event.detail===1){window.sendUi('open-file-viewer?path=' + '${safeFullPath}')}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}">@${displayPath}</span>`;
+                });
+                return window.marked ? marked.parse(rendered) : rendered;
+            },
+
             streamMessage: (data) => {
                 const { content, role, stopReason, timestamp } = data;
                 const targetRole = role === 'user' ? 'me' : 'ai';
+                
                 if (window.ACP.lastBlockType === 'thought') window.ACP.finalizeThought();
-                if (window.ACP.lastBlockType !== 'message' || window.ACP.lastMessageRole !== targetRole) {
+                
+                if (!window.ACP.lastAiMsgId || window.ACP.lastBlockType !== 'message' || window.ACP.lastMessageRole !== targetRole) {
                     window.ACP.lastAiMsgId = window.ACP.addMessageToUI(targetRole, '', timestamp);
                     window.ACP.lastBlockType = 'message';
                     window.ACP.lastMessageRole = targetRole;
@@ -639,22 +662,7 @@
 
                 const targetDiv = document.getElementById(window.ACP.lastAiMsgId);
                 if (targetDiv) {
-                    let rendered = content;
-                    rendered = rendered.replace(/(@(?:"[^"]+"|[^\s\xa0\n]+))/g, (match) => {
-                        let rawPath = match.substring(1).replace(/(^"|"$)/g, '');
-                        let displayPath = rawPath;
-                        let fullPath = rawPath;
-                        if (rawPath.startsWith('file:///')) {
-                            fullPath = decodeURIComponent(rawPath.substring(8));
-                            let lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
-                            displayPath = fullPath.substring(lastSlash + 1);
-                        }
-                        let safeFullPath = encodeURIComponent(fullPath);
-                        return `<span class="text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors" contenteditable="false" onclick="if(event.detail===1){window.sendUi('open-file-viewer?path=' + '${safeFullPath}')}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}">@${displayPath}</span>`;
-                    });
-
-                    if (window.marked) targetDiv.innerHTML = marked.parse(rendered);
-                    else targetDiv.innerText = rendered;
+                    targetDiv.innerHTML = window.ACP.renderContent(content);
                 }
                 if (stopReason) window.ACP.showProcessing(false);
                 const outer = document.getElementById('mainChatCanvas');
@@ -752,24 +760,40 @@
                     const json = new TextDecoder().decode(bytes);
                     const data = JSON.parse(json);
                     document.getElementById('mainChatCanvasInner').innerHTML = '';
-                    window.ACP.lastMessageRole = ''; window.ACP.lastBlockType = ''; window.ACP.lastRenderedDate = null;
+                    window.ACP.breakGrouping(); 
+                    
                     data.forEach(msg => {
                         const r = msg.role;
+                        const targetRole = r === 'user' ? 'me' : 'ai';
                         if (r === 'thought') {
-                            const tIds = window.ACP.createThoughtContainer();
-                            window.ACP.lastBlockType = 'thought'; window.ACP.accumulatedThought = msg.content; window.ACP.lastAiThoughtId = tIds;
+                            const tIds = window.ACP.createThoughtContainer(msg.timestamp);
                             window.ACP.parseAndRenderThought(msg.content, tIds.contentId);
+                            window.ACP.lastAiThoughtId = tIds;
+                            window.ACP.lastBlockType = 'thought';
                             window.ACP.finalizeThought();
-                        } else window.ACP.streamMessage({content: msg.content, role: r, stopReason: 'history', timestamp: msg.timestamp});
+                        } else {
+                            const id = window.ACP.addMessageToUI(targetRole, '', msg.timestamp);
+                            const div = document.getElementById(id);
+                            if (div) div.innerHTML = window.ACP.renderContent(msg.content);
+                        }
+                        window.ACP.breakGrouping(); // Ensure each history entry is its own bubble
                     });
                 } catch (e) { console.error('History load error:', e); }
             },
 
             clearChat: () => {
                 document.getElementById('mainChatCanvasInner').innerHTML = '';
-                window.ACP.lastAiMsgId = ''; window.ACP.lastAiThoughtId = null; window.ACP.lastBlockType = ''; window.ACP.lastMessageRole = '';
+                window.ACP.breakGrouping();
                 window.ACP.lastRenderedDate = null;
                 window.ACP.showProcessing(false);
+            },
+
+            breakGrouping: () => {
+                if (window.ACP.lastBlockType === 'thought') window.ACP.finalizeThought();
+                window.ACP.lastAiMsgId = '';
+                window.ACP.lastAiThoughtId = null;
+                window.ACP.lastBlockType = '';
+                window.ACP.lastMessageRole = '';
             },
 
             getTriggerInfo: (text, trigger) => {

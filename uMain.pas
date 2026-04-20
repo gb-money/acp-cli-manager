@@ -308,6 +308,7 @@ end;
 
 procedure TS.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
+  if URL.IsEmpty then Exit;
   if URL.ToLower.Contains('index.html') then Exit;
   if URL.ToLower.StartsWith('about:') or URL.ToLower.StartsWith('javascript:') then Exit;
 
@@ -474,6 +475,17 @@ begin
               if LObj.O['params'].Contains('update') and (LObj.O['params'].Items[LObj.O['params'].IndexOf('update')].Typ = jdtObject) then
               begin
                 LUpdateType := LObj.O['params'].O['update'].S['sessionUpdate'];
+                
+                // Break grouping if not a chunk to ensure new bubble for next content
+                if not (SameText(LUpdateType, 'agent_message_chunk') or 
+                        SameText(LUpdateType, 'user_message_chunk') or 
+                        SameText(LUpdateType, 'thought_chunk')) then
+                begin
+                   System.Classes.TThread.Queue(nil, procedure begin
+                     if Assigned(FAgentControl) then FAgentControl.BreakGrouping;
+                   end);
+                end;
+
                 if SameText(LUpdateType, 'available_commands_update') then LDoLog := False;
               end;
             end;
