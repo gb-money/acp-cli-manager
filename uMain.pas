@@ -323,6 +323,18 @@ begin
     LOpts.UseRegex := URL.Contains('regex=true');
     LOpts.IncludeActive := not URL.Contains('active=false');
     LOpts.IncludeInactive := not URL.Contains('inactive=false');
+    LOpts.IncludeUser := not URL.Contains('user=false');
+    LOpts.IncludeAgent := not URL.Contains('agent=false');
+    LOpts.IncludeThought := URL.Contains('thought=true');
+    
+    LOpts.TargetSessionId := '';
+    LIdx := URL.IndexOf('targetSessionId=');
+    if LIdx > 0 then begin
+      LOpts.TargetSessionId := URL.Substring(LIdx + 16);
+      if LOpts.TargetSessionId.Contains('&') then
+        LOpts.TargetSessionId := LOpts.TargetSessionId.Substring(0, LOpts.TargetSessionId.IndexOf('&'));
+      LOpts.TargetSessionId := System.NetEncoding.TNetEncoding.URL.Decode(LOpts.TargetSessionId);
+    end;
 
     FSearchService.Search(LQuery, LOpts);
     WebBrowserMain.Stop;
@@ -536,9 +548,13 @@ begin
     end;
     LJsonStr := LRoot.ToJSON(False);
     System.Classes.TThread.Queue(nil, procedure 
+    var LBase64: string;
     begin
       if Assigned(FAgentControl) then
-        FAgentControl.ExecuteJS('window.ACP.updateSearchResults("' + System.NetEncoding.TNetEncoding.Base64.Encode(LJsonStr) + '")');
+      begin
+        LBase64 := System.NetEncoding.TNetEncoding.Base64.EncodeBytesToString(TEncoding.UTF8.GetBytes(LJsonStr)).Replace(#13, '').Replace(#10, '');
+        FAgentControl.ExecuteJS('window.ACP.updateSearchResults("' + LBase64 + '")');
+      end;
     end);
   finally LRoot.Free; end;
 end;

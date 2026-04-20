@@ -12,6 +12,10 @@ type
     UseRegex: Boolean;
     IncludeActive: Boolean;
     IncludeInactive: Boolean;
+    IncludeUser: Boolean;
+    IncludeAgent: Boolean;
+    IncludeThought: Boolean;
+    TargetSessionId: string; // Filter by specific session if not empty
   end;
 
   TSearchMatch = record
@@ -55,7 +59,11 @@ begin
   begin
     LRegOpt := [];
     if not AOptions.CaseSensitive then LRegOpt := [roIgnoreCase];
-    Result := TRegEx.IsMatch(AFullText, AQuery, LRegOpt);
+    try
+      Result := TRegEx.IsMatch(AFullText, AQuery, LRegOpt);
+    except
+      Result := False;
+    end;
   end
   else
   begin
@@ -80,9 +88,12 @@ begin
   begin
     LRegOpt := [];
     if not AOptions.CaseSensitive then LRegOpt := [roIgnoreCase];
-    LRegEx := TRegEx.Create(AQuery, LRegOpt);
-    LMatch := LRegEx.Match(AFullText);
-    if LMatch.Success then LPos := LMatch.Index;
+    try
+      LRegEx := TRegEx.Create(AQuery, LRegOpt);
+      LMatch := LRegEx.Match(AFullText);
+      if LMatch.Success then LPos := LMatch.Index;
+    except
+    end;
   end
   else
   begin
@@ -90,22 +101,21 @@ begin
     else LPos := Pos(AQuery.ToLower, AFullText.ToLower);
   end;
 
-  if LPos = 0 then 
+  if LPos <= 0 then 
   begin
     if AFullText.Length > LContextLen * 2 then
-      Exit(AFullText.Substring(0, LContextLen * 2) + '...')
+      Result := AFullText.Substring(0, LContextLen * 2) + '...'
     else
-      Exit(AFullText);
+      Result := AFullText;
+    Exit;
   end;
 
   LStart := LPos - LContextLen;
   if LStart < 1 then LStart := 1;
-  
   LEnd := LPos + AQuery.Length + LContextLen;
   if LEnd > AFullText.Length then LEnd := AFullText.Length;
 
   Result := AFullText.Substring(LStart - 1, LEnd - LStart + 1);
-  
   if LStart > 1 then Result := '...' + Result;
   if LEnd < AFullText.Length then Result := Result + '...';
 end;
@@ -123,18 +133,57 @@ begin
     var
       LBaseDir: string;
       LAgentDirs, LSessionDirs: TArray<string>;
-      LAgentDir, LSessionDir, LHistoryFile, LMetaFile, LRawText, LSessionName, LWorkspace: string;
-      LMetaJson, LHistoryJson, LData, LUpdate, LContent: JsonDataObjects.TJsonObject;
+      LAgentDir, LSessionDir, LHistoryFile, LMetaFile, LSessionName, LWorkspace: string;
+      LMetaJson, LHistoryJson, LData, LUpdate: JsonDataObjects.TJsonObject;
       LSessResult: TSearchSessionResult;
       LMatches: TList<TSearchMatch>;
       LFinalResults: TList<TSearchSessionResult>;
       LHistoryLines: TStringList;
-      LText: string;
+      LText, LRole, LMethod, LUpdateType, LCurrentText, LCurrentRole, LCurrentTimestamp: string;
       LIsActive: Boolean;
-      i: Integer;
+      i, LCurrentFirstIndex: Integer;
       LMatch: TSearchMatch;
       LResultsArr: TArray<TSearchSessionResult>;
       LBase: JsonDataObjects.TJsonBaseObject;
+
+      procedure FlushCurrentMessage;
+      var LInclude: Boolean;
+      begin
+        if (LCurrentText <> '') and (LCurrentRole <> '') then
+        begin
+          LInclude := False;
+          if (LCurrentRole = 'user') and LSearchOpts.IncludeUser then LInclude := True
+          else if (LCurrentRole = 'ai') and LSearchOpts.IncludeAgent then LInclude := True
+          else if (LCurrentRole = 'thought') and LSearchOpts.IncludeThought then LInclude := True;
+
+          if LInclude and MatchesText(LCurrentText, LSearchQuery, LSearchOpts) then
+          begin
+            LMatch.Timestamp := LCurrentTimestamp;
+            LMatch.Role := LCurrentRole;
+            LMatch.Snippet := CreateSnippet(LCurrentText, LSearchQuery, LSearchOpts);
+            LMatch.MessageIndex := LCurrentFirstIndex;
+            LMatches.Add(LMatch);
+          end;
+        end;
+        LCurrentText := ''; LCurrentRole := '';
+      end;
+
+      procedure ProcessContent(AUpdate: JsonDataObjects.TJsonObject; var AOutText: string);
+      var k, LIdx: Integer;
+      begin
+        LIdx := AUpdate.IndexOf('content');
+        if LIdx < 0 then Exit;
+        
+        if AUpdate.Items[LIdx].Typ = jdtObject then
+          AOutText := AOutText + AUpdate.O['content'].S['text']
+        else if AUpdate.Items[LIdx].Typ = jdtArray then
+        begin
+          for k := 0 to AUpdate.A['content'].Count - 1 do
+            if AUpdate.A['content'].O[k].S['type'] = 'text' then
+              AOutText := AOutText + AUpdate.A['content'].O[k].S['text'];
+        end;
+      end;
+
     begin
       LBaseDir := TPath.Combine(FBaseConfigPath, 'sessions');
       if not TDirectory.Exists(LBaseDir) then Exit;
@@ -149,37 +198,39 @@ begin
           for LSessionDir in LSessionDirs do
           begin
             LHistoryFile := TPath.Combine(LSessionDir, 'history.json');
-            LMetaFile := TPath.Combine(LSessionDir, 'metadata.json');
             if not TFile.Exists(LHistoryFile) then Continue;
 
+            // Target Session Filter
+            if (LSearchOpts.TargetSessionId <> '') and 
+               not SameText(TPath.GetFileName(LSessionDir), LSearchOpts.TargetSessionId) then Continue;
+
             try
-              LIsActive := False;
-              LSessionName := TPath.GetFileName(LSessionDir);
-              LWorkspace := '';
+              LIsActive := False; LSessionName := TPath.GetFileName(LSessionDir); LWorkspace := '';
+              LMetaFile := TPath.Combine(LSessionDir, 'metadata.json');
               if TFile.Exists(LMetaFile) then
               begin
                 LMetaJson := JsonDataObjects.TJsonObject.ParseFromFile(LMetaFile) as JsonDataObjects.TJsonObject;
                 try
-                  if Assigned(LMetaJson) then
-                  begin
+                  if Assigned(LMetaJson) then begin
                     LSessionName := LMetaJson.S['name'];
                     LWorkspace := LMetaJson.S['workspace'];
                     LIsActive := LMetaJson.B['isActive'];
                   end;
-                finally
-                  LMetaJson.Free;
-                end;
+                finally LMetaJson.Free; end;
               end;
 
-              if LIsActive and not LSearchOpts.IncludeActive then Continue;
-              if not LIsActive and not LSearchOpts.IncludeInactive then Continue;
-
-              LRawText := TFile.ReadAllText(LHistoryFile, TEncoding.UTF8);
-              if not MatchesText(LRawText, LSearchQuery, LSearchOpts) then Continue;
+              // Only apply Active/Inactive filter if TargetSessionId is NOT specified
+              if (LSearchOpts.TargetSessionId = '') then
+              begin
+                if LIsActive and not LSearchOpts.IncludeActive then Continue;
+                if not LIsActive and not LSearchOpts.IncludeInactive then Continue;
+              end;
 
               LMatches := TList<TSearchMatch>.Create;
               try
-                LHistoryLines.Text := LRawText;
+                LHistoryLines.LoadFromFile(LHistoryFile, TEncoding.UTF8);
+                LCurrentText := ''; LCurrentRole := ''; LCurrentFirstIndex := -1;
+
                 for i := 0 to LHistoryLines.Count - 1 do
                 begin
                   if LHistoryLines[i].Trim.IsEmpty then Continue;
@@ -187,31 +238,44 @@ begin
                   try
                     if (LBase <> nil) and (LBase is JsonDataObjects.TJsonObject) then
                     begin
-                      LHistoryJson := LBase as JsonDataObjects.TJsonObject;
+                      LHistoryJson := JsonDataObjects.TJsonObject(LBase);
                       LData := LHistoryJson.O['data'];
-                      if (LData <> nil) and (LData.S['method'] = 'session/update') then
+                      if LData = nil then Continue;
+                      
+                      LMethod := LData.S['method'];
+                      if LMethod = 'session/update' then
                       begin
                         LUpdate := LData.O['params'].O['update'];
-                        LContent := LUpdate.O['content'];
-                        LText := LContent.S['text'];
+                        LUpdateType := LUpdate.S['sessionUpdate'];
+                        
+                        LRole := 'ai';
+                        if LUpdateType.Contains('user_') then LRole := 'user'
+                        else if LUpdateType.Contains('thought') then LRole := 'thought';
 
-                        if MatchesText(LText, LSearchQuery, LSearchOpts) then
-                        begin
-                          LMatch.Timestamp := LHistoryJson.S['timestamp'];
-                          LMatch.Role := LUpdate.S['sessionUpdate'].Replace('_chunk', '').Replace('agent_', 'ai_').Replace('user_', 'user');
-                          LMatch.Snippet := CreateSnippet(LText, LSearchQuery, LSearchOpts);
-                          LMatch.MessageIndex := i;
-                          LMatches.Add(LMatch);
+                        if (LCurrentRole <> '') and (LCurrentRole <> LRole) then FlushCurrentMessage;
+
+                        if LCurrentRole = '' then begin
+                          LCurrentRole := LRole; LCurrentTimestamp := LHistoryJson.S['timestamp']; LCurrentFirstIndex := i;
                         end;
-                      end;
+                        
+                        ProcessContent(LUpdate, LCurrentText);
+                      end 
+                      else if LMethod = 'session/prompt' then
+                      begin
+                        FlushCurrentMessage;
+                        LRole := 'user';
+                        LText := LData.O['params'].S['prompt'];
+                        LCurrentRole := LRole; LCurrentTimestamp := LHistoryJson.S['timestamp']; LCurrentFirstIndex := i;
+                        LCurrentText := LText;
+                        FlushCurrentMessage;
+                      end
+                      else FlushCurrentMessage;
                     end;
-                  finally
-                    LBase.Free;
-                  end;
+                  finally LBase.Free; end;
                 end;
+                FlushCurrentMessage;
 
-                if LMatches.Count > 0 then
-                begin
+                if LMatches.Count > 0 then begin
                   LSessResult.SessionId := TPath.GetFileName(LSessionDir);
                   LSessResult.AgentType := TPath.GetFileName(LAgentDir).Replace('-cli', '');
                   LSessResult.SessionName := LSessionName;
@@ -219,25 +283,16 @@ begin
                   LSessResult.Matches := LMatches.ToArray;
                   LFinalResults.Add(LSessResult);
                 end;
-              finally
-                LMatches.Free;
-              end;
-            except
-            end;
+              finally LMatches.Free; end;
+            except end;
           end;
         end;
 
         LResultsArr := LFinalResults.ToArray;
-        System.Classes.TThread.Queue(nil, 
-          procedure
-          begin
-            if Assigned(FOnSearchComplete) then
-              FOnSearchComplete(LResultsArr);
-          end);
-      finally
-        LHistoryLines.Free;
-        LFinalResults.Free;
-      end;
+        System.Classes.TThread.Queue(nil, procedure begin
+          if Assigned(FOnSearchComplete) then FOnSearchComplete(LResultsArr);
+        end);
+      finally LHistoryLines.Free; LFinalResults.Free; end;
     end);
 end;
 
