@@ -188,6 +188,25 @@
 
             addMessageToUI: (role, text, timestamp) => {
                 const container = document.getElementById('mainChatCanvasInner');
+                
+                // 1. Dynamic Date Badge Logic
+                if (timestamp) {
+                    const datePart = timestamp.split(' ')[0]; // Extract YYYY-MM-DD
+                    if (window.ACP.lastRenderedDate !== datePart) {
+                        window.ACP.lastRenderedDate = datePart;
+                        const todayStr = new Date().toISOString().split('T')[0];
+                        const displayDate = (datePart === todayStr) ? "Today" : datePart;
+                        
+                        container.insertAdjacentHTML('beforeend', `
+                            <div class="flex justify-center my-8 px-4">
+                                <span class="px-4 py-1.5 text-[10px] font-bold tracking-widest text-on-surface-variant uppercase bg-surface-container-high rounded-full border border-outline-variant/10 shadow-sm">
+                                    ${displayDate}
+                                </span>
+                            </div>
+                        `);
+                    }
+                }
+
                 let time = '';
                 if (timestamp) {
                     const parts = timestamp.split(' ');
@@ -549,7 +568,7 @@
                     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
                     const json = new TextDecoder().decode(bytes);
                     const data = JSON.parse(json);
-                    document.getElementById('mainChatCanvasInner').innerHTML = `<div class="flex justify-center mb-8 px-4"><span class="px-3 py-1 text-[11px] font-medium tracking-wider text-on-surface-variant uppercase bg-surface-container rounded-full border border-outline-variant/10">Today</span></div>`;
+                    document.getElementById('mainChatCanvasInner').innerHTML = '';
                     window.ACP.lastMessageRole = ''; window.ACP.lastBlockType = '';
                     data.forEach(msg => {
                         const r = msg.role;
@@ -566,6 +585,7 @@
             clearChat: () => {
                 document.getElementById('mainChatCanvasInner').innerHTML = '';
                 window.ACP.lastAiMsgId = ''; window.ACP.lastAiThoughtId = null; window.ACP.lastBlockType = ''; window.ACP.lastMessageRole = '';
+                window.ACP.lastRenderedDate = null;
                 window.ACP.showProcessing(false);
             },
 
@@ -834,8 +854,5 @@
             }, true);
         });
     </script>
-</body>
-</html>
-ipt>
 </body>
 </html>
