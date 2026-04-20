@@ -29,6 +29,7 @@ type
     procedure HandlePermissionResponse(const Params: TDictionary<string, string>);
     procedure HandleCancelPrompt(const Params: TDictionary<string, string>);
     procedure HandleResumeSession(const Params: TDictionary<string, string>);
+    procedure HandleNextPrevSession(ADir: Integer);
     procedure HandleGetFileContent(const Params: TDictionary<string, string>);
     procedure HandleOpenFileDialog(const Params: TDictionary<string, string>);
     procedure HandleGetFileHistory(const Params: TDictionary<string, string>);
@@ -44,6 +45,7 @@ type
     procedure UpdateFileList(const ARootPath: string = '');
     procedure RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
     procedure ShowTyping(const AShow: Boolean);
+    procedure ExecuteJS(const AScript: string);
     property OnNewChat: TNewChatEvent read FOnNewChat write FOnNewChat;
   end;
 
@@ -90,6 +92,8 @@ begin
   if Action = 'new-chat' then HandleNewChat(Params)
   else if Action = 'send-message' then HandleSendMessage(Params)
   else if Action = 'select-session' then HandleSelectSession(Params)
+  else if Action = 'next-session' then HandleNextPrevSession(1)
+  else if Action = 'prev-session' then HandleNextPrevSession(-1)
   else if Action = 'resume-session' then HandleResumeSession(Params)
   else if Action = 'change-model' then HandleChangeModel(Params)
   else if Action = 'permission-response' then HandlePermissionResponse(Params)
@@ -218,6 +222,35 @@ begin
        end;
        UpdateSessionList;
     end;
+  end;
+end;
+
+procedure TAgentControl.HandleNextPrevSession(ADir: Integer);
+var
+  LSessions: TList<TSessionInfo>;
+  LActive: TSessionInfo;
+  LIdx, LNextIdx: Integer;
+  LParams: TDictionary<string, string>;
+begin
+  LSessions := FSessionMgr.GetSessionListSnapshot;
+  try
+    if LSessions.Count <= 1 then Exit;
+    
+    LActive := FSessionMgr.ActiveSession;
+    LIdx := LSessions.IndexOf(LActive);
+    
+    if LIdx = -1 then LNextIdx := 0
+    else LNextIdx := (LIdx + ADir + LSessions.Count) mod LSessions.Count;
+    
+    LParams := TDictionary<string, string>.Create;
+    try
+      LParams.Add('id', LSessions[LNextIdx].SessionId);
+      HandleSelectSession(LParams);
+    finally
+      LParams.Free;
+    end;
+  finally
+    LSessions.Free;
   end;
 end;
 
@@ -382,6 +415,12 @@ begin
     LList.Free;
     LArray.Free;
   end;
+end;
+
+procedure TAgentControl.ExecuteJS(const AScript: string);
+begin
+  if Assigned(FWebBrowser) then
+    FWebBrowser.EvaluateJavaScript(AScript);
 end;
 
 procedure TAgentControl.ShowTyping(const AShow: Boolean);

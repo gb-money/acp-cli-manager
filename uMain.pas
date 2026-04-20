@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages,
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Generics.Collections,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.WebBrowser, uAgent, uGeminiAgent, uACPAgent,
-  uSessionManager, uAgentControl, uDebugRPC, JsonDataObjects, uConversationService, uUIControl, System.SyncObjs;
+  uSessionManager, uAgentControl, uDebugRPC, JsonDataObjects, uConversationService, uUIControl, uSearchService, System.SyncObjs;
 
 type
   TAgentTypeHelper = record helper for TAgentType
@@ -26,6 +26,7 @@ type
     FSessionMgr: TSessionManager;
     FUIControl: TUIControl;
     FAgentControl: TAgentControl;
+    FSearchService: TSearchService;
     FAgents: TDictionary<TAgentType, TAgent>;
     FInitialized: Boolean;
     procedure DoStatusChange(Sender: TObject; const Msg: string);
@@ -36,12 +37,13 @@ type
     procedure DoThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
     procedure DoFSWrite(Sender: TObject; const SessionId, Path, OldContent, NewContent: string);
     procedure DoRawData(Sender: TObject; const Direction, RawText: string);
-    procedure DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
+    procedure DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: JsonDataObjects.TJsonObject; Options: JsonDataObjects.TJsonArray);
     procedure DoSessionMetadataUpdate(Sender: TObject; const SessionId: string);
     procedure DoOpenExplorer(Sender: TObject);
     procedure DoOpenFileViewer(Sender: TObject; const APath: string);
     procedure DoOpenDiffViewer(Sender: TObject; const ASessionId, APath, AHashId: string);
     procedure DoSessionRestored(Sender: TObject; ASession: TSessionInfo);
+    procedure DoSearchComplete(const AResults: TArray<TSearchSessionResult>);
     procedure LoadSessionsFromDisk;
     function GetOrCreateAgent(AType: TAgentType): TAgent;
   public
@@ -56,7 +58,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.IOUtils, uACPClient, FMX.Dialogs, uFileExplorer, Winapi.ShellAPI, uFileViewer, uDiffViewer, System.RegularExpressions;
+  System.IOUtils, uACPClient, FMX.Dialogs, uFileExplorer, Winapi.ShellAPI, uFileViewer, uDiffViewer, System.RegularExpressions, System.NetEncoding;
 
 { TAgentTypeHelper }
 
@@ -87,61 +89,73 @@ begin
   FUIControl.OnOpenDiffViewer := DoOpenDiffViewer;
   FAgentControl := TAgentControl.Create(WebBrowserMain, FSessionMgr);
   FAgentControl.OnNewChat := DoNewChat;
+
+  FSearchService := TSearchService.Create;
+  FSearchService.BaseConfigPath := FSessionMgr.BaseConfigPath;
+  FSearchService.OnSearchComplete := DoSearchComplete;
 end;
 
 procedure TS.DoSessionRestored(Sender: TObject; ASession: TSessionInfo);
 begin
-  if Assigned(ASession) then
+  System.Classes.TThread.Queue(nil, procedure 
   begin
-     if Assigned(FAgentControl) then FAgentControl.UpdateFileList(ASession.Cwd);
-     if Assigned(FAgentControl) then FAgentControl.UpdateSessionList;
-  end;
+    if Assigned(ASession) and Assigned(FAgentControl) then
+    begin
+      FAgentControl.UpdateFileList(ASession.Cwd);
+      FAgentControl.UpdateSessionList;
+    end;
+  end);
 end;
 
 procedure TS.StartSessionRestoration(ASession: TSessionInfo);
 var
   LACPAgent: TACPAgent;
+  LSession: TSessionInfo;
 begin
   if not Assigned(ASession) or not (ASession.Agent is TACPAgent) then Exit;
   LACPAgent := TACPAgent(ASession.Agent);
+  LSession := ASession;
   
-  LACPAgent.Workspace := ASession.Cwd;
-  if ASession.SessionId.StartsWith('pending-') then begin
-    LACPAgent.CreateNewSession(ASession.Cwd, '', procedure(SessionId: string)
+  LACPAgent.Workspace := LSession.Cwd;
+  if LSession.SessionId.StartsWith('pending-') then begin
+    LACPAgent.CreateNewSession(LSession.Cwd, '', procedure(SessionId: string)
+    var LSid: string;
     begin
-      TThread.Queue(nil, procedure 
+      LSid := SessionId;
+      System.Classes.TThread.Queue(nil, procedure 
       begin
-        if SessionId <> '' then begin 
-          FSessionMgr.FinalizeSessionId(ASession, SessionId); 
-          ASession.IsLoading := False; 
-          ASession.IsActive := True; 
-          LACPAgent.SetSessionLogPath(SessionId, ASession.LogPath); 
+        if LSid <> '' then begin 
+          FSessionMgr.FinalizeSessionId(LSession, LSid); 
+          LSession.IsLoading := False; 
+          LSession.IsActive := True; 
+          LACPAgent.SetSessionLogPath(LSid, LSession.LogPath); 
         end
-        else FSessionMgr.DeleteSession(ASession);
+        else FSessionMgr.DeleteSession(LSession);
         
         if Assigned(FAgentControl) then begin 
           FAgentControl.ShowTyping(False);
           FAgentControl.UpdateSessionList; 
-          FAgentControl.UpdateFileList(ASession.Cwd); 
+          FAgentControl.UpdateFileList(LSession.Cwd); 
         end;
       end);
     end);
   end else begin
-    TConversationService.StartRestoration(ASession);
-    LACPAgent.LoadSession(ASession.SessionId, procedure(SessionId: string)
+    TConversationService.StartRestoration(LSession);
+    LACPAgent.LoadSession(LSession.SessionId, procedure(SessionId: string)
+    var LSid: string;
     begin
-      TThread.Queue(nil, procedure 
+      LSid := SessionId;
+      System.Classes.TThread.Queue(nil, procedure 
       begin
-        if SessionId = '' then
+        if LSid = '' then
         begin
-          // Restoration failed. Remove the invalid session from the list.
-          FSessionMgr.DeleteSession(ASession);
+          FSessionMgr.DeleteSession(LSession);
           if Assigned(FAgentControl) then FAgentControl.UpdateSessionList;
           Exit;
         end;
 
-        TConversationService.FinalizeRestoration(ASession);
-        if SessionId <> '' then LACPAgent.SetSessionLogPath(SessionId, ASession.LogPath);
+        TConversationService.FinalizeRestoration(LSession);
+        if LSid <> '' then LACPAgent.SetSessionLogPath(LSid, LSession.LogPath);
         
         if Assigned(FAgentControl) then begin 
           FAgentControl.UpdateSessionList; 
@@ -257,7 +271,6 @@ begin
       LSessionId := TPath.GetFileName(LSessionDir);
       if LSessionId.StartsWith('pending-') then Continue;
 
-      // Filter: Only restore sessions that have conversation history
       LHistoryPath := TPath.Combine(LSessionDir, 'history.json');
       if not TFile.Exists(LHistoryPath) or (TFile.GetSize(LHistoryPath) < 10) then
         Continue;
@@ -295,32 +308,43 @@ end;
 
 procedure TS.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
-  // 1. Allow initial UI file
   if URL.ToLower.Contains('index.html') then Exit;
-
-  // 2. Ignore internal Edge/WebView2 protocols
   if URL.ToLower.StartsWith('about:') or URL.ToLower.StartsWith('javascript:') then Exit;
 
-  // 3. Handle Custom Schemas (acp-action, ui-action)
+  if URL.ToLower.StartsWith('acp-action://search-conversations') then
+  begin
+    var LQuery := '';
+    var LIdx := URL.IndexOf('query=');
+    if LIdx > 0 then LQuery := System.NetEncoding.TNetEncoding.URL.Decode(URL.Substring(LIdx + 6));
+    if LQuery.Contains('&') then LQuery := LQuery.Substring(0, LQuery.IndexOf('&'));
+    
+    var LOpts: TSearchOptions;
+    LOpts.CaseSensitive := URL.Contains('case=true');
+    LOpts.UseRegex := URL.Contains('regex=true');
+    LOpts.IncludeActive := not URL.Contains('active=false');
+    LOpts.IncludeInactive := not URL.Contains('inactive=false');
+
+    FSearchService.Search(LQuery, LOpts);
+    WebBrowserMain.Stop;
+    Exit;
+  end;
+
   if Assigned(FUIControl) and FUIControl.HandleRequest(URL) then Exit;
   if Assigned(FAgentControl) and FAgentControl.HandleRequest(URL) then Exit;
 
-  // 4. Open everything else (External links, local file links) in system default app
-  ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWNORMAL);
-
-  // 5. Block internal navigation
+  Winapi.ShellAPI.ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWNORMAL);
   WebBrowserMain.Stop;
 end;
 
 procedure TS.DoResponse(Sender: TObject; const SessionId, Text: string);
 var
-  LActualText, LStopReason: string;
-  LStopIdx: Integer;
+  LActualText, LStopReason, LSid: string;
 begin
   LActualText := Text;
   LStopReason := 'end_turn';
+  LSid := SessionId;
   
-  LStopIdx := Text.IndexOf('||STOP:');
+  var LStopIdx := Text.IndexOf('||STOP:');
   if LStopIdx >= 0 then
   begin
     LActualText := Text.Substring(0, LStopIdx);
@@ -330,7 +354,7 @@ begin
   System.Classes.TThread.Queue(nil, procedure 
   begin 
     if Assigned(FAgentControl) then begin 
-      FAgentControl.UpdateMessageStreaming(SessionId, LActualText, 'ai', LStopReason);
+      FAgentControl.UpdateMessageStreaming(LSid, LActualText, 'ai', LStopReason);
       FAgentControl.ShowTyping(False); 
       FAgentControl.UpdateSessionList; 
     end; 
@@ -339,59 +363,52 @@ end;
 
 procedure TS.DoMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
 var
-  LRole, LActualText, LStopReason: string;
+  LRole, LActualText, LStopReason, LSid: string;
   LSessionInfo, LFound: TSessionInfo;
   LSessions: TList<TSessionInfo>;
   LIdx: Integer;
 begin
   LRole := 'ai'; LActualText := FullText;
-  LStopReason := '';
-
+  LStopReason := ''; LSid := SessionId;
   if LActualText.StartsWith('USER:') then 
   begin 
     LRole := 'user'; 
     LActualText := LActualText.Substring(5); 
   end;
-
   LIdx := LActualText.ToLower.IndexOf('--- content from');
   if LIdx < 0 then LIdx := LActualText.ToLower.IndexOf('--- context from');
-  if LIdx >= 0 then
-    LActualText := LActualText.Substring(0, LIdx).Trim;
+  if LIdx >= 0 then LActualText := LActualText.Substring(0, LIdx).Trim;
 
   LFound := nil;
   if Assigned(FSessionMgr) then begin
     LSessions := FSessionMgr.GetSessionListSnapshot;
     try
       for LSessionInfo in LSessions do
-        if LSessionInfo.SessionId = SessionId then begin
-          LFound := LSessionInfo;
-          Break;
-        end;
+        if LSessionInfo.SessionId = LSid then begin LFound := LSessionInfo; Break; end;
     finally LSessions.Free; end;
   end;
-
   if Assigned(LFound) then begin
-    if LFound.IsLoading or ((Sender is TACPAgent) and TACPAgent(Sender).IsRestoringSession(SessionId)) then
+    if LFound.IsLoading or ((Sender is TACPAgent) and TACPAgent(Sender).IsRestoringSession(LSid)) then
     begin
       LStopReason := 'history';
-      FSessionMgr.RecordActivity(SessionId);
+      FSessionMgr.RecordActivity(LSid);
     end;
   end;
-
   System.Classes.TThread.Queue(nil, procedure 
   begin 
     if Assigned(FAgentControl) then 
       if LStopReason <> 'history' then
-        FAgentControl.UpdateMessageStreaming(SessionId, LActualText, LRole, LStopReason); 
+        FAgentControl.UpdateMessageStreaming(LSid, LActualText, LRole, LStopReason); 
   end);
 end;
 
 procedure TS.DoThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+var LSid, LFull: string;
 begin
+  LSid := SessionId; LFull := FullText;
   System.Classes.TThread.Queue(nil, procedure 
   begin 
-    if Assigned(FAgentControl) then 
-      FAgentControl.UpdateThoughtStreaming(SessionId, FullText); 
+    if Assigned(FAgentControl) then FAgentControl.UpdateThoughtStreaming(LSid, LFull); 
   end);
 end;
 
@@ -405,68 +422,42 @@ begin
     LSessions := FSessionMgr.GetSessionListSnapshot;
     try
       for LSessionInfo in LSessions do
-        if LSessionInfo.SessionId = SessionId then begin
-          LFound := LSessionInfo;
-          Break;
-        end;
+        if LSessionInfo.SessionId = SessionId then begin LFound := LSessionInfo; Break; end;
     finally LSessions.Free; end;
   end;
-
-  if Assigned(LFound) then
-    TConversationService.SaveFileDiff(LFound, Path, OldContent, NewContent);
+  if Assigned(LFound) then TConversationService.SaveFileDiff(LFound, Path, OldContent, NewContent);
 end;
 
 procedure TS.DoRawData(Sender: TObject; const Direction, RawText: string);
 var
   LDir, LRaw: string;
 begin
-  LDir := Direction;
-  LRaw := RawText;
+  LDir := Direction; LRaw := RawText;
   System.Classes.TThread.Queue(nil, procedure 
   var
-    LBase: TJsonBaseObject;
-    LObj: TJsonObject;
-    LSessionId, LMethod, LUpdateType: string;
-    LTargetSession, LSessionInfo: TSessionInfo;
-    LDoLog: Boolean;
-    LSessions: TList<TSessionInfo>;
+    LBase: JsonDataObjects.TJsonBaseObject; LObj: JsonDataObjects.TJsonObject; LSessionId, LMethod, LUpdateType: string;
+    LTargetSession, LSessionInfo: TSessionInfo; LDoLog: Boolean; LSessions: TList<TSessionInfo>;
   begin
     if Assigned(frmDebugRPC) then frmDebugRPC.AddLog(LDir, LRaw);
     if SameText(LDir, 'SYS') then Exit;
     if not Assigned(FSessionMgr) then Exit;
-    
     LBase := nil;
     try
-      try
-        LBase := TJsonBaseObject.Parse(LRaw);
-      except
-        on E: Exception do Exit;
-      end;
-      
-      if Assigned(LBase) and (LBase is TJsonObject) then
+      try LBase := JsonDataObjects.TJsonBaseObject.Parse(LRaw); except on E: Exception do Exit; end;
+      if Assigned(LBase) and (LBase is JsonDataObjects.TJsonObject) then
       begin
-        LObj := TJsonObject(LBase);
+        LObj := JsonDataObjects.TJsonObject(LBase);
         LSessionId := LObj.S['sessionId'];
         if LSessionId = '' then LSessionId := LObj.O['params'].S['sessionId'];
-        
         if LSessionId <> '' then begin
-          LTargetSession := nil;
-          LSessions := FSessionMgr.GetSessionListSnapshot;
+          LTargetSession := nil; LSessions := FSessionMgr.GetSessionListSnapshot;
           try
             for LSessionInfo in LSessions do 
-              if LSessionInfo.SessionId = LSessionId then begin
-                LTargetSession := LSessionInfo;
-                Break;
-              end;
-          finally
-            LSessions.Free;
-          end;
-            
+              if LSessionInfo.SessionId = LSessionId then begin LTargetSession := LSessionInfo; Break; end;
+          finally LSessions.Free; end;
           if Assigned(LTargetSession) then begin
-            LDoLog := True; 
-            LMethod := LObj.S['method'];
+            LDoLog := True; LMethod := LObj.S['method'];
             if LMethod = '' then LMethod := LObj.O['params'].S['method'];
-            
             if SameText(LMethod, 'session/update') then begin
               if LObj.O['params'].Contains('update') and (LObj.O['params'].Items[LObj.O['params'].IndexOf('update')].Typ = jdtObject) then
               begin
@@ -482,13 +473,12 @@ begin
   end);
 end;
 
-procedure TS.DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
+procedure TS.DoPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: JsonDataObjects.TJsonObject; Options: JsonDataObjects.TJsonArray);
 var
   LID, LMethod, LSID, LToolCall, LOptions: string;
 begin
   LID := ID; LMethod := Method; LSID := SessionId;
-  LToolCall := ToolCall.ToJSON(False);
-  LOptions := Options.ToJSON(False);
+  LToolCall := ToolCall.ToJSON(False); LOptions := Options.ToJSON(False);
   System.Classes.TThread.Queue(nil, procedure 
   begin 
     if Assigned(FAgentControl) then 
@@ -498,63 +488,79 @@ end;
 
 procedure TS.DoSessionMetadataUpdate(Sender: TObject; const SessionId: string);
 var
-  LSession: TSessionInfo;
-  LSessionInfo: TSessionInfo;
-  LSessions: TList<TSessionInfo>;
+  LSession, LSessionInfo: TSessionInfo; LSessions: TList<TSessionInfo>;
+  LSid: string;
 begin
+  LSid := SessionId;
   LSession := nil;
   if Assigned(FSessionMgr) then begin
     LSessions := FSessionMgr.GetSessionListSnapshot;
     try
       for LSessionInfo in LSessions do
-        if LSessionInfo.SessionId = SessionId then begin
-          LSession := LSessionInfo;
-          Break;
-        end;
+        if LSessionInfo.SessionId = LSid then begin LSession := LSessionInfo; Break; end;
     finally LSessions.Free; end;
   end;
-
   if Assigned(LSession) and LSession.IsLoading then
   begin
-    // available_commands_update received, restoration is complete!
-    LSession.IsLoading := False;
-    LSession.IsActive := True;
+    LSession.IsLoading := False; LSession.IsActive := True;
     if Assigned(FAgentControl) then FAgentControl.UpdateFileList(LSession.Cwd);
   end;
-
   System.Classes.TThread.Queue(nil, procedure 
-  begin 
-    if Assigned(FAgentControl) then 
-      FAgentControl.UpdateSessionList; 
-  end);
+  begin if Assigned(FAgentControl) then FAgentControl.UpdateSessionList; end);
+end;
+
+procedure TS.DoSearchComplete(const AResults: TArray<TSearchSessionResult>);
+var
+  LRoot: JsonDataObjects.TJsonArray; LSessObj, LMatchObj: JsonDataObjects.TJsonObject; LMatchesArr: JsonDataObjects.TJsonArray;
+  LSess: TSearchSessionResult; LMatch: TSearchMatch;
+  LJsonStr: string;
+begin
+  LRoot := JsonDataObjects.TJsonArray.Create;
+  try
+    for LSess in AResults do
+    begin
+      LSessObj := LRoot.AddObject;
+      LSessObj.S['sessionId'] := LSess.SessionId;
+      LSessObj.S['agentType'] := LSess.AgentType;
+      LSessObj.S['name'] := LSess.SessionName;
+      LSessObj.S['workspace'] := LSess.Workspace;
+      LMatchesArr := LSessObj.A['matches'];
+      for LMatch in LSess.Matches do
+      begin
+        LMatchObj := LMatchesArr.AddObject;
+        LMatchObj.S['timestamp'] := LMatch.Timestamp;
+        LMatchObj.S['role'] := LMatch.Role;
+        LMatchObj.S['snippet'] := LMatch.Snippet;
+        LMatchObj.I['index'] := LMatch.MessageIndex;
+      end;
+    end;
+    LJsonStr := LRoot.ToJSON(False);
+    System.Classes.TThread.Queue(nil, procedure 
+    begin
+      if Assigned(FAgentControl) then
+        FAgentControl.ExecuteJS('window.ACP.updateSearchResults("' + System.NetEncoding.TNetEncoding.Base64.Encode(LJsonStr) + '")');
+    end);
+  finally LRoot.Free; end;
 end;
 
 procedure TS.DoStatusChange(Sender: TObject; const Msg: string); 
-var
-  LMsg: string;
+var LMsg: string;
 begin 
   LMsg := Msg;
   System.Classes.TThread.Queue(nil, procedure 
-  begin
-    if Assigned(frmDebugRPC) then frmDebugRPC.AddACPLog('Status: ' + LMsg);
-  end);
+  begin if Assigned(frmDebugRPC) then frmDebugRPC.AddACPLog('Status: ' + LMsg); end);
 end;
 
 procedure TS.DoStateChange(Sender: TObject; const OldState, NewState: TAgentState);
-var
-  LNewState: TAgentState;
-  LSender: TObject;
+var LNewState: TAgentState; LSender: TObject;
 begin
-  LNewState := NewState;
-  LSender := Sender;
+  LNewState := NewState; LSender := Sender;
   System.Classes.TThread.Queue(nil, procedure
   var
-    LACPAgent: TACPAgent; LTargetSession, LSessionInfo: TSessionInfo;
-    LSessions: TList<TSessionInfo>;
+    LACPAgent: TACPAgent; LTargetSession, LSessionInfo: TSessionInfo; LSessions: TList<TSessionInfo>;
   begin
     if LSender is TAgent then
     begin
-      // When agent becomes ready, mark all its sessions as inactive initially
       if LNewState = asReady then
       begin
         LSessions := FSessionMgr.GetSessionListSnapshot;
@@ -564,7 +570,6 @@ begin
         finally LSessions.Free; end;
       end;
     end;
-
     if (LSender is TACPAgent) and (LNewState = asReady) then begin
       LACPAgent := TACPAgent(LSender); LTargetSession := nil;
       if Assigned(FSessionMgr) then
@@ -572,15 +577,9 @@ begin
         LSessions := FSessionMgr.GetSessionListSnapshot;
         try
           for LSessionInfo in LSessions do 
-            if (LSessionInfo.Agent = LACPAgent) and LSessionInfo.IsLoading then begin 
-              LTargetSession := LSessionInfo; 
-              Break; 
-            end;
-        finally
-          LSessions.Free;
-        end;
+            if (LSessionInfo.Agent = LACPAgent) and LSessionInfo.IsLoading then begin LTargetSession := LSessionInfo; Break; end;
+        finally LSessions.Free; end;
       end;
-      
       if Assigned(LTargetSession) then StartSessionRestoration(LTargetSession);
     end;
     if Assigned(FAgentControl) then FAgentControl.UpdateSessionList;
@@ -589,9 +588,10 @@ end;
 
 procedure TS.DoNewChat(Sender: TObject; const AgentName: string);
 var
-  LAgent: TAgent; LGemini: TGeminiAgent; LPendingId, LSelectedDir: string; LPendingSession: TSessionInfo;
+  LAgent: TAgent; LGemini: TGeminiAgent; LPendingId, LSelectedDir, LAgentName: string; LPendingSession: TSessionInfo;
 begin
-  if SameText(AgentName, 'gemini') then begin
+  LAgentName := AgentName;
+  if SameText(LAgentName, 'gemini') then begin
     if not SelectDirectory('Select Project Workspace for Gemini', '', LSelectedDir) then Exit;
     LPendingId := 'pending-' + TGuid.NewGuid.ToString; LAgent := GetOrCreateAgent(atGemini); LGemini := LAgent as TGeminiAgent;
     LPendingSession := FSessionMgr.AddSession(LGemini, atGemini, LPendingId, FSessionMgr.GetUniqueSessionName('New Chat'), LSelectedDir);
@@ -603,10 +603,12 @@ begin
       if LGemini.State = asReady then begin
         LGemini.Workspace := LSelectedDir;
         LGemini.CreateNewSession(LSelectedDir, '', procedure(SessionId: string)
+        var LSid: string;
         begin
+          LSid := SessionId;
           System.Classes.TThread.Queue(nil, procedure 
           begin
-            if SessionId <> '' then begin FSessionMgr.FinalizeSessionId(LPendingSession, SessionId); LPendingSession.IsLoading := False; LGemini.SetSessionLogPath(SessionId, LPendingSession.LogPath); end
+            if LSid <> '' then begin FSessionMgr.FinalizeSessionId(LPendingSession, LSid); LPendingSession.IsLoading := False; LGemini.SetSessionLogPath(LSid, LPendingSession.LogPath); end
             else FSessionMgr.DeleteSession(LPendingSession);
             if Assigned(FAgentControl) then begin FAgentControl.UpdateSessionList; FAgentControl.UpdateFileList(LSelectedDir); end;
           end);
@@ -628,9 +630,7 @@ begin
         if (LSession.Agent is TACPAgent) and (LSession.SessionId <> '') then
           if TACPAgent(LSession.Agent).Sessions.TryGetValue(LSession.SessionId, LData) then
             if LData.IsProcessing then if LSession.Agent is TGeminiAgent then TGeminiAgent(LSession.Agent).CancelPrompt(LSession.SessionId);
-    finally
-      LSessions.Free;
-    end;
+    finally LSessions.Free; end;
   end;
 end;
 

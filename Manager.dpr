@@ -11,6 +11,7 @@ uses
   uAgent in 'src\Agents\uAgent.pas',
   uACPAgent in 'src\Agents\uACPAgent.pas',
   uConversationService in 'src\Core\uConversationService.pas',
+  uSearchService in 'src\Core\uSearchService.pas',
   uWebACPCommandHandler in 'src\Core\uWebACPCommandHandler.pas',
   uAgentProcess in 'src\Core\uAgentProcess.pas',
   uACPClient in 'src\ACP\uACPClient.pas',

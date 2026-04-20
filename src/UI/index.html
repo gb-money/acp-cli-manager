@@ -115,6 +115,119 @@
             thoughtStartTime: 0,
             accumulatedThought: '',
             isProcessingActive: false,
+            lastRenderedDate: null,
+            
+            toggleSearch: (force) => {
+                const overlay = document.getElementById('searchOverlay');
+                const sidebar = document.getElementById('searchSidebar');
+                const isOpen = force !== undefined ? force : sidebar.classList.contains('translate-x-full');
+                
+                if (isOpen) {
+                    overlay.classList.remove('hidden');
+                    setTimeout(() => {
+                        overlay.classList.remove('opacity-0');
+                        sidebar.classList.remove('translate-x-full');
+                        document.getElementById('searchQuery').focus();
+                    }, 10);
+                } else {
+                    overlay.classList.add('opacity-0');
+                    sidebar.classList.add('translate-x-full');
+                    setTimeout(() => overlay.classList.add('hidden'), 300);
+                }
+            },
+
+            executeSearch: () => {
+                const query = document.getElementById('searchQuery').value.trim();
+                if (!query) return;
+
+                document.getElementById('searchEmptyState').classList.add('hidden');
+                document.getElementById('searchLoadingState').classList.remove('hidden');
+                document.getElementById('searchResultsList').classList.add('hidden');
+
+                const opts = {
+                    case: document.getElementById('searchCase').checked,
+                    regex: document.getElementById('searchRegex').checked,
+                    active: document.getElementById('searchActive').checked,
+                    inactive: document.getElementById('searchInactive').checked
+                };
+
+                window.sendAcp(`search-conversations?query=${encodeURIComponent(query)}&case=${opts.case}&regex=${opts.regex}&active=${opts.active}&inactive=${opts.inactive}`);
+            },
+
+            updateSearchResults: (base64) => {
+                try {
+                    const binary = window.atob(base64);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    const json = new TextDecoder().decode(bytes);
+                    const results = JSON.parse(json);
+                    
+                    const list = document.getElementById('searchResultsList');
+                    const loading = document.getElementById('searchLoadingState');
+                    
+                    loading.classList.add('hidden');
+                    list.classList.remove('hidden');
+                    
+                    if (results.length === 0) {
+                        list.innerHTML = '<div class="text-center py-12 opacity-40"><p class="text-sm">No matches found</p></div>';
+                        return;
+                    }
+
+                    list.innerHTML = results.map(session => `
+                        <div class="bg-surface-container rounded-xl border border-outline-variant/10 overflow-hidden shadow-sm hover:border-outline-variant/30 transition-all">
+                            <button onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.chevron').classList.toggle('rotate-180')" 
+                                class="w-full flex items-center justify-between p-4 text-left hover:bg-surface-container-high transition-colors">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="text-xs font-bold text-primary truncate">${session.name}</span>
+                                        <span class="text-[10px] text-on-surface-variant/50">${session.matches.length} results</span>
+                                    </div>
+                                    <div class="text-[10px] text-on-surface-variant/40 truncate flex items-center gap-1">
+                                        <span class="material-icons text-[12px]">folder</span>
+                                        ${session.workspace}
+                                    </div>
+                                </div>
+                                <span class="material-icons chevron text-on-surface-variant/30 transition-transform duration-200">expand_more</span>
+                            </button>
+                            <div class="hidden border-t border-outline-variant/10 bg-surface/30">
+                                ${session.matches.map(match => `
+                                    <div onclick="window.ACP.goToMatch('${session.sessionId}', ${match.index})" 
+                                        class="p-4 hover:bg-surface-container-highest cursor-pointer border-b last:border-b-0 border-outline-variant/5 group transition-colors">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <div class="flex items-center gap-2">
+                                                <span class="px-1.5 py-0.5 rounded bg-surface-container-high text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">${match.role}</span>
+                                                <span class="text-[10px] text-on-surface-variant/40">${match.timestamp}</span>
+                                            </div>
+                                            <span class="material-icons text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward</span>
+                                        </div>
+                                        <div class="text-xs text-on-surface-variant leading-relaxed line-clamp-2 italic font-serif">
+                                            ${match.snippet}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('');
+                } catch(e) { console.error('Search update error:', e); }
+            },
+
+            goToMatch: (sessionId, index) => {
+                if (window.ACP.activeSessionId !== sessionId) {
+                    window.sendAcp(`select-session?id=${sessionId}`);
+                }
+                
+                // For now, we scroll if it's the same session. 
+                // Full scrolling for other sessions requires waiting for loadHistory.
+                const container = document.getElementById('mainChatCanvas');
+                const inner = document.getElementById('mainChatCanvasInner');
+                const target = inner.children[index]; 
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    target.classList.add('ring-2', 'ring-primary', 'ring-offset-4', 'ring-offset-surface');
+                    setTimeout(() => target.classList.remove('ring-2'), 2000);
+                }
+                window.ACP.toggleSearch(false);
+            },
             
             toggleDropdown: (e, force) => {
                 if (e) e.stopPropagation();
@@ -318,6 +431,7 @@
 
             updateSessionList: (data) => {
                 const sessions = typeof data === 'string' ? JSON.parse(data) : data;
+                window.ACP.allSessions = sessions; // Store sessions for navigation
                 const container = document.getElementById('sessionListContainer');
                 const sendBtn = document.getElementById('send-button');
                 const userInput = document.getElementById('userInput');
@@ -781,6 +895,73 @@
     </main>
 
     <script>
+        // --- Shortcut Managers ---
+        class ACPShortcutManager {
+            constructor(acp) { this.acp = acp; }
+            init() { window.addEventListener('keydown', (e) => this.handleKeydown(e)); }
+            handleKeydown(e) {
+                if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                    e.preventDefault();
+                    this.navigateSession(e.key === 'ArrowUp' ? -1 : 1);
+                    return;
+                }
+                if (e.altKey && e.code === 'KeyN') {
+                    e.preventDefault(); this.acp.toggleDropdown(null); return;
+                }
+                const dropdown = document.getElementById('newChatDropdown');
+                if (dropdown && !dropdown.classList.contains('hidden')) {
+                    if (e.code === 'KeyG') {
+                        e.preventDefault(); window.sendAcp('new-chat?agent=gemini'); this.acp.toggleDropdown(null, false);
+                    }
+                }
+            }
+            navigateSession(dir) {
+                window.sendAcp(dir === 1 ? 'next-session' : 'prev-session');
+            }
+        }
+
+        class ShortcutManager {
+            constructor(acp) { this.acp = acp; }
+            init() {
+                const input = document.getElementById('userInput');
+                if (input) input.addEventListener('keydown', (e) => this.handleInputKeydown(e));
+            }
+            handleInputKeydown(e) {
+                const cd = document.getElementById('commandDropdown');
+                const fd = document.getElementById('fileDropdown');
+                const isCommandVisible = !cd.classList.contains('hidden');
+                const isFileVisible = !fd.classList.contains('hidden');
+                if (isCommandVisible || isFileVisible) {
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault(); this._navigate(isCommandVisible, 1);
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault(); this._navigate(isCommandVisible, -1);
+                    } else if (e.key === 'Enter' || e.key === 'Tab') {
+                        e.preventDefault(); this._confirm(isCommandVisible);
+                    } else if (e.key === 'Escape') {
+                        this.acp.showCommands(false); this.acp.showFiles(false);
+                    }
+                    return;
+                }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.acp.sendMessage(); }
+            }
+            _navigate(isCommand, dir) {
+                if (isCommand) {
+                    this.acp.selectedCommandIndex = (this.acp.selectedCommandIndex + dir + this.acp.filteredCommands.length) % this.acp.filteredCommands.length;
+                    this.acp.renderCommands(this.acp.filteredCommands);
+                    this.acp.scrollToActive('commandListContainer');
+                } else {
+                    this.acp.selectedFileIndex = (this.acp.selectedFileIndex + dir + this.acp.filteredFiles.length) % this.acp.filteredFiles.length;
+                    this.acp.renderFiles(this.acp.filteredFiles);
+                    this.acp.scrollToActive('fileListContainer');
+                }
+            }
+            _confirm(isCommand) {
+                if (isCommand) this.acp.applyCommand(this.acp.filteredCommands[this.acp.selectedCommandIndex].name);
+                else this.acp.applyFile(this.acp.filteredFiles[this.acp.selectedFileIndex]);
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             const input = document.getElementById('userInput');
             if (input) {
@@ -788,55 +969,13 @@
                     window.ACP.handleSlashCommand(this.innerText);
                     window.ACP.handleAtCommand(this.innerText);
                 });
-                input.addEventListener('keydown', (e) => {
-                    const cd = document.getElementById('commandDropdown');
-                    const fd = document.getElementById('fileDropdown');
-                    const isCommandVisible = !cd.classList.contains('hidden');
-                    const isFileVisible = !fd.classList.contains('hidden');
-
-                    if (isCommandVisible || isFileVisible) {
-                        if (e.key === 'ArrowDown') {
-                            e.preventDefault();
-                            if (isCommandVisible) {
-                                window.ACP.selectedCommandIndex = (window.ACP.selectedCommandIndex + 1) % window.ACP.filteredCommands.length;
-                                window.ACP.renderCommands(window.ACP.filteredCommands);
-                                window.ACP.scrollToActive('commandListContainer');
-                            } else {
-                                window.ACP.selectedFileIndex = (window.ACP.selectedFileIndex + 1) % window.ACP.filteredFiles.length;
-                                window.ACP.renderFiles(window.ACP.filteredFiles);
-                                window.ACP.scrollToActive('fileListContainer');
-                            }
-                        } else if (e.key === 'ArrowUp') {
-                            e.preventDefault();
-                            if (isCommandVisible) {
-                                window.ACP.selectedCommandIndex = (window.ACP.selectedCommandIndex - 1 + window.ACP.filteredCommands.length) % window.ACP.filteredCommands.length;
-                                window.ACP.renderCommands(window.ACP.filteredCommands);
-                                window.ACP.scrollToActive('commandListContainer');
-                            } else {
-                                window.ACP.selectedFileIndex = (window.ACP.selectedFileIndex - 1 + window.ACP.filteredFiles.length) % window.ACP.filteredFiles.length;
-                                window.ACP.renderFiles(window.ACP.filteredFiles);
-                                window.ACP.scrollToActive('fileListContainer');
-                            }
-                        } else if (e.key === 'Enter' || e.key === 'Tab') {
-                            e.preventDefault();
-                            if (isCommandVisible) window.ACP.applyCommand(window.ACP.filteredCommands[window.ACP.selectedCommandIndex].name);
-                            else window.ACP.applyFile(window.ACP.filteredFiles[window.ACP.selectedFileIndex]);
-                        } else if (e.key === 'Escape') {
-                            window.ACP.showCommands(false); window.ACP.showFiles(false);
-                        }
-                        return;
-                    }
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.ACP.sendMessage(); }
-                });
             }
 
-            window.addEventListener('keydown', (e) => {
-                if (e.altKey && e.code === 'KeyN') { e.preventDefault(); window.ACP.toggleDropdown(null); }
-                const dropdown = document.getElementById('newChatDropdown');
-                if (dropdown && !dropdown.classList.contains('hidden')) {
-                    if (e.code === 'KeyG') { e.preventDefault(); window.sendAcp('new-chat?agent=gemini'); window.ACP.toggleDropdown(null, false); }
-                }
-            });
+            // Initialize Shortcut Managers
+            window.acpShortcutManager = new ACPShortcutManager(window.ACP);
+            window.acpShortcutManager.init();
+            window.shortcutManager = new ShortcutManager(window.ACP);
+            window.shortcutManager.init();
 
             document.addEventListener('click', (e) => {
                 if (!e.target.closest('#newChatDropdown') && !e.target.closest('button[onclick*="toggleDropdown"]')) {
