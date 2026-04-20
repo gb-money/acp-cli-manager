@@ -7,21 +7,31 @@ uses
   JsonDataObjects, System.SyncObjs;
 
 type
+  TAgentType = (atGemini, atClaude, atCodex);
+
+  TSessionInfo = class;
+
+  TSessionRestoredEvent = procedure(Sender: TObject; ASession: TSessionInfo) of object;
+
   TSessionInfo = class
   public
     Agent: TAgent;
+    AgentType: TAgentType;
     SessionId: string;
     Name: string;
     IsLoading: Boolean;
+    IsActive: Boolean;
     IsPinned: Boolean;
     LogPath: string;
     DiffsPath: string; // Directory for diff blocks
     Cwd: string; // Workspace directory
     CreatedAt: TDateTime;
     LastConversationDate: TDateTime;
-    constructor Create(AAgent: TAgent; const ASessionId, AName: string; const ACwd: string = '');
+    LastHistoryTick: Cardinal; // Last time a history chunk was received
+    constructor Create(AAgent: TAgent; AType: TAgentType; const ASessionId, AName: string; const ACwd: string = '');
     procedure SaveMetadata;
     procedure LoadMetadata;
+    procedure MarkActivity;
   end;
 
   TSessionManager = class
@@ -29,28 +39,32 @@ type
     FSessions: TObjectList<TSessionInfo>;
     FActiveSession: TSessionInfo;
     FLock: TCriticalSection;
+    FWatchdogTerminated: Boolean;
+    FOnSessionRestored: TSessionRestoredEvent;
     function GetBaseConfigPath: string;
+    procedure StartWatchdog;
   public
     constructor Create;
     destructor Destroy; override;
     
-    function AddSession(AAgent: TAgent; const ASessionId, AName: string; const ACwd: string = ''): TSessionInfo;
+    function AddSession(AAgent: TAgent; AType: TAgentType; const ASessionId, AName: string; const ACwd: string = ''): TSessionInfo;
     procedure FinalizeSessionId(ASession: TSessionInfo; const ANewId: string);
     procedure DeleteSession(ASession: TSessionInfo);
     procedure SelectSession(ASession: TSessionInfo);
     procedure EnsureDirectoryStructure;
     function GetUniqueSessionName(const ABaseName: string): string;
     procedure SortSessions;
+    procedure RecordActivity(const ASessionId: string);
     
     procedure Lock;
     procedure Unlock;
     
-    // 안전한 스냅샷 리스트 반환 (for in 루프 안전성 확보)
     function GetSessionListSnapshot: TList<TSessionInfo>;
     
     property Sessions: TObjectList<TSessionInfo> read FSessions;
     property ActiveSession: TSessionInfo read FActiveSession;
     property BaseConfigPath: string read GetBaseConfigPath;
+    property OnSessionRestored: TSessionRestoredEvent read FOnSessionRestored write FOnSessionRestored;
   end;
 
 implementation
@@ -60,16 +74,24 @@ uses
 
 { TSessionInfo }
 
-constructor TSessionInfo.Create(AAgent: TAgent; const ASessionId, AName: string; const ACwd: string);
+constructor TSessionInfo.Create(AAgent: TAgent; AType: TAgentType; const ASessionId, AName: string; const ACwd: string);
 begin
   Agent := AAgent;
+  AgentType := AType;
   SessionId := ASessionId;
   Name := AName;
   Cwd := ACwd;
   IsLoading := False;
+  IsActive := False;
   IsPinned := False;
   CreatedAt := Now;
   LastConversationDate := Now;
+  LastHistoryTick := 0;
+end;
+
+procedure TSessionInfo.MarkActivity;
+begin
+  LastHistoryTick := TThread.GetTickCount;
 end;
 
 procedure TSessionInfo.SaveMetadata;
@@ -93,6 +115,7 @@ begin
     LObj.S['sessionId'] := SessionId;
     LObj.S['name'] := Name;
     LObj.S['cwd'] := Cwd;
+    LObj.I['agentType'] := Ord(AgentType);
     LObj.B['pinned'] := IsPinned;
     LObj.D['createdAt'] := CreatedAt;
     LObj.D['lastConversationDate'] := LastConversationDate;
@@ -123,6 +146,8 @@ begin
     LObj.LoadFromFile(LFile);
     Name := LObj.S['name'];
     Cwd := LObj.S['cwd'];
+    if LObj.Contains('agentType') then
+      AgentType := TAgentType(LObj.I['agentType']);
     IsPinned := LObj.B['pinned'];
     if LObj.Contains('createdAt') then
       CreatedAt := LObj.D['createdAt'];
@@ -140,11 +165,14 @@ begin
   FLock := TCriticalSection.Create;
   FSessions := TObjectList<TSessionInfo>.Create(True);
   FActiveSession := nil;
+  FWatchdogTerminated := False;
   EnsureDirectoryStructure;
+  StartWatchdog;
 end;
 
 destructor TSessionManager.Destroy;
 begin
+  FWatchdogTerminated := True;
   FSessions.Free;
   FLock.Free;
   inherited;
@@ -158,6 +186,72 @@ end;
 procedure TSessionManager.Unlock;
 begin
   FLock.Leave;
+end;
+
+procedure TSessionManager.StartWatchdog;
+var
+  LManager: TSessionManager;
+begin
+  LManager := Self;
+  TThread.CreateAnonymousThread(procedure
+  var
+    LSession: TSessionInfo;
+    LNow: Cardinal;
+    LTimedOutSessions: TList<TSessionInfo>;
+    LS: TSessionInfo;
+  begin
+    while not LManager.FWatchdogTerminated do
+    begin
+      Sleep(500);
+      LTimedOutSessions := TList<TSessionInfo>.Create;
+      try
+        LNow := TThread.GetTickCount;
+        LManager.Lock;
+        try
+          for LSession in LManager.FSessions do
+          begin
+            if LSession.IsLoading and (LSession.LastHistoryTick > 0) then
+            begin
+              if (LNow - LSession.LastHistoryTick) > 10000 then // 10s
+                LTimedOutSessions.Add(LSession);
+            end;
+          end;
+        finally LManager.Unlock; end;
+
+        for LS in LTimedOutSessions do
+        begin
+          LS.IsLoading := False;
+          LS.IsActive := True;
+          LS.LastHistoryTick := 0;
+          if Assigned(LManager.FOnSessionRestored) then
+          begin
+             TThread.Queue(nil, procedure
+             begin
+               if Assigned(LManager.FOnSessionRestored) then
+                 LManager.FOnSessionRestored(LManager, LS);
+             end);
+          end;
+        end;
+      finally
+        LTimedOutSessions.Free;
+      end;
+    end;
+  end).Start;
+end;
+
+procedure TSessionManager.RecordActivity(const ASessionId: string);
+var
+  LSession: TSessionInfo;
+begin
+  Lock;
+  try
+    for LSession in FSessions do
+      if LSession.SessionId = ASessionId then
+      begin
+        LSession.MarkActivity;
+        Break;
+      end;
+  finally Unlock; end;
 end;
 
 procedure TSessionManager.SortSessions;
@@ -224,11 +318,11 @@ begin
   end;
 end;
 
-function TSessionManager.AddSession(AAgent: TAgent; const ASessionId, AName, ACwd: string): TSessionInfo;
+function TSessionManager.AddSession(AAgent: TAgent; AType: TAgentType; const ASessionId, AName, ACwd: string): TSessionInfo;
 var
   LSessionDir: string;
 begin
-  Result := TSessionInfo.Create(AAgent, ASessionId, AName, ACwd);
+  Result := TSessionInfo.Create(AAgent, AType, ASessionId, AName, ACwd);
   
   if not ASessionId.StartsWith('pending-') then
   begin
@@ -281,13 +375,31 @@ begin
 end;
 
 procedure TSessionManager.DeleteSession(ASession: TSessionInfo);
+var
+  LSessionDir: string;
 begin
+  if ASession = nil then Exit;
+
+  // 1. Determine session directory path
+  LSessionDir := TPath.Combine(BaseConfigPath, 'sessions');
+  LSessionDir := TPath.Combine(LSessionDir, ASession.Agent.AgentName.ToLower + '-cli');
+  LSessionDir := TPath.Combine(LSessionDir, ASession.SessionId);
+
+  // 2. Remove from memory
   Lock;
   try
     if FActiveSession = ASession then FActiveSession := nil;
     FSessions.Remove(ASession);
   finally
     Unlock;
+  end;
+
+  // 3. Delete from disk
+  try
+    if TDirectory.Exists(LSessionDir) then
+      TDirectory.Delete(LSessionDir, True);
+  except
+    on E: Exception do ; // Silently fail if directory is locked or already deleted
   end;
 end;
 

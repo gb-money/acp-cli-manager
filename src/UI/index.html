@@ -183,13 +183,20 @@
             },
 
             resumeSession: () => {
-                window.ACP.clearChat(); 
                 window.sendAcp('resume-session?id=' + window.ACP.activeSessionId);
             },
 
-            addMessageToUI: (role, text) => {
+            addMessageToUI: (role, text, timestamp) => {
                 const container = document.getElementById('mainChatCanvasInner');
-                const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                let time = '';
+                if (timestamp) {
+                    const parts = timestamp.split(' ');
+                    if (parts.length > 1) time = parts[1].substring(0, 5); // "HH:mm"
+                    else time = timestamp.substring(0, 5);
+                } else {
+                    time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                }
+                
                 const id = 'msg-' + Date.now() + Math.random().toString(36).substr(2, 5);
 
                 let html = role === 'me' ? `
@@ -203,7 +210,7 @@
                         </div>
                     </div>` : `
                     <div class="flex flex-col items-start gap-1.5 max-w-3xl mr-auto group mb-8 px-4">
-                        <div class="flex items-center gap-3 mb-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div class="flex items-center gap-3 mb-1 ml-1 transition-opacity">
                             <span class="text-[11px] font-headline font-semibold text-primary">Gemini-CLI</span>
                             <span class="text-[11px] text-on-surface-variant font-medium">${time}</span>
                         </div>
@@ -362,6 +369,14 @@
                         modelSelectBtn.querySelector('span:nth-child(2)').innerText = currentModelLabel || 'Select Model';
                         modelSelectBtn.querySelector('span:nth-child(2)').className = 'text-on-surface font-medium';
                     }
+                } else {
+                    // No active session (e.g., after deletion). Reset UI to initial state.
+                    window.ACP.activeSessionId = '';
+                    document.getElementById('activeAgentHeader').innerText = 'No Session';
+                    document.getElementById('mainInputArea').classList.add('hidden');
+                    document.getElementById('mainChatCanvas').classList.add('hidden');
+                    document.getElementById('mainEmptyArea').classList.remove('hidden');
+                    document.getElementById('mainChatCanvasInner').innerHTML = '';
                 }
 
                 container.innerHTML = sessions.map(s => `
@@ -396,14 +411,15 @@
             },
 
             streamMessage: (data) => {
-                const { content, role, stopReason } = data;
+                const { content, role, stopReason, timestamp } = data;
                 const targetRole = role === 'user' ? 'me' : 'ai';
                 if (window.ACP.lastBlockType === 'thought') window.ACP.finalizeThought();
                 if (window.ACP.lastBlockType !== 'message' || window.ACP.lastMessageRole !== targetRole) {
-                    window.ACP.lastAiMsgId = window.ACP.addMessageToUI(targetRole, '');
+                    window.ACP.lastAiMsgId = window.ACP.addMessageToUI(targetRole, '', timestamp);
                     window.ACP.lastBlockType = 'message';
                     window.ACP.lastMessageRole = targetRole;
                 }
+
                 const targetDiv = document.getElementById(window.ACP.lastAiMsgId);
                 if (targetDiv) {
                     let rendered = content;
@@ -542,7 +558,7 @@
                             window.ACP.lastBlockType = 'thought'; window.ACP.accumulatedThought = msg.content; window.ACP.lastAiThoughtId = tIds;
                             window.ACP.parseAndRenderThought(msg.content, tIds.contentId);
                             window.ACP.finalizeThought();
-                        } else window.ACP.streamMessage({content: msg.content, role: r, stopReason: 'history'});
+                        } else window.ACP.streamMessage({content: msg.content, role: r, stopReason: 'history', timestamp: msg.timestamp});
                     });
                 } catch (e) { console.error('History load error:', e); }
             },
@@ -733,7 +749,7 @@
                                 <button id="send-button" class="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-on-primary hover:bg-primary-container shadow-lg shadow-primary/20 transition-all duration-200 active:scale-95 group"><span class="material-symbols-outlined text-[20px]">send</span></button>
                             </div>
                         </div>
-                        <div class="text-center mt-3"><p class="text-[10px] text-on-surface-variant font-label">ACP Manager can execute commands on your behalf. Press <kbd class="px-1 py-0.5 rounded bg-surface-container border border-outline-variant/20 font-mono text-[9px]">⌘K</kbd> to search agents.</p></div>
+                        <div class="text-center mt-3"></div>
                     </div>
                 </div>
             </div>
@@ -818,5 +834,8 @@
             }, true);
         });
     </script>
+</body>
+</html>
+ipt>
 </body>
 </html>

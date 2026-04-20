@@ -50,7 +50,7 @@ type
 implementation
 
 uses
-  JsonDataObjects, FMX.Forms, uGeminiAgent, uACPAgent, System.Types, uConversationService, uDebugRPC;
+  JsonDataObjects, FMX.Forms, uGeminiAgent, uACPAgent, System.Types, uConversationService, uDebugRPC, uMain;
 
 constructor TAgentControl.Create(AWebBrowser: TWebBrowser; ASessionMgr: TSessionManager);
 var
@@ -161,6 +161,7 @@ begin
         LInnerMsg: TJsonArray;
         LInnerJson: string;
         LBytes: TBytes;
+        LBase64: string;
       begin
         if not Assigned(LTargetSession) then Exit;
         
@@ -169,8 +170,8 @@ begin
         try
           LInnerJson := LInnerMsg.ToJSON(False);
           LBytes := TEncoding.UTF8.GetBytes(LInnerJson);
-          LInnerJson := TNetEncoding.Base64.EncodeBytesToString(LBytes).Replace(#13, '').Replace(#10, '');
-          FWebBrowser.EvaluateJavaScript('window.ACP.loadHistoryBase64("' + LInnerJson + '")');
+          LBase64 := TNetEncoding.Base64.EncodeBytesToString(LBytes).Replace(#13, '').Replace(#10, '');
+          FWebBrowser.EvaluateJavaScript('window.ACP.loadHistoryBase64("' + LBase64 + '")');
           FWebBrowser.EvaluateJavaScript('if (document.getElementById("historySidebar") && !document.getElementById("historySidebar").classList.contains("hidden")) window.sendAcp("get-file-history");');
         finally
           LInnerMsg.Free;
@@ -202,10 +203,18 @@ begin
 
     if Assigned(LTargetSession) then
     begin
-       if Assigned(LTargetSession.Agent) and (LTargetSession.Agent.State in [asDisconnected, asError]) then
+       // 1. Pre-load local history immediately
+       HandleSelectSession(Params);
+
+       // 2. Start connection and restoration
+       LTargetSession.IsLoading := True; 
+       if Assigned(LTargetSession.Agent) then
        begin
-         LTargetSession.IsLoading := True; 
-         LTargetSession.Agent.Connect;
+         if LTargetSession.Agent.State in [asDisconnected, asError] then
+           LTargetSession.Agent.Connect
+         else if LTargetSession.Agent.State = asReady then
+           // Agent is already ready, trigger restoration directly
+           S.StartSessionRestoration(LTargetSession);
        end;
        UpdateSessionList;
     end;
@@ -392,6 +401,7 @@ begin
     LObj.S['sessionId'] := ASessionId;
     LObj.S['content'] := AContent;
     LObj.S['role'] := ARole; 
+    LObj.S['timestamp'] := FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
     if AStopReason <> '' then
       LObj.S['stopReason'] := AStopReason;
     FWebBrowser.EvaluateJavaScript('window.ACP.streamMessage(' + LObj.ToJSON(False) + ')');
@@ -515,14 +525,15 @@ begin
         LObj := LArray.AddObject;
         LObj.S['id'] := LSessionInfo.SessionId;
         LObj.S['name'] := LSessionInfo.Name;
-        LObj.S['workspace'] := GetWorkspaceDisplayText(LSessionInfo.Cwd); 
-        LObj.B['active'] := (FSessionMgr.ActiveSession = LSessionInfo);
+        LObj.S['workspace'] := GetWorkspaceDisplayText(LSessionInfo.Cwd);
+        LObj.B['active'] := FSessionMgr.ActiveSession = LSessionInfo;
         LObj.B['pinned'] := LSessionInfo.IsPinned;
-        LObj.B['online'] := Assigned(LSessionInfo.Agent) and (LSessionInfo.Agent.State = asReady);
+        LObj.B['online'] := LSessionInfo.IsActive; // Use session-specific active flag
         LObj.B['loading'] := LSessionInfo.IsLoading or (Assigned(LSessionInfo.Agent) and (LSessionInfo.Agent.State in [asConnecting, asInitializing]));
         LObj.D['createdAt'] := LSessionInfo.CreatedAt;
         LObj.D['lastConversationDate'] := LSessionInfo.LastConversationDate;
         LObj.S['icon'] := 'forum';
+
         LObj.S['lastMsg'] := 'Ready to chat...';
         if LSessionInfo.IsLoading then LObj.S['lastMsg'] := 'Starting process...';
         if LSessionInfo.Agent is TGeminiAgent then

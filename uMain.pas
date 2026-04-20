@@ -6,11 +6,9 @@ uses
   Winapi.Windows, Winapi.Messages,
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Generics.Collections,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.WebBrowser, uAgent, uGeminiAgent, uACPAgent,
-  uSessionManager, uAgentControl, uDebugRPC, JsonDataObjects, uConversationService, uUIControl;
+  uSessionManager, uAgentControl, uDebugRPC, JsonDataObjects, uConversationService, uUIControl, System.SyncObjs;
 
 type
-  TAgentType = (atGemini, atClaude, atCodex);
-
   TAgentTypeHelper = record helper for TAgentType
     function ToString: string;
     function AgentClass: TComponentClass;
@@ -43,9 +41,11 @@ type
     procedure DoOpenExplorer(Sender: TObject);
     procedure DoOpenFileViewer(Sender: TObject; const APath: string);
     procedure DoOpenDiffViewer(Sender: TObject; const ASessionId, APath, AHashId: string);
+    procedure DoSessionRestored(Sender: TObject; ASession: TSessionInfo);
     procedure LoadSessionsFromDisk;
     function GetOrCreateAgent(AType: TAgentType): TAgent;
   public
+    procedure StartSessionRestoration(ASession: TSessionInfo);
   end;
 
 var
@@ -62,7 +62,10 @@ uses
 
 function TAgentTypeHelper.AgentClass: TComponentClass;
 begin
-  case Self of atGemini: Result := TGeminiAgent; else Result := nil; end;
+  case Self of 
+    atGemini: Result := TGeminiAgent; 
+    else Result := nil; 
+  end;
 end;
 
 function TAgentTypeHelper.ToString: string;
@@ -76,6 +79,7 @@ procedure TS.FormCreate(Sender: TObject);
 begin
   FInitialized := False;
   FSessionMgr := TSessionManager.Create;
+  FSessionMgr.OnSessionRestored := DoSessionRestored;
   FAgents := TDictionary<TAgentType, TAgent>.Create;
   FUIControl := TUIControl.Create;
   FUIControl.OnOpenExplorer := DoOpenExplorer;
@@ -83,6 +87,68 @@ begin
   FUIControl.OnOpenDiffViewer := DoOpenDiffViewer;
   FAgentControl := TAgentControl.Create(WebBrowserMain, FSessionMgr);
   FAgentControl.OnNewChat := DoNewChat;
+end;
+
+procedure TS.DoSessionRestored(Sender: TObject; ASession: TSessionInfo);
+begin
+  if Assigned(ASession) then
+  begin
+     if Assigned(FAgentControl) then FAgentControl.UpdateFileList(ASession.Cwd);
+     if Assigned(FAgentControl) then FAgentControl.UpdateSessionList;
+  end;
+end;
+
+procedure TS.StartSessionRestoration(ASession: TSessionInfo);
+var
+  LACPAgent: TACPAgent;
+begin
+  if not Assigned(ASession) or not (ASession.Agent is TACPAgent) then Exit;
+  LACPAgent := TACPAgent(ASession.Agent);
+  
+  LACPAgent.Workspace := ASession.Cwd;
+  if ASession.SessionId.StartsWith('pending-') then begin
+    LACPAgent.CreateNewSession(ASession.Cwd, '', procedure(SessionId: string)
+    begin
+      TThread.Queue(nil, procedure 
+      begin
+        if SessionId <> '' then begin 
+          FSessionMgr.FinalizeSessionId(ASession, SessionId); 
+          ASession.IsLoading := False; 
+          ASession.IsActive := True; 
+          LACPAgent.SetSessionLogPath(SessionId, ASession.LogPath); 
+        end
+        else FSessionMgr.DeleteSession(ASession);
+        
+        if Assigned(FAgentControl) then begin 
+          FAgentControl.ShowTyping(False);
+          FAgentControl.UpdateSessionList; 
+          FAgentControl.UpdateFileList(ASession.Cwd); 
+        end;
+      end);
+    end);
+  end else begin
+    TConversationService.StartRestoration(ASession);
+    LACPAgent.LoadSession(ASession.SessionId, procedure(SessionId: string)
+    begin
+      TThread.Queue(nil, procedure 
+      begin
+        if SessionId = '' then
+        begin
+          // Restoration failed. Remove the invalid session from the list.
+          FSessionMgr.DeleteSession(ASession);
+          if Assigned(FAgentControl) then FAgentControl.UpdateSessionList;
+          Exit;
+        end;
+
+        TConversationService.FinalizeRestoration(ASession);
+        if SessionId <> '' then LACPAgent.SetSessionLogPath(SessionId, ASession.LogPath);
+        
+        if Assigned(FAgentControl) then begin 
+          FAgentControl.UpdateSessionList; 
+        end;
+      end);
+    end);
+  end;
 end;
 
 procedure TS.DoOpenExplorer(Sender: TObject);
@@ -165,9 +231,10 @@ end;
 
 procedure TS.LoadSessionsFromDisk;
 var
-  LBaseDir, LAgentDir, LSessionDir, LSessionId, LAgentName: string;
+  LBaseDir, LAgentDir, LSessionDir, LSessionId, LAgentName, LHistoryPath: string;
   LAgent: TAgent;
   LSession: TSessionInfo;
+  LType: TAgentType;
 begin
   if not Assigned(FSessionMgr) then Exit;
   LBaseDir := TPath.Combine(FSessionMgr.BaseConfigPath, 'sessions');
@@ -176,17 +243,28 @@ begin
   for LAgentDir in TDirectory.GetDirectories(LBaseDir) do
   begin
     LAgentName := TPath.GetFileName(LAgentDir);
-    if SameText(LAgentName, 'gemini-cli') then
+    LType := atGemini;
+    if SameText(LAgentName, 'gemini-cli') then LType := atGemini
+    else if SameText(LAgentName, 'claude-cli') then LType := atClaude
+    else if SameText(LAgentName, 'codex-cli') then LType := atCodex
+    else Continue;
+
+    LAgent := GetOrCreateAgent(LType);
+    if not Assigned(LAgent) then Continue;
+
+    for LSessionDir in TDirectory.GetDirectories(LAgentDir) do
     begin
-      LAgent := GetOrCreateAgent(atGemini);
-      for LSessionDir in TDirectory.GetDirectories(LAgentDir) do
-      begin
-        LSessionId := TPath.GetFileName(LSessionDir);
-        if LSessionId.StartsWith('pending-') then Continue;
-        LSession := FSessionMgr.AddSession(LAgent, LSessionId, 'Loading...');
-        if LAgent is TACPAgent then
-          TACPAgent(LAgent).SetSessionLogPath(LSessionId, LSession.LogPath);
-      end;
+      LSessionId := TPath.GetFileName(LSessionDir);
+      if LSessionId.StartsWith('pending-') then Continue;
+
+      // Filter: Only restore sessions that have conversation history
+      LHistoryPath := TPath.Combine(LSessionDir, 'history.json');
+      if not TFile.Exists(LHistoryPath) or (TFile.GetSize(LHistoryPath) < 10) then
+        Continue;
+
+      LSession := FSessionMgr.AddSession(LAgent, LType, LSessionId, 'Loading...');
+      if LAgent is TACPAgent then
+        TACPAgent(LAgent).SetSessionLogPath(LSessionId, LSession.LogPath);
     end;
   end;
 end;
@@ -208,7 +286,8 @@ end;
 
 procedure TS.WebBrowserMainDidFinishLoad(ASender: TObject);
 begin
-  System.Classes.TThread.ForceQueue(nil, procedure begin 
+  System.Classes.TThread.ForceQueue(nil, procedure 
+  begin 
     if Assigned(WebBrowserMain) and WebBrowserMain.Visible then WebBrowserMain.SetFocus; 
     if Assigned(FAgentControl) then FAgentControl.UpdateSessionList; 
   end);
@@ -248,7 +327,8 @@ begin
     LStopReason := Text.Substring(LStopIdx + 7);
   end;
 
-  System.Classes.TThread.Queue(nil, procedure begin 
+  System.Classes.TThread.Queue(nil, procedure 
+  begin 
     if Assigned(FAgentControl) then begin 
       FAgentControl.UpdateMessageStreaming(SessionId, LActualText, 'ai', LStopReason);
       FAgentControl.ShowTyping(False); 
@@ -292,18 +372,24 @@ begin
 
   if Assigned(LFound) then begin
     if LFound.IsLoading or ((Sender is TACPAgent) and TACPAgent(Sender).IsRestoringSession(SessionId)) then
+    begin
       LStopReason := 'history';
+      FSessionMgr.RecordActivity(SessionId);
+    end;
   end;
 
-  System.Classes.TThread.Queue(nil, procedure begin 
+  System.Classes.TThread.Queue(nil, procedure 
+  begin 
     if Assigned(FAgentControl) then 
-      FAgentControl.UpdateMessageStreaming(SessionId, LActualText, LRole, LStopReason); 
+      if LStopReason <> 'history' then
+        FAgentControl.UpdateMessageStreaming(SessionId, LActualText, LRole, LStopReason); 
   end);
 end;
 
 procedure TS.DoThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
 begin
-  System.Classes.TThread.Queue(nil, procedure begin 
+  System.Classes.TThread.Queue(nil, procedure 
+  begin 
     if Assigned(FAgentControl) then 
       FAgentControl.UpdateThoughtStreaming(SessionId, FullText); 
   end);
@@ -403,15 +489,41 @@ begin
   LID := ID; LMethod := Method; LSID := SessionId;
   LToolCall := ToolCall.ToJSON(False);
   LOptions := Options.ToJSON(False);
-  System.Classes.TThread.Queue(nil, procedure begin 
+  System.Classes.TThread.Queue(nil, procedure 
+  begin 
     if Assigned(FAgentControl) then 
       FAgentControl.RequestPermissionUI(LSID, LID, LMethod, LToolCall, LOptions); 
   end);
 end;
 
 procedure TS.DoSessionMetadataUpdate(Sender: TObject; const SessionId: string);
+var
+  LSession: TSessionInfo;
+  LSessionInfo: TSessionInfo;
+  LSessions: TList<TSessionInfo>;
 begin
-  System.Classes.TThread.Queue(nil, procedure begin 
+  LSession := nil;
+  if Assigned(FSessionMgr) then begin
+    LSessions := FSessionMgr.GetSessionListSnapshot;
+    try
+      for LSessionInfo in LSessions do
+        if LSessionInfo.SessionId = SessionId then begin
+          LSession := LSessionInfo;
+          Break;
+        end;
+    finally LSessions.Free; end;
+  end;
+
+  if Assigned(LSession) and LSession.IsLoading then
+  begin
+    // available_commands_update received, restoration is complete!
+    LSession.IsLoading := False;
+    LSession.IsActive := True;
+    if Assigned(FAgentControl) then FAgentControl.UpdateFileList(LSession.Cwd);
+  end;
+
+  System.Classes.TThread.Queue(nil, procedure 
+  begin 
     if Assigned(FAgentControl) then 
       FAgentControl.UpdateSessionList; 
   end);
@@ -422,7 +534,8 @@ var
   LMsg: string;
 begin 
   LMsg := Msg;
-  System.Classes.TThread.Queue(nil, procedure begin
+  System.Classes.TThread.Queue(nil, procedure 
+  begin
     if Assigned(frmDebugRPC) then frmDebugRPC.AddACPLog('Status: ' + LMsg);
   end);
 end;
@@ -436,17 +549,30 @@ begin
   LSender := Sender;
   System.Classes.TThread.Queue(nil, procedure
   var
-    LGemini: TGeminiAgent; LTargetSession, LSessionInfo: TSessionInfo;
+    LACPAgent: TACPAgent; LTargetSession, LSessionInfo: TSessionInfo;
     LSessions: TList<TSessionInfo>;
   begin
-    if (LSender is TGeminiAgent) and (LNewState = asReady) then begin
-      LGemini := TGeminiAgent(LSender); LTargetSession := nil;
+    if LSender is TAgent then
+    begin
+      // When agent becomes ready, mark all its sessions as inactive initially
+      if LNewState = asReady then
+      begin
+        LSessions := FSessionMgr.GetSessionListSnapshot;
+        try
+          for LSessionInfo in LSessions do
+            if LSessionInfo.Agent = LSender then LSessionInfo.IsActive := False;
+        finally LSessions.Free; end;
+      end;
+    end;
+
+    if (LSender is TACPAgent) and (LNewState = asReady) then begin
+      LACPAgent := TACPAgent(LSender); LTargetSession := nil;
       if Assigned(FSessionMgr) then
       begin
         LSessions := FSessionMgr.GetSessionListSnapshot;
         try
           for LSessionInfo in LSessions do 
-            if (LSessionInfo.Agent = LGemini) and LSessionInfo.IsLoading then begin 
+            if (LSessionInfo.Agent = LACPAgent) and LSessionInfo.IsLoading then begin 
               LTargetSession := LSessionInfo; 
               Break; 
             end;
@@ -455,44 +581,7 @@ begin
         end;
       end;
       
-      if Assigned(LTargetSession) then begin
-        LGemini.Workspace := LTargetSession.Cwd;
-        if LTargetSession.SessionId.StartsWith('pending-') then begin
-          LGemini.CreateNewSession(LTargetSession.Cwd, '', procedure(const SessionId: string)
-          begin
-            System.Classes.TThread.Queue(nil, procedure begin
-              if SessionId <> '' then begin 
-                FSessionMgr.FinalizeSessionId(LTargetSession, SessionId); 
-                LTargetSession.IsLoading := False; 
-                LGemini.SetSessionLogPath(SessionId, LTargetSession.LogPath); 
-              end
-              else FSessionMgr.DeleteSession(LTargetSession);
-              
-              if Assigned(FAgentControl) then begin 
-                FAgentControl.ShowTyping(False);
-                FAgentControl.UpdateSessionList; 
-                FAgentControl.UpdateFileList(LTargetSession.Cwd); 
-              end;
-            end);
-          end);
-        end else begin
-          TConversationService.StartRestoration(LTargetSession);
-          LGemini.LoadSession(LTargetSession.SessionId, procedure(const SessionId: string)
-          begin
-            System.Classes.TThread.Queue(nil, procedure begin
-              LTargetSession.IsLoading := False; 
-              TConversationService.FinalizeRestoration(LTargetSession);
-              if SessionId <> '' then LGemini.SetSessionLogPath(SessionId, LTargetSession.LogPath);
-              
-              if Assigned(FAgentControl) then begin 
-                FAgentControl.ShowTyping(False);
-                FAgentControl.UpdateSessionList; 
-                FAgentControl.UpdateFileList(LTargetSession.Cwd); 
-              end;
-            end);
-          end);
-        end;
-      end;
+      if Assigned(LTargetSession) then StartSessionRestoration(LTargetSession);
     end;
     if Assigned(FAgentControl) then FAgentControl.UpdateSessionList;
   end);
@@ -505,16 +594,18 @@ begin
   if SameText(AgentName, 'gemini') then begin
     if not SelectDirectory('Select Project Workspace for Gemini', '', LSelectedDir) then Exit;
     LPendingId := 'pending-' + TGuid.NewGuid.ToString; LAgent := GetOrCreateAgent(atGemini); LGemini := LAgent as TGeminiAgent;
-    LPendingSession := FSessionMgr.AddSession(LGemini, LPendingId, FSessionMgr.GetUniqueSessionName('New Chat'), LSelectedDir);
+    LPendingSession := FSessionMgr.AddSession(LGemini, atGemini, LPendingId, FSessionMgr.GetUniqueSessionName('New Chat'), LSelectedDir);
     LPendingSession.IsLoading := True; FSessionMgr.SelectSession(LPendingSession);
     if Assigned(WebBrowserMain) then WebBrowserMain.EvaluateJavaScript('window.ACP.clearChat()');
     if Assigned(FAgentControl) then begin FAgentControl.UpdateSessionList; FAgentControl.UpdateFileList(LSelectedDir); end;
-    System.Classes.TThread.Queue(nil, procedure begin
+    System.Classes.TThread.Queue(nil, procedure 
+    begin
       if LGemini.State = asReady then begin
         LGemini.Workspace := LSelectedDir;
-        LGemini.CreateNewSession(LSelectedDir, '', procedure(const SessionId: string)
+        LGemini.CreateNewSession(LSelectedDir, '', procedure(SessionId: string)
         begin
-          System.Classes.TThread.Queue(nil, procedure begin
+          System.Classes.TThread.Queue(nil, procedure 
+          begin
             if SessionId <> '' then begin FSessionMgr.FinalizeSessionId(LPendingSession, SessionId); LPendingSession.IsLoading := False; LGemini.SetSessionLogPath(SessionId, LPendingSession.LogPath); end
             else FSessionMgr.DeleteSession(LPendingSession);
             if Assigned(FAgentControl) then begin FAgentControl.UpdateSessionList; FAgentControl.UpdateFileList(LSelectedDir); end;

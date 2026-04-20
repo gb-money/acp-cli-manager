@@ -54,6 +54,9 @@ type
     procedure StartRestoration(const SessionId: string);
     procedure FinalizeRestoration(const SessionId: string);
     function IsRestoringSession(const SessionId: string): Boolean;
+
+    procedure LoadSession(const SessionId: string; ACallback: TProc<string>); virtual; abstract;
+    procedure CreateNewSession(const Cwd: string; const Mode: string; ACallback: TProc<string>); virtual; abstract;
     
     property OnRawData: TACPRawDataEvent read FOnRawData write FOnRawData;
     property OnPermissionRequest: TAgentPermissionRequestEvent read FOnPermissionRequest write FOnPermissionRequest;

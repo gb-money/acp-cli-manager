@@ -26,8 +26,8 @@ type
     destructor Destroy; override;
     
     procedure Connect; override;
-    procedure CreateNewSession(const ACwd: string; const APrompt: string = ''; OnSuccess: TSessionCreatedCallback = nil);
-    procedure LoadSession(const SessionId: string; OnSuccess: TSessionCreatedCallback = nil);
+    procedure CreateNewSession(const Cwd: string; const Mode: string; ACallback: TProc<string>); override;
+    procedure LoadSession(const SessionId: string; ACallback: TProc<string>); override;
     procedure SendPrompt(const SessionId, AText: string); override;
     procedure ChangeModel(const SessionId, AModelId: string);
     procedure CancelPrompt(const SessionId: string);
@@ -137,12 +137,12 @@ begin
   end;
 end;
 
-procedure TGeminiAgent.CreateNewSession(const ACwd: string; const APrompt: string; OnSuccess: TSessionCreatedCallback);
+procedure TGeminiAgent.CreateNewSession(const Cwd: string; const Mode: string; ACallback: TProc<string>);
 var
   Params: TJsonObject;
 begin
   DoStatusChange('Creating Session...');
-  Params := TACPProtocol.CreateSessionNewParams(ACwd, APrompt);
+  Params := TACPProtocol.CreateSessionNewParams(Cwd, Mode);
   try
     ACPClient.Send('session/new', Params,
       procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
@@ -158,7 +158,7 @@ begin
           begin
             ExtractSessionMetadata(NewSessionId, ResultObj);
             DoStatusChange('Session Created: ' + NewSessionId);
-            if Assigned(OnSuccess) then OnSuccess(NewSessionId);
+            if Assigned(ACallback) then ACallback(NewSessionId);
           end
           else
             DoStatusChange('ERR: Session ID missing in response.');
@@ -167,7 +167,7 @@ begin
         begin
           if Assigned(ErrorObj) then DoStatusChange('Session Failed: ' + ErrorObj.ToJSON(False))
           else DoStatusChange('Session Failed: Unknown error');
-          if Assigned(OnSuccess) then OnSuccess('');
+          if Assigned(ACallback) then ACallback('');
         end;
       end);
   finally
@@ -175,7 +175,7 @@ begin
   end;
 end;
 
-procedure TGeminiAgent.LoadSession(const SessionId: string; OnSuccess: TSessionCreatedCallback);
+procedure TGeminiAgent.LoadSession(const SessionId: string; ACallback: TProc<string>);
 var
   Params: TJsonObject;
 begin
@@ -188,19 +188,29 @@ begin
     
     ACPClient.Send('session/load', Params,
       procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
+      var
+        LErrMsg: string;
       begin
         if Success then
         begin
           ExtractSessionMetadata(SessionId, ResultObj);
           DoStatusChange('Session Loaded: ' + SessionId);
           State := asReady;
-          if Assigned(OnSuccess) then OnSuccess(SessionId);
+          if Assigned(ACallback) then ACallback(SessionId);
         end
         else
         begin
-          DoStatusChange('Session Load Failed');
+          LErrMsg := 'Session Load Failed';
+          if Assigned(ErrorObj) then
+          begin
+            LErrMsg := LErrMsg + ' (Code: ' + IntToStr(ErrorObj.I['code']) + ')';
+            if ErrorObj.Contains('data') and ErrorObj.O['data'].Contains('details') then
+              LErrMsg := LErrMsg + ': ' + ErrorObj.O['data'].S['details'];
+          end;
+          
+          DoStatusChange(LErrMsg);
           State := asReady; 
-          if Assigned(OnSuccess) then OnSuccess('');
+          if Assigned(ACallback) then ACallback(''); // Signal uMain to delete the session
         end;
       end);
   finally

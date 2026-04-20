@@ -3,7 +3,7 @@ unit uConversationService;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, System.Hash, JsonDataObjects, uSessionManager;
+  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, System.Hash, JsonDataObjects, uSessionManager, uACPAgent;
 
 type
   TConversationService = class
@@ -191,7 +191,11 @@ begin
         if LChunkText <> '' then
         begin
           if (LUpdateType <> 'full_message') and Assigned(LLastMsg) and (LLastMsg.S['role'] = LRole) then
-            LLastMsg.S['content'] := LLastMsg.S['content'] + LChunkText
+          begin
+            LLastMsg.S['content'] := LLastMsg.S['content'] + LChunkText;
+            // Always update timestamp to the latest chunk's time for accurate display
+            LLastMsg.S['timestamp'] := ALogEntry.S['timestamp'];
+          end
           else
           begin
             LLastMsg := LMessages.AddObject;
@@ -210,12 +214,18 @@ var
   LLogObj: TJsonObject;
   LTargetFile, LJSON: string;
   LBase: TJsonBaseObject;
+  LIsRestoring: Boolean;
 begin
   if (ASession = nil) or (ASession.LogPath = '') then Exit;
   
-  // Update last conversation date
-  ASession.LastConversationDate := Now;
-  ASession.SaveMetadata;
+  LIsRestoring := ASession.IsLoading or ((ASession.Agent is TACPAgent) and TACPAgent(ASession.Agent).IsRestoringSession(ASession.SessionId));
+
+  // Only update last conversation date if NOT restoring
+  if not LIsRestoring then
+  begin
+    ASession.LastConversationDate := Now;
+    ASession.SaveMetadata;
+  end;
 
   LTargetFile := ASession.LogPath;
   if ASession.IsLoading and TFile.Exists(ASession.LogPath + '.new') then
