@@ -520,6 +520,8 @@ begin
         LObj.B['pinned'] := LSessionInfo.IsPinned;
         LObj.B['online'] := Assigned(LSessionInfo.Agent) and (LSessionInfo.Agent.State = asReady);
         LObj.B['loading'] := LSessionInfo.IsLoading or (Assigned(LSessionInfo.Agent) and (LSessionInfo.Agent.State in [asConnecting, asInitializing]));
+        LObj.D['createdAt'] := LSessionInfo.CreatedAt;
+        LObj.D['lastConversationDate'] := LSessionInfo.LastConversationDate;
         LObj.S['icon'] := 'forum';
         LObj.S['lastMsg'] := 'Ready to chat...';
         if LSessionInfo.IsLoading then LObj.S['lastMsg'] := 'Starting process...';

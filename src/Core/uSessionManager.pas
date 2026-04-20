@@ -17,6 +17,8 @@ type
     LogPath: string;
     DiffsPath: string; // Directory for diff blocks
     Cwd: string; // Workspace directory
+    CreatedAt: TDateTime;
+    LastConversationDate: TDateTime;
     constructor Create(AAgent: TAgent; const ASessionId, AName: string; const ACwd: string = '');
     procedure SaveMetadata;
     procedure LoadMetadata;
@@ -38,6 +40,7 @@ type
     procedure SelectSession(ASession: TSessionInfo);
     procedure EnsureDirectoryStructure;
     function GetUniqueSessionName(const ABaseName: string): string;
+    procedure SortSessions;
     
     procedure Lock;
     procedure Unlock;
@@ -52,6 +55,9 @@ type
 
 implementation
 
+uses
+  System.Generics.Defaults;
+
 { TSessionInfo }
 
 constructor TSessionInfo.Create(AAgent: TAgent; const ASessionId, AName: string; const ACwd: string);
@@ -62,6 +68,8 @@ begin
   Cwd := ACwd;
   IsLoading := False;
   IsPinned := False;
+  CreatedAt := Now;
+  LastConversationDate := Now;
 end;
 
 procedure TSessionInfo.SaveMetadata;
@@ -86,6 +94,8 @@ begin
     LObj.S['name'] := Name;
     LObj.S['cwd'] := Cwd;
     LObj.B['pinned'] := IsPinned;
+    LObj.D['createdAt'] := CreatedAt;
+    LObj.D['lastConversationDate'] := LastConversationDate;
     LObj.SaveToFile(LFile);
   finally
     LObj.Free;
@@ -114,6 +124,10 @@ begin
     Name := LObj.S['name'];
     Cwd := LObj.S['cwd'];
     IsPinned := LObj.B['pinned'];
+    if LObj.Contains('createdAt') then
+      CreatedAt := LObj.D['createdAt'];
+    if LObj.Contains('lastConversationDate') then
+      LastConversationDate := LObj.D['lastConversationDate'];
   finally
     LObj.Free;
   end;
@@ -146,6 +160,32 @@ begin
   FLock.Leave;
 end;
 
+procedure TSessionManager.SortSessions;
+begin
+  Lock;
+  try
+    FSessions.Sort(TComparer<TSessionInfo>.Construct(
+      function(const Left, Right: TSessionInfo): Integer
+      begin
+        // Pinned sessions first
+        if Left.IsPinned <> Right.IsPinned then
+        begin
+          if Left.IsPinned then Result := -1
+          else Result := 1;
+        end
+        else
+        begin
+          // Descending by LastConversationDate
+          if Left.LastConversationDate > Right.LastConversationDate then Result := -1
+          else if Left.LastConversationDate < Right.LastConversationDate then Result := 1
+          else Result := 0;
+        end;
+      end));
+  finally
+    Unlock;
+  end;
+end;
+
 function TSessionManager.GetSessionListSnapshot: TList<TSessionInfo>;
 var
   LSession: TSessionInfo;
@@ -153,6 +193,7 @@ begin
   Result := TList<TSessionInfo>.Create;
   Lock;
   try
+    SortSessions; // Sort before returning snapshot
     for LSession in FSessions do
       Result.Add(LSession);
   finally

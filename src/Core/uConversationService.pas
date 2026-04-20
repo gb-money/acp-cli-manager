@@ -212,6 +212,11 @@ var
   LBase: TJsonBaseObject;
 begin
   if (ASession = nil) or (ASession.LogPath = '') then Exit;
+  
+  // Update last conversation date
+  ASession.LastConversationDate := Now;
+  ASession.SaveMetadata;
+
   LTargetFile := ASession.LogPath;
   if ASession.IsLoading and TFile.Exists(ASession.LogPath + '.new') then
     LTargetFile := ASession.LogPath + '.new';
