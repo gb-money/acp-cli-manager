@@ -150,7 +150,8 @@ begin
     LObj.I['agentType'] := Ord(AgentType);
     LObj.B['pinned'] := IsPinned;
     LObj.D['createdAt'] := CreatedAt;
-    LObj.D['lastConversationDate'] := LastConversationDate;
+    if LastConversationDate > 0 then
+      LObj.D['lastConversationDate'] := LastConversationDate;
     LObj.SaveToFile(LFile);
   finally
     LObj.Free;

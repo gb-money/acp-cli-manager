@@ -99,3 +99,8 @@ To ensure consistent handling of Korean characters across different development 
 ### B. String Handling
 - **Native Type**: The default `string` type in Delphi 11 is `UnicodeString` (UTF-16). Use it for all internal text processing to maintain full Hangul compatibility.
 - **I/O Operations**: When reading from or writing to external files or network streams, explicitly specify `TEncoding.UTF8` to prevent encoding mismatches.
+
+## 12. Shell Command Usage (PowerShell)
+- **Command Chaining**: The development environment uses **Windows PowerShell**. 
+- **Rule**: NEVER use the `&&` operator to chain multiple commands, as it is not supported in many PowerShell versions.
+- **Mechanism**: Use the semicolon `;` operator for sequential command execution (e.g., `git status; git diff HEAD`).

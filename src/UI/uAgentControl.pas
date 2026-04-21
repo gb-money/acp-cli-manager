@@ -358,7 +358,11 @@ begin
 end;
 
 procedure TAgentControl.HandleNewChat(const Params: TDictionary<string, string>);
-var LAgentName, LSelectedDir: string; LType: TAgentType; LHandler: TAgentHandler;
+var 
+  LAgentName, LSelectedDir: string; 
+  LType: TAgentType; 
+  LHandler: TAgentHandler;
+  LPrevActive: TSessionInfo;
 begin
   if Params.TryGetValue('agent', LAgentName) then begin
     if Assigned(FOnNewChat) then FOnNewChat(Self, LAgentName);
@@ -366,7 +370,17 @@ begin
     else if SameText(LAgentName, 'claude') then LType := atClaude
     else if SameText(LAgentName, 'codex') then LType := atCodex
     else Exit;
+    
     if not SelectDirectory('Select Project Workspace for ' + LAgentName, '', LSelectedDir) then Exit;
+
+    // Deselect current active session to prevent dual-selection UI bug
+    LPrevActive := FSessionMgr.ActiveSession;
+    if Assigned(LPrevActive) then
+    begin
+      FSessionMgr.SelectSession(nil);
+      UpdateSession(LPrevActive);
+    end;
+
     LHandler := GetHandler(LType);
     if Assigned(LHandler) then LHandler.CreateNewSession(LSelectedDir);
   end;
