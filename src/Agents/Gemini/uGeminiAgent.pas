@@ -372,7 +372,33 @@ begin
   try
     P.S['sessionId'] := SessionId; P.S['modelId'] := AModelId;
     ACPClient.Send('session/set_model', P, procedure(AResponse: TJsonObject)
-      begin if Assigned(AResponse) and not AResponse.Contains('error') then DoStatusChange('Model changed to ' + AModelId + ' (Session: ' + SessionId + ')'); end);
+      var 
+        LData: TSessionData;
+        LModels: TJsonObject;
+      begin 
+        if Assigned(AResponse) and not AResponse.Contains('error') then 
+        begin
+          // 내부 캐시(ModelsJson) 업데이트
+          if Sessions.TryGetValue(SessionId, LData) and (LData.ModelsJson <> '') then
+          begin
+            LModels := TJsonObject.Parse(LData.ModelsJson) as TJsonObject;
+            try
+              if Assigned(LModels) then
+              begin
+                LModels.S['currentModelId'] := AModelId;
+                LData.ModelsJson := LModels.ToJSON(False);
+                Sessions.AddOrSetValue(SessionId, LData);
+              end;
+            finally LModels.Free; end;
+          end;
+
+          DoStatusChange('Model changed to ' + AModelId + ' (Session: ' + SessionId + ')'); 
+          
+          // Execute OnPropertyUpdate event instead of calling ExecuteJS directly
+          if Assigned(OnPropertyUpdate) then
+            OnPropertyUpdate(Self, SessionId, 'currentModelId', AModelId);
+        end;
+      end);
   finally P.Free; end;
 end;
 

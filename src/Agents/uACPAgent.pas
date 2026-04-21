@@ -27,6 +27,7 @@ type
     FOnRawData: TAgentRPCEvent;
     FOnPermissionRequest: TAgentPermissionRequestEvent;
     FOnSessionMetadataUpdate: TSessionMetadataUpdateEvent;
+    FOnPropertyUpdate: TSessionPropertyUpdateEvent;
 
     procedure HandleInternalReceive(Sender: TObject; const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject);
     procedure HandleInternalRawData(Sender: TObject; Direction: TRPCDirection; const RawText: string);
@@ -36,9 +37,9 @@ type
     procedure HandleFSWrite(const ID, Method: string; Params: TJsonObject);
     procedure HandleRequestPermission(const ID, Method: string; Params: TJsonObject);
     procedure ResetGrouping(const ASessionId: string);
-    function FindSessionById(const ASessionId: string): TSessionInfo;
     function GetIsConnected: Boolean;
   protected
+    function FindSessionById(const ASessionId: string): TSessionInfo;
     function GetSessionList: TArray<string>; override;
     procedure DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject); virtual;
     procedure HandleSessionUpdate(Params: TJsonObject); virtual;
@@ -73,6 +74,7 @@ type
     property OnRawData: TAgentRPCEvent read FOnRawData write FOnRawData;
     property OnPermissionRequest: TAgentPermissionRequestEvent read FOnPermissionRequest write FOnPermissionRequest;
     property OnSessionMetadataUpdate: TSessionMetadataUpdateEvent read FOnSessionMetadataUpdate write FOnSessionMetadataUpdate;
+    property OnPropertyUpdate: TSessionPropertyUpdateEvent read FOnPropertyUpdate write FOnPropertyUpdate;
   end;
 
 implementation

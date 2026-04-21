@@ -920,6 +920,18 @@ window.ACP = {
         window.ACP.replaceTriggerRange('@', pill); window.ACP.showFiles(false);
     }, setWorkspaceFiles: (files) => { window.ACP.workspaceFiles = files; },
     showTyping: (show) => { window.ACP.showProcessing(show); },
+    changeModel: (sessionId, modelId) => {
+        const idx = window.ACP.allSessions.findIndex(s => s.id === sessionId);
+        if (idx !== -1) {
+            if (!window.ACP.allSessions[idx].models) window.ACP.allSessions[idx].models = {};
+            window.ACP.allSessions[idx].models.currentModelId = modelId;
+            window.ACP.allSessions[idx].currentModelId = modelId;
+            
+            if (window.ACP.activeSessionId === sessionId) {
+                window.ACP.updateActiveSessionUI(window.ACP.allSessions[idx]);
+            }
+        }
+    },
     showModal: (type, title, desc) => {
         const overlay = document.getElementById('modalOverlay');
         const container = document.getElementById('modalContainer');

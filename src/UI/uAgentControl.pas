@@ -33,6 +33,7 @@ type
     procedure DoAgentEndTurn(Sender: TObject; const SessionId, StopReason: string);
     procedure DoAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
     procedure DoAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
+    procedure DoAgentPropertyUpdate(Sender: TObject; const SessionId, PropertyName, NewValue: string);
     procedure DoAgentRawData(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string);
     
     // Service Event Handlers
@@ -155,6 +156,7 @@ begin
       TACPAgent(AAgent).OnRawData := DoAgentRawData;
       TACPAgent(AAgent).OnPermissionRequest := DoAgentPermissionRequest;
       TACPAgent(AAgent).OnSessionMetadataUpdate := DoAgentSessionMetadataUpdate;
+      TACPAgent(AAgent).OnPropertyUpdate := DoAgentPropertyUpdate;
     end;
   end;
 end;
@@ -303,6 +305,15 @@ begin
       if LSession.IsLoading then begin LSession.IsLoading := False; LSession.IsActive := True; UpdateFileList(LSession.Cwd); end;
       UpdateSession(LSession);
     end;
+  end));
+end;
+
+procedure TAgentControl.DoAgentPropertyUpdate(Sender: TObject; const SessionId, PropertyName, NewValue: string);
+begin
+  System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
+  begin
+    if PropertyName = 'currentModelId' then
+      ExecuteJS(Format('window.ACP.changeModel("%s", "%s")', [SessionId, NewValue]));
   end));
 end;
 
@@ -498,7 +509,7 @@ begin
   if Params.TryGetValue('modelId', LModelId) then begin
     LActive := FSessionMgr.ActiveSession;
     if Assigned(LActive) and (LActive.Agent is TGeminiAgent) then begin
-      TGeminiAgent(LActive.Agent).ChangeModel(LActive.SessionId, LModelId); UpdateSessionList;
+      TGeminiAgent(LActive.Agent).ChangeModel(LActive.SessionId, LModelId);
     end;
   end;
 end;
