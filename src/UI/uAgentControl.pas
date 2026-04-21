@@ -66,6 +66,7 @@ type
     procedure RegisterAgent(AType: TAgentType; AAgent: TAgent);
     procedure AddSession(ASession: TSessionInfo);
     procedure DeleteSession(ASession: TSessionInfo);
+    procedure DeleteSessionUI(const ASessionId: string);
     procedure LoadAllSessions;
     procedure UpdateSessionList;
     procedure UpdateSession(ASession: TSessionInfo);
@@ -175,10 +176,15 @@ begin
   UpdateSessionList; // Refresh the entire list to ensure UI is in sync
 end;
 
+procedure TAgentControl.DeleteSessionUI(const ASessionId: string);
+begin
+  FWebBrowser.EvaluateJavaScript('window.ACP.DeleteSession("' + ASessionId + '")');
+end;
+
 procedure TAgentControl.DoAgentRawData(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string);
 var
   LSession: TSessionInfo;
-  LDirStr: string;
+  LDirStr, LMethod: string;
 begin
   // 1. Logging Persistence (only if we have a valid session)
   if (Direction <> rdInternal) and (SessionId <> '') then
@@ -192,6 +198,19 @@ begin
       else LDirStr := 'SYS';
       end;
       TConversationService.AppendLog(LSession, LDirStr, RawText);
+
+      // --- NEW: Conditional Conversation Date Update ---
+      if Assigned(AObj) then
+      begin
+        LMethod := AObj.S['method'];
+        if (Direction = rdOutgoing) and SameText(LMethod, 'session/prompt') then
+          LSession.UpdateConversationDate
+        else if (Direction = rdIncoming) then
+        begin
+           if LMethod.StartsWith('fs/', True) or SameText(LMethod, 'session/request_permission') then
+             LSession.UpdateConversationDate;
+        end;
+      end;
     end;
   end;
 
@@ -201,12 +220,20 @@ begin
 end;
 
 procedure TAgentControl.DoAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+var LSession: TSessionInfo;
 begin
+  LSession := FSessionMgr.GetSessionById(SessionId);
+  if Assigned(LSession) then LSession.UpdateConversationDate;
+
   System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateMessageStreaming(SessionId, FullText, 'ai', ''); end));
 end;
 
 procedure TAgentControl.DoAgentThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+var LSession: TSessionInfo;
 begin
+  LSession := FSessionMgr.GetSessionById(SessionId);
+  if Assigned(LSession) then LSession.UpdateConversationDate;
+
   System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateThoughtStreaming(SessionId, FullText); end));
 end;
 
@@ -567,8 +594,11 @@ begin
   Result.B['active'] := FSessionMgr.ActiveSession = ASessionInfo; Result.B['pinned'] := ASessionInfo.IsPinned; Result.B['isActive'] := ASessionInfo.IsActive;
   Result.B['isWaitForResponse'] := ASessionInfo.IsWaitForResponse; Result.B['online'] := ASessionInfo.IsActive; 
   Result.B['loading'] := ASessionInfo.IsLoading or (Assigned(ASessionInfo.Agent) and (ASessionInfo.Agent.State in [asConnecting, asInitializing]));
-  Result.D['createdAt'] := ASessionInfo.CreatedAt; Result.D['lastConversationDate'] := ASessionInfo.LastConversationDate; Result.S['icon'] := 'forum';
-  Result.S['lastMsg'] := 'Ready to chat...'; if ASessionInfo.IsLoading then Result.S['lastMsg'] := 'Starting process...';
+  Result.D['createdAt'] := ASessionInfo.CreatedAt;
+  if ASessionInfo.LastConversationDate > 0 then
+    Result.D['lastConversationDate'] := ASessionInfo.LastConversationDate;
+
+  Result.S['icon'] := 'forum';  Result.S['lastMsg'] := 'Ready to chat...'; if ASessionInfo.IsLoading then Result.S['lastMsg'] := 'Starting process...';
   if Assigned(ASessionInfo.Agent) and (ASessionInfo.Agent is TACPAgent) then begin
     if TACPAgent(ASessionInfo.Agent).Sessions.TryGetValue(ASessionInfo.SessionId, LData) then begin
       if LData.ModelsJson <> '' then begin

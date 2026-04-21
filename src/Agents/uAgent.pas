@@ -38,6 +38,7 @@ type
     procedure SaveMetadata;
     procedure LoadMetadata;
     procedure MarkActivity;
+    procedure UpdateConversationDate;
   end;
 
   TAgent = class(TComponent)
@@ -57,16 +58,17 @@ type
     function GetSessionList: TArray<string>; virtual; abstract;
     procedure DoStatusChange(const Msg: string);
     procedure DoStateChange(const OldState, NewState: TAgentState);
-    procedure DoResponse(const SessionId, Text: string);
-    procedure DoMessageChunk(const SessionId, Chunk, FullText: string);
-    procedure DoThoughtChunk(const SessionId, Chunk, FullText: string);
-    procedure DoFSWrite(const SessionId, Path, OldContent, NewContent: string);
   public
     constructor Create(AOwner: TComponent); override;
     procedure Connect; virtual; abstract;
     procedure Initialize; virtual; abstract;
     procedure Stop; virtual; abstract;
     procedure SendPrompt(const SessionId, AText: string); virtual; abstract;
+    
+    procedure DoResponse(const SessionId, Text: string);
+    procedure DoMessageChunk(const SessionId, Chunk, FullText: string);
+    procedure DoThoughtChunk(const SessionId, Chunk, FullText: string);
+    procedure DoFSWrite(const SessionId, Path, OldContent, NewContent: string);
     
     property AgentName: string read FAgentName write FAgentName;
     property AgentType: TAgentType read FAgentType write FAgentType;
@@ -100,13 +102,19 @@ begin
   IsActive := False;
   IsPinned := False;
   CreatedAt := Now;
-  LastConversationDate := Now;
+  LastConversationDate := 0; // Initialize to 0 (empty)
   LastHistoryTick := 0;
 end;
 
 procedure TSessionInfo.MarkActivity;
 begin
   LastHistoryTick := TThread.GetTickCount;
+end;
+
+procedure TSessionInfo.UpdateConversationDate;
+begin
+  LastConversationDate := Now;
+  SaveMetadata;
 end;
 
 procedure TSessionInfo.SaveMetadata;

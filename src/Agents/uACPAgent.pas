@@ -48,7 +48,6 @@ type
     procedure DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject); virtual;
     procedure HandleSessionUpdate(Params: TJsonObject); virtual;
     
-    property ACPClient: TACPClient read FACPClient;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -65,6 +64,7 @@ type
     procedure LoadSession(const SessionId: string; ACallback: TProc<string>); virtual; abstract;
     procedure CreateNewSession(const Cwd: string; const Mode: string; ACallback: TProc<string>); virtual; abstract;
     
+    property ACPClient: TACPClient read FACPClient;
     property SessionManager: TObject read FSessionMgr write FSessionMgr;
     property OnRawData: TAgentRPCEvent read FOnRawData write FOnRawData;
     property OnPermissionRequest: TAgentPermissionRequestEvent read FOnPermissionRequest write FOnPermissionRequest;

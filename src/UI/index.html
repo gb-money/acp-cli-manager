@@ -777,6 +777,7 @@
                                 ${s.pinned ? '<span class="material-symbols-outlined text-[12px] text-primary shrink-0">push_pin</span>' : ''}
                             </div>
                             <div class="text-xs workspace-label ${s.active ? 'text-on-surface-variant' : 'opacity-60'} truncate">${s.workspace || ''}</div>
+                            ${(s.lastConversationDate && s.lastConversationDate > 0) ? `<div class="text-[9px] text-on-surface-variant/40 mt-0.5">Last active: ${new Date(s.lastConversationDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>` : ''}
                         </div>
                         
                         <div class="relative z-20 shrink-0">
@@ -822,7 +823,14 @@
 
             DeleteSession: (sessionId) => {
                 window.ACP.allSessions = window.ACP.allSessions.filter(s => s.id !== sessionId);
-                window.ACP.updateSessionList(window.ACP.allSessions);
+                const item = document.getElementById(`session-item-${sessionId}`);
+                if (item) item.remove();
+                
+                // If the deleted session was active, reset UI
+                if (window.ACP.activeSessionId === sessionId) {
+                    window.ACP.activeSessionId = '';
+                    window.ACP.updateActiveSessionUI(null);
+                }
             },
 
             updateSession: (data) => {
@@ -862,147 +870,6 @@
                 if (s.active) {
                     window.ACP.updateActiveSessionUI(s);
                 }
-            },
-
-            streamThought: (data) => {
-                if (window.ACP.lastBlockType === 'message') {
-                    window.ACP.breakGrouping();
-                }
-                if (window.ACP.lastBlockType !== 'thought' || !window.ACP.lastAiThoughtId) {
-                    window.ACP.lastAiThoughtId = window.ACP.createThoughtContainer(data.timestamp);
-                    window.ACP.lastBlockType = 'thought';
-                    window.ACP.accumulatedThought = '';
-                }
-                window.ACP.accumulatedThought = data.content;
-                window.ACP.parseAndRenderThought(window.ACP.accumulatedThought, window.ACP.lastAiThoughtId.contentId);
-                const div = document.getElementById(window.ACP.lastAiThoughtId.contentId);
-                if (div) div.classList.remove('hidden');
-                const outer = document.getElementById('mainChatCanvas');
-                outer.scrollTop = outer.scrollHeight;
-            },
-
-            renderContent: (content) => {
-                let rendered = content;
-                rendered = rendered.replace(/(@(?:"[^"]+"|[^\s\xa0\n]+))/g, (match) => {
-                    let rawPath = match.substring(1).replace(/(^"|"$)/g, '');
-                    let displayPath = rawPath;
-                    let fullPath = rawPath;
-                    if (rawPath.startsWith('file:///')) {
-                        fullPath = decodeURIComponent(rawPath.substring(8));
-                        let lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
-                        displayPath = fullPath.substring(lastSlash + 1);
-                    }
-                    let safeFullPath = encodeURIComponent(fullPath);
-                    return `<span class="text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors" contenteditable="false" onclick="if(event.detail===1){window.sendUi('open-file-viewer?path=' + '${safeFullPath}')}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}">@${displayPath}</span>`;
-                });
-                return window.marked ? marked.parse(rendered) : rendered;
-            },
-
-            streamMessage: (data) => {
-                const { content, role, stopReason, timestamp } = data;
-                const targetRole = role === 'user' ? 'me' : 'ai';
-
-                if (window.ACP.lastBlockType === 'thought') {
-                    window.ACP.finalizeThought();
-                    window.ACP.lastAiThoughtId = null;
-                }
-
-                if (!window.ACP.lastAiMsgId || window.ACP.lastBlockType !== 'message' || window.ACP.lastMessageRole !== targetRole) {
-                    window.ACP.lastAiMsgId = window.ACP.addMessageToUI(targetRole, '', timestamp);
-                    window.ACP.lastBlockType = 'message';
-                    window.ACP.lastMessageRole = targetRole;
-                }
-
-                const targetDiv = document.getElementById(window.ACP.lastAiMsgId);
-                if (targetDiv) {
-                    targetDiv.innerHTML = window.ACP.renderContent(content);
-                }
-                if (stopReason) window.ACP.showProcessing(false);
-                const outer = document.getElementById('mainChatCanvas');
-                outer.scrollTop = outer.scrollHeight;
-            },
-
-            renderPermissionRequest: (data) => {
-                try {
-                    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-                    const { id, toolCall, options } = parsed;
-                    const actionContainerId = `${window.ACP.lastAiMsgId}-actions`;
-                    const container = document.getElementById(actionContainerId);
-                    if (!container) return;
-                    container.classList.remove('hidden'); container.classList.add('flex');
-                    const displayOptions = options || [{ optionId: 'allow_once', name: 'Allow Once', kind: 'allow_once' }, { optionId: 'cancel', name: 'Reject', kind: 'reject_once' }];
-                    container.innerHTML = displayOptions.map(opt => {
-                        let icon = 'check', color = 'text-primary';
-                        if (opt.kind === 'allow_always' || opt.optionId.includes('always')) icon = 'done_all';
-                        if (opt.kind === 'reject_once' || opt.optionId === 'cancel') { icon = 'close'; color = 'text-error'; }
-                        return `
-                            <button onclick="window.sendAcp('permission-response?id=${id}&optionId=${opt.optionId}'); this.parentElement.classList.add('opacity-50', 'pointer-events-none')"
-                                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container border border-outline-variant/20 text-xs font-medium text-on-surface transition-colors shadow-sm active:scale-95">
-                                <span class="material-symbols-outlined text-[14px] ${color}">${icon}</span>
-                                ${opt.name}
-                            </button>`;
-                    }).join('');
-                    if (window.ACP.isProcessingActive) window.ACP.showProcessing(true);
-                    const outer = document.getElementById('mainChatCanvas');
-                    outer.scrollTop = outer.scrollHeight;
-                } catch (e) { console.error('Permission render error:', e); }
-            },
-
-            updateFileHistoryBase64: (base64) => {
-                try {
-                    const binary = window.atob(base64);
-                    const bytes = new Uint8Array(binary.length);
-                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                    const json = new TextDecoder().decode(bytes);
-                    const history = JSON.parse(json);
-                    const container = document.getElementById('fileHistoryContainer');
-                    if (!container) return;
-                    if (!history || history.length === 0) {
-                        container.innerHTML = '<div class="p-8 text-center text-xs text-on-surface-variant italic opacity-30">No history available</div>';
-                        return;
-                    }
-                    const grouped = {};
-                    history.forEach(item => {
-                        const file = item.path.split(/[\/\\]/).pop();
-                        if (!grouped[file]) grouped[file] = { path: item.path, entries: [] };
-                        grouped[file].entries.push(item);
-                    });
-                    container.innerHTML = Object.keys(grouped).map(file => {
-                        const data = grouped[file];
-                        const lastTime = data.entries[0].timestamp.split(' ')[1];
-                        const entriesHtml = data.entries.map((e, idx) => {
-                            const time = e.timestamp.split(' ')[1];
-                            const isFirst = idx === 0;
-                            const colorClass = isFirst ? 'bg-primary' : 'bg-on-surface-variant';
-                            const safePath = encodeURIComponent(e.path);
-                            return `
-                                <div class="relative cursor-pointer hover:bg-white/5 p-1 rounded" onclick="window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=${safePath}&hashId=${e.id}')">
-                                    <span class="absolute -left-[21px] top-2 w-2 h-2 rounded-full ${colorClass} border-2 border-surface-container-low"></span>
-                                    <p class="text-xs text-on-surface hover:text-primary transition-colors">Diff: ${e.id || 'Snap'}</p>
-                                    <p class="text-[10px] text-on-surface-variant font-mono mt-0.5">${time}</p>
-                                </div>`;
-                        }).join('');
-                        const safeDataPath = encodeURIComponent(data.path);
-                        return `
-                            <div class="bg-surface-container rounded-xl border border-outline-variant/10 overflow-hidden mb-2 select-none">
-                                <div onclick="this.nextElementSibling.classList.toggle('hidden'); const icon = this.querySelector('.chevron'); icon.innerText = icon.innerText === 'expand_more' ? 'chevron_right' : 'expand_more';" 
-                                     ondblclick="window.sendUi('open-file-viewer?path=${safeDataPath}')"
-                                     class="p-3 flex items-start gap-3 cursor-pointer hover:bg-surface-container-high transition-colors">
-                                    <span class="material-symbols-outlined text-primary mt-0.5 text-[18px]">description</span>
-                                    <div class="flex-1 min-w-0">
-                                        <p class="text-sm font-medium text-on-surface truncate" title="${data.path}">${file}</p>
-                                        <p class="text-xs text-on-surface-variant mt-0.5">Last Modified ${lastTime}</p>
-                                    </div>
-                                    <span class="material-symbols-outlined text-on-surface-variant text-[16px] chevron">chevron_right</span>
-                                </div>
-                                <div class="hidden px-4 pb-3 pt-1 border-t border-outline-variant/5 bg-surface-container-low/50">
-                                    <div class="relative pl-4 mt-2 space-y-3 before:absolute before:inset-y-0 before:left-[7px] before:w-px before:bg-outline-variant/20">
-                                        ${entriesHtml}
-                                    </div>
-                                </div>
-                            </div>`;
-                    }).join('');
-                } catch (e) { console.error('File History render error:', e); }
             },
 
             loadHistoryBase64: (base64) => {

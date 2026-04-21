@@ -23,6 +23,7 @@ type
     constructor Create(ASessionMgr: TSessionManager; AAgent: TAgent; AAgentControl: IAgentControl); virtual;
     procedure CreateNewSession(const AWorkspaceDir: string); virtual; abstract;
     procedure ResumeSession(ASession: TSessionInfo); virtual; abstract;
+    procedure Prompt(ASession: TSessionInfo; const AText: string); virtual; abstract;
   end;
 
 implementation

@@ -10,12 +10,14 @@ type
   public
     procedure CreateNewSession(const AWorkspaceDir: string); override;
     procedure ResumeSession(ASession: TSessionInfo); override;
+    procedure Prompt(ASession: TSessionInfo; const AText: string); override;
   end;
 
 implementation
 
 uses
-  uACPAgent, uConversationService, FMX.Forms, JsonDataObjects, uAgentControl;
+  uACPAgent, uConversationService, FMX.Forms, JsonDataObjects, uAgentControl,
+  System.RegularExpressions, System.IOUtils;
 
 procedure TGeminiAgentHandler.ResumeSession(ASession: TSessionInfo);
 var
@@ -160,15 +162,23 @@ begin
           begin
             LSid := SessionId;
             TThread.Queue(nil, TThreadProcedure(procedure 
+            var
+              LOldId: string;
             begin
               if LSid <> '' then begin 
-                FSessionMgr.FinalizeSessionId(LPendingSession, LSid); 
+                // 1. Capture old ID and Update state
+                LOldId := LPendingSession.SessionId;
                 LPendingSession.IsLoading := False; 
                 LPendingSession.IsActive := True; 
+                
+                // 2. Finalize to real Session ID (Back-end)
+                FSessionMgr.FinalizeSessionId(LPendingSession, LSid); 
                 LGemini.SetSessionLogPath(LSid, LPendingSession.LogPath); 
                 
+                // 3. Sync UI: Remove old ID entry and Add new finalized one
                 if Assigned(FAgentControl) then begin
-                  (FAgentControl as TAgentControl).UpdateSession(LPendingSession); // Use UpdateSession instead of UpdateSessionList
+                  (FAgentControl as TAgentControl).DeleteSessionUI(LOldId);
+                  (FAgentControl as TAgentControl).AddSession(LPendingSession); 
                   (FAgentControl as TAgentControl).UpdateFileList(AWorkspaceDir); 
                 end;
               end
@@ -197,6 +207,141 @@ begin
       end;
     end;
   end).Start;
+end;
+
+procedure TGeminiAgentHandler.Prompt(ASession: TSessionInfo; const AText: string);
+var
+  LGemini: TGeminiAgent;
+  Data: TSessionData;
+  LParams, ItemObj: TJsonObject;
+  PromptArr: TJsonArray;
+  LMatchValue, LPart: string;
+  LFilePath, LFileContent: string;
+  LLastPos: Integer;
+  LStream: TFileStream;
+  LBytes: TBytes;
+  LMatches: TMatchCollection;
+  LMatch: TMatch;
+  LWorkspaceName: string;
+  LSid: string;
+begin
+  if not (FAgent is TGeminiAgent) or not Assigned(ASession) then Exit;
+  LGemini := TGeminiAgent(FAgent);
+  LSid := ASession.SessionId;
+
+  if not LGemini.Sessions.TryGetValue(LSid, Data) then
+    Data := Default(TSessionData);
+
+  Data.FullThought := '';
+  Data.FullMessage := '';
+  Data.CurrentBlockText := '';
+  Data.LastChunkType := '';
+  Data.IsProcessing := True; 
+  LGemini.Sessions.AddOrSetValue(LSid, Data);
+
+  LParams := TJsonObject.Create;
+  try
+    LParams.S['sessionId'] := LSid;
+    PromptArr := LParams.A['prompt'];
+
+    LWorkspaceName := TPath.GetFileName(ExcludeTrailingPathDelimiter(LGemini.Workspace));
+
+    LLastPos := 1;
+    LMatches := TRegEx.Matches(AText, '(@"(?:[^"]+)"|@[^\s\xa0\n]+)');
+    
+    for LMatch in LMatches do
+    begin
+      if LMatch.Index > LLastPos then
+      begin
+        LPart := Copy(AText, LLastPos, LMatch.Index - LLastPos);
+        if LPart <> '' then
+        begin
+          ItemObj := PromptArr.AddObject;
+          ItemObj.S['type'] := 'text';
+          ItemObj.S['text'] := LPart;
+        end;
+      end;
+
+      LMatchValue := LMatch.Value;
+      LFilePath := Trim(LMatchValue.Substring(1)); 
+      
+      if LFilePath.StartsWith('"') and LFilePath.EndsWith('"') then
+        LFilePath := Copy(LFilePath, 2, Length(LFilePath) - 2);
+
+      LFilePath := LFilePath.Replace('/', PathDelim);
+
+      if LFilePath.StartsWith(LWorkspaceName + PathDelim, True) then
+        LFilePath := LFilePath.Substring(Length(LWorkspaceName) + 1);
+
+      if not TPath.IsPathRooted(LFilePath) then
+        LFilePath := TPath.GetFullPath(TPath.Combine(LGemini.Workspace, LFilePath));
+
+      LFileContent := '';
+      if TFile.Exists(LFilePath) then
+      begin
+        try
+          LStream := TFileStream.Create(LFilePath, fmOpenRead or fmShareDenyNone);
+          try
+            if LStream.Size > 0 then
+            begin
+              SetLength(LBytes, LStream.Size);
+              LStream.ReadBuffer(LBytes[0], LStream.Size);
+              LFileContent := TEncoding.UTF8.GetString(LBytes);
+            end;
+          finally LStream.Free; end;
+        except
+        end;
+      end;
+
+      ItemObj := PromptArr.AddObject;
+      ItemObj.S['type'] := 'resource';
+      with ItemObj.O['resource'] do
+      begin
+        S['text'] := LFileContent;
+        S['uri'] := 'file:///' + LFilePath.Replace('\', '/');
+      end;
+
+      LLastPos := LMatch.Index + LMatch.Length;
+    end;
+
+    if LLastPos <= Length(AText) then
+    begin
+      LPart := Copy(AText, LLastPos, MaxInt);
+      if LPart <> '' then
+      begin
+        ItemObj := PromptArr.AddObject;
+        ItemObj.S['type'] := 'text';
+        ItemObj.S['text'] := LPart;
+      end;
+    end;
+    
+    if PromptArr.Count = 0 then
+    begin
+      ItemObj := PromptArr.AddObject;
+      ItemObj.S['type'] := 'text';
+      ItemObj.S['text'] := AText;
+    end;
+
+    LGemini.ACPClient.Send('session/prompt', LParams, 
+      procedure(AResponse: TJsonObject)
+      var
+        LD_Callback: TSessionData;
+        LStopReason: string;
+      begin
+        if LGemini.Sessions.TryGetValue(LSid, LD_Callback) then
+        begin
+          LD_Callback.IsProcessing := False; 
+          LGemini.Sessions.AddOrSetValue(LSid, LD_Callback);
+        end;
+        if Assigned(AResponse) and not AResponse.Contains('error') then
+        begin
+          LStopReason := AResponse.O['result'].S['stopReason'];
+          if LStopReason = '' then LStopReason := 'end_turn';
+          if LGemini.Sessions.TryGetValue(LSid, LD_Callback) then
+            LGemini.DoResponse(LSid, LD_Callback.FullMessage + '||STOP:' + LStopReason);
+        end;
+      end);
+  finally LParams.Free; end;
 end;
 
 end.

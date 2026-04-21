@@ -70,21 +70,21 @@ begin
       end
       else
       begin
-        TThread.Queue(nil, procedure
+        TThread.Queue(nil, TThreadProcedure(procedure
         begin
           DoStatusChange('ERR: Failed to start gemini process. (Check if gemini-cli is installed)');
           State := asError;
-        end);
+        end));
       end;
     except
       on E: Exception do
       begin
         var LErrorMsg := E.Message;
-        TThread.Queue(nil, procedure
+        TThread.Queue(nil, TThreadProcedure(procedure
         begin
           DoStatusChange('ERR: ' + LErrorMsg);
           State := asError;
-        end);
+        end));
       end;
     end;
   end).Start;
