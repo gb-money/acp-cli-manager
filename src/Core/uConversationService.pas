@@ -213,16 +213,13 @@ begin
   
   LIsRestoring := ASession.IsLoading or ((ASession.Agent is TACPAgent) and TACPAgent(ASession.Agent).IsRestoringSession(ASession.SessionId));
 
-  // Only update last conversation date if NOT restoring
-  if not LIsRestoring then
-  begin
-    ASession.LastConversationDate := Now;
-    ASession.SaveMetadata;
-  end;
+  // If we are restoring, DO NOT write to log file or update metadata
+  if LIsRestoring then Exit;
+
+  ASession.LastConversationDate := Now;
+  ASession.SaveMetadata;
 
   LTargetFile := ASession.LogPath;
-  if ASession.IsLoading and TFile.Exists(ASession.LogPath + '.new') then
-    LTargetFile := ASession.LogPath + '.new';
 
   LLogObj := TJsonObject.Create;
   try
@@ -279,24 +276,13 @@ begin
 end;
 
 class procedure TConversationService.StartRestoration(ASession: TSessionInfo);
-var LNewPath: string;
 begin
-  if (ASession = nil) or (ASession.LogPath = '') then Exit;
-  LNewPath := ASession.LogPath + '.new';
-  if TFile.Exists(LNewPath) then TFile.Delete(LNewPath);
-  TFile.WriteAllText(LNewPath, '', TEncoding.UTF8);
+  // Legacy: No longer used.
 end;
 
 class procedure TConversationService.FinalizeRestoration(ASession: TSessionInfo);
-var LNewPath: string;
 begin
-  if (ASession = nil) or (ASession.LogPath = '') then Exit;
-  LNewPath := ASession.LogPath + '.new';
-  if TFile.Exists(LNewPath) then
-  begin
-    if TFile.Exists(ASession.LogPath) then TFile.Delete(ASession.LogPath);
-    TFile.Move(LNewPath, ASession.LogPath);
-  end;
+  // Legacy: No longer used.
 end;
 
 end.
