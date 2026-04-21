@@ -202,7 +202,7 @@ begin
   end;
 end;
 
-class procedure TConversationService.AppendLog(ASession: TSessionInfo; const ADirection, ARawText: string);
+class procedure TConversationService.AppendLog(ASession: TSessionInfo; const ADirection, ARawText: string; AUpdateDate: Boolean);
 var
   LLogObj: TJsonObject;
   LTargetFile, LJSON: string;
@@ -216,8 +216,11 @@ begin
   // If we are restoring, DO NOT write to log file or update metadata
   if LIsRestoring then Exit;
 
-  ASession.LastConversationDate := Now;
-  ASession.SaveMetadata;
+  if AUpdateDate then
+  begin
+    ASession.LastConversationDate := Now;
+    ASession.SaveMetadata;
+  end;
 
   LTargetFile := ASession.LogPath;
 

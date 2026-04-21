@@ -202,7 +202,7 @@ begin
         rdOutgoing: LDirStr := 'OUT';
       else LDirStr := 'SYS';
       end;
-      TConversationService.AppendLog(LSession, LDirStr, RawText);
+      TConversationService.AppendLog(LSession, LDirStr, RawText, False);
 
       // --- Conditional Conversation Date Update ---
       if Assigned(AObj) then
