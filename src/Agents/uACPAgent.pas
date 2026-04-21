@@ -4,39 +4,34 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.IOUtils,
-  JsonDataObjects, uAgent, uACPClient, uACPProtocol;
+  JsonDataObjects, uAgent, uACPClient, uAgentTypes, uSessionManager;
 
 type
   TSessionData = record
     FullThought: string;
     FullMessage: string;
-    ModesJson: string;
-    ModelsJson: string;
     CommandsJson: string;
-    LastChunkType: string;    // 'thought', 'message', or 'user'
-    CurrentBlockText: string; // Text for the current block only
-    LogPath: string;          // Persistent history path
-    IsProcessing: Boolean;    // True if generating response
-    IsRestoring: Boolean;     // True if replaying history (session/load)
+    ModelsJson: string;
+    ModesJson: string;
+    CurrentBlockText: string;
+    LastChunkType: string;
+    IsRestoring: Boolean;
+    IsProcessing: Boolean;
   end;
-
-  TAgentPermissionRequestEvent = procedure(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray) of object;
-  TSessionMetadataUpdateEvent = procedure(Sender: TObject; const SessionId: string) of object;
-  TAgentRPCEvent = procedure(Sender: TObject; ADirection: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const ARawText: string) of object;
 
   TACPAgent = class(TAgent)
   private
     FACPClient: TACPClient;
-    FSessionMgr: TObject; // Injected TSessionManager
+    FSessionMgr: TSessionManager; // Injected TSessionManager
     FSessions: TDictionary<string, TSessionData>;
     FOnRawData: TAgentRPCEvent;
     FOnPermissionRequest: TAgentPermissionRequestEvent;
     FOnSessionMetadataUpdate: TSessionMetadataUpdateEvent;
-    
+
     procedure HandleInternalReceive(Sender: TObject; const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject);
     procedure HandleInternalRawData(Sender: TObject; Direction: TRPCDirection; const RawText: string);
     procedure HandleInternalTerminated(Sender: TObject; ExitCode: Cardinal);
-    
+
     procedure HandleFSRead(const ID, Method: string; Params: TJsonObject);
     procedure HandleFSWrite(const ID, Method: string; Params: TJsonObject);
     procedure HandleRequestPermission(const ID, Method: string; Params: TJsonObject);
@@ -53,7 +48,7 @@ type
     destructor Destroy; override;
     procedure Connect; override;
     procedure Stop; override;
-    
+
     function Start: Boolean; virtual; // Make virtual for subclass overrides
     procedure ReplyPermission(const ID, OptionId: string);
     procedure SetSessionLogPath(const SessionId, APath: string);
@@ -65,18 +60,19 @@ type
     procedure CreateNewSession(const Cwd: string; const Mode: string; ACallback: TProc<string>); virtual; abstract;
     
     property ACPClient: TACPClient read FACPClient;
-    property SessionManager: TObject read FSessionMgr write FSessionMgr;
+    property SessionManager: TSessionManager read FSessionMgr write FSessionMgr;
+    property Sessions: TDictionary<string, TSessionData> read FSessions;
+    property IsConnected: Boolean read GetIsConnected;
+
     property OnRawData: TAgentRPCEvent read FOnRawData write FOnRawData;
     property OnPermissionRequest: TAgentPermissionRequestEvent read FOnPermissionRequest write FOnPermissionRequest;
     property OnSessionMetadataUpdate: TSessionMetadataUpdateEvent read FOnSessionMetadataUpdate write FOnSessionMetadataUpdate;
-    property Sessions: TDictionary<string, TSessionData> read FSessions;
-    property IsConnected: Boolean read GetIsConnected;
   end;
 
 implementation
 
 uses
-  uMain, uSessionManager, uConversationService;
+  uACPProtocol;
 
 { TACPAgent }
 
@@ -98,44 +94,34 @@ end;
 
 procedure TACPAgent.Connect;
 begin
-  FSessions.Clear;
+  Start;
 end;
 
 function TACPAgent.Start: Boolean;
 begin
   Result := FACPClient.Start;
-end;
-
-function TACPAgent.GetIsConnected: Boolean;
-begin
-  Result := Assigned(FACPClient) and FACPClient.IsRunning;
+  if Result then
+    State := asConnecting;
 end;
 
 procedure TACPAgent.Stop;
 begin
-  if Assigned(FACPClient) then
-    FACPClient.Stop;
+  FACPClient.Stop;
+  State := asDisconnected;
 end;
 
 procedure TACPAgent.SetSessionLogPath(const SessionId, APath: string);
-var
-  Data: TSessionData;
 begin
-  if not FSessions.TryGetValue(SessionId, Data) then
-    Data := Default(TSessionData);
-  Data.LogPath := APath;
-  FSessions.AddOrSetValue(SessionId, Data);
 end;
 
 procedure TACPAgent.StartRestoration(const SessionId: string);
 var
   Data: TSessionData;
 begin
-  if FSessions.TryGetValue(SessionId, Data) then
-  begin
-    Data.IsRestoring := True;
-    FSessions.AddOrSetValue(SessionId, Data);
-  end;
+  if not FSessions.TryGetValue(SessionId, Data) then
+    Data := Default(TSessionData);
+  Data.IsRestoring := True;
+  FSessions.AddOrSetValue(SessionId, Data);
 end;
 
 procedure TACPAgent.FinalizeRestoration(const SessionId: string);
@@ -147,6 +133,11 @@ begin
     Data.IsRestoring := False;
     FSessions.AddOrSetValue(SessionId, Data);
   end;
+end;
+
+function TACPAgent.GetIsConnected: Boolean;
+begin
+  Result := FACPClient.IsRunning;
 end;
 
 function TACPAgent.IsRestoringSession(const SessionId: string): Boolean;
@@ -248,66 +239,44 @@ begin
 end;
 
 procedure TACPAgent.HandleInternalRawData(Sender: TObject; Direction: TRPCDirection; const RawText: string);
-var
-  LBase: TJsonBaseObject;
-  LObj: TJsonObject;
-  LSessionId, LDirStr: string;
-  LSession: TSessionInfo;
 begin
-  LSessionId := '';
-  LObj := nil;
-  LSession := nil;
-  LBase := nil;
-  
-  // 1. Only attempt to parse if it's actual RPC traffic (not system logs)
-  if Direction <> rdInternal then
+  if Assigned(FOnRawData) then
   begin
-    try
-      LBase := TJsonBaseObject.Parse(RawText);
-      if Assigned(LBase) and (LBase is TJsonObject) then
-      begin
-        LObj := TJsonObject(LBase);
-        LSessionId := LObj.S['sessionId'];
-        if LSessionId = '' then LSessionId := LObj.O['params'].S['sessionId'];
-        
-        if LSessionId <> '' then LSession := FindSessionById(LSessionId);
-      end;
-    except
-      // Ignore parsing errors for raw data logging, LObj remains nil
-    end;
-  end;
-
-  try
-    // 2. Persistence (only if we have a valid session and it's real traffic)
-    if (Direction <> rdInternal) and Assigned(LSession) then
+    var LObj: TJsonObject := nil;
+    if RawText.Trim.StartsWith('{') then
     begin
-      case Direction of
-        rdIncoming: LDirStr := 'IN';
-        rdOutgoing: LDirStr := 'OUT';
-      else LDirStr := 'SYS';
+      try
+        LObj := TJsonObject.Parse(RawText) as TJsonObject;
+      except
+        LObj := nil;
       end;
-      TConversationService.AppendLog(LSession, LDirStr, RawText);
     end;
-
-    // 3. Emit event for Debug UI (ALWAYS, even if parsing failed)
-    if Assigned(FOnRawData) then
-      FOnRawData(Self, Direction, LSessionId, LObj, RawText);
-  finally
-    if Assigned(LBase) then LBase.Free;
+    
+    try
+      var LSid := '';
+      if Assigned(LObj) then
+      begin
+         LSid := LObj.S['sessionId'];
+         if LSid = '' then LSid := LObj.O['params'].S['sessionId'];
+         if LSid = '' then LSid := LObj.O['result'].S['sessionId'];
+      end;
+      
+      FOnRawData(Self, Direction, LSid, LObj, RawText);
+    finally
+      if Assigned(LObj) then LObj.Free;
+    end;
   end;
 end;
 
 function TACPAgent.FindSessionById(const ASessionId: string): TSessionInfo;
 var
-  LSession: TSessionInfo;
   LSessions: TList<TSessionInfo>;
-  LManager: TSessionManager;
+  LSession: TSessionInfo;
 begin
   Result := nil;
   if not Assigned(FSessionMgr) then Exit;
-  
-  LManager := TSessionManager(FSessionMgr);
-  LSessions := LManager.GetSessionListSnapshot;
+
+  LSessions := FSessionMgr.GetSessionListSnapshot;
   try
     for LSession in LSessions do
       if LSession.SessionId = ASessionId then begin
@@ -325,6 +294,7 @@ var
 begin
   if (ASessionId <> '') and FSessions.TryGetValue(ASessionId, Data) then
   begin
+    if Data.LastChunkType <> '' then DoStreamingEnd(ASessionId, Data.LastChunkType);
     Data.CurrentBlockText := '';
     Data.LastChunkType := '';
     FSessions.AddOrSetValue(ASessionId, Data);
@@ -432,12 +402,14 @@ begin
 
   if UpdateType = 'available_commands_update' then
   begin
+    if Data.LastChunkType <> '' then DoStreamingEnd(SessionId, Data.LastChunkType);
     Data.CurrentBlockText := '';
     Data.LastChunkType := '';
     Changed := True;
   end
   else if (UpdateType = 'tool_call_update') or (UpdateType = 'tool_call') then
   begin
+    if Data.LastChunkType <> '' then DoStreamingEnd(SessionId, Data.LastChunkType);
     Data.CurrentBlockText := '';
     Data.LastChunkType := '';
     if (UpdateType = 'tool_call_update') and UpdateObj.Contains('content') and (UpdateObj.Items[UpdateObj.IndexOf('content')].Typ = jdtArray) then
@@ -479,6 +451,7 @@ begin
     begin
       if Data.LastChunkType <> CleanType then
       begin
+        if Data.LastChunkType <> '' then DoStreamingEnd(SessionId, Data.LastChunkType);
         Data.CurrentBlockText := '';
         Data.LastChunkType := CleanType;
       end;

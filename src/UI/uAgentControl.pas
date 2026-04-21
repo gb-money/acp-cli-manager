@@ -29,6 +29,7 @@ type
     // Agent Event Handlers (UI Routing & Logging)
     procedure DoAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
     procedure DoAgentThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+    procedure DoAgentStreamingEnd(Sender: TObject; const SessionId, AType: string);
     procedure DoAgentResponse(Sender: TObject; const SessionId, Text: string);
     procedure DoAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
     procedure DoAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
@@ -72,6 +73,9 @@ type
     procedure UpdateSession(ASession: TSessionInfo);
     procedure UpdateMessageStreaming(const ASessionId, AContent: string; const ARole: string = 'ai'; const AStopReason: string = '');
     procedure UpdateThoughtStreaming(const ASessionId, AContent: string);
+    procedure StartStreaming(const ASessionId, AType: string);
+    procedure EndStreaming(const ASessionId, AType: string);
+    procedure ReceiveMessage(const ASessionId, AContent: string);
     procedure BreakGrouping;
     procedure UpdateFileList(const ARootPath: string = '');
     procedure ShowPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
@@ -144,6 +148,7 @@ begin
     FAgentList.AddOrSetValue(AType, AAgent);
     AAgent.OnMessageChunk := DoAgentMessageChunk;
     AAgent.OnThoughtChunk := DoAgentThoughtChunk;
+    AAgent.OnStreamingEnd := DoAgentStreamingEnd;
     AAgent.OnResponse := DoAgentResponse;
     if AAgent is TACPAgent then
     begin
@@ -223,16 +228,33 @@ procedure TAgentControl.DoAgentMessageChunk(Sender: TObject; const SessionId, Ch
 var LSession: TSessionInfo;
 begin
   LSession := FSessionMgr.GetSessionById(SessionId);
-  if Assigned(LSession) then LSession.UpdateConversationDate;
-  System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateMessageStreaming(SessionId, FullText, 'ai', ''); end));
+  if Assigned(LSession) then
+  begin
+    LSession.UpdateConversationDate;
+    if not LSession.IsMessageStreaming then
+      StartStreaming(SessionId, 'message');
+      
+    ReceiveMessage(SessionId, FullText);
+  end;
 end;
 
 procedure TAgentControl.DoAgentThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
 var LSession: TSessionInfo;
 begin
   LSession := FSessionMgr.GetSessionById(SessionId);
-  if Assigned(LSession) then LSession.UpdateConversationDate;
-  System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateThoughtStreaming(SessionId, FullText); end));
+  if Assigned(LSession) then
+  begin
+    LSession.UpdateConversationDate;
+    if not LSession.IsThoughtStreaming then
+      StartStreaming(SessionId, 'thought');
+      
+    ReceiveMessage(SessionId, FullText);
+  end;
+end;
+
+procedure TAgentControl.DoAgentStreamingEnd(Sender: TObject; const SessionId, AType: string);
+begin
+  EndStreaming(SessionId, AType);
 end;
 
 procedure TAgentControl.DoAgentResponse(Sender: TObject; const SessionId, Text: string);
@@ -244,7 +266,14 @@ begin
   var LStopIdx := Text.IndexOf('||STOP:');
   if LStopIdx >= 0 then begin LActualText := Text.Substring(0, LStopIdx); LStopReason := Text.Substring(LStopIdx + 7); end;
   LSession := FSessionMgr.GetSessionById(LSid);
-  if Assigned(LSession) then LSession.IsWaitForResponse := False;
+  
+  if Assigned(LSession) then
+  begin
+    LSession.IsWaitForResponse := False;
+    if LSession.IsThoughtStreaming then EndStreaming(LSid, 'thought');
+    if LSession.IsMessageStreaming then EndStreaming(LSid, 'message');
+  end;
+  
   System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateMessageStreaming(LSid, LActualText, 'ai', LStopReason); ShowTyping(False); if Assigned(LSession) then UpdateSession(LSession); end));
 end;
 
@@ -256,6 +285,10 @@ begin
   LSession := FSessionMgr.GetSessionById(SessionId);
   if Assigned(LSession) then
   begin
+    // Interrupt streaming if active
+    if LSession.IsThoughtStreaming then EndStreaming(SessionId, 'thought');
+    if LSession.IsMessageStreaming then EndStreaming(SessionId, 'message');
+
     LHandler := GetHandler(LSession.AgentType);
     if Assigned(LHandler) then
       LHandler.ProcessRequestPermission(ID, Method, SessionId, ToolCall, Options);
@@ -559,6 +592,49 @@ begin
   try
     LObj.S['sessionId'] := ASessionId; LObj.S['content'] := AContent; LObj.S['timestamp'] := FormatDateTime('yyyy-mm-dd hh:nn:ss', Now); ExecuteJS('window.ACP.streamThought(' + LObj.ToJSON(False) + ')');
   finally LObj.Free; end;
+end;
+
+procedure TAgentControl.StartStreaming(const ASessionId, AType: string);
+var
+  LSession: TSessionInfo;
+begin
+  LSession := FSessionMgr.GetSessionById(ASessionId);
+  if Assigned(LSession) then
+  begin
+    if AType = 'thought' then LSession.IsThoughtStreaming := True
+    else LSession.IsMessageStreaming := True;
+
+    if FSessionMgr.ActiveSession = LSession then
+      ExecuteJS('window.ACP.startStreaming("' + AType + '")');
+  end;
+end;
+
+procedure TAgentControl.EndStreaming(const ASessionId, AType: string);
+var
+  LSession: TSessionInfo;
+begin
+  LSession := FSessionMgr.GetSessionById(ASessionId);
+  if Assigned(LSession) then
+  begin
+    if AType = 'thought' then LSession.IsThoughtStreaming := False
+    else LSession.IsMessageStreaming := False;
+
+    if FSessionMgr.ActiveSession = LSession then
+      ExecuteJS('window.ACP.endStreaming("' + AType + '")');
+  end;
+end;
+
+procedure TAgentControl.ReceiveMessage(const ASessionId, AContent: string);
+var
+  LSession: TSessionInfo;
+  LBase64: string;
+begin
+  LSession := FSessionMgr.GetSessionById(ASessionId);
+  if Assigned(LSession) and (FSessionMgr.ActiveSession = LSession) then
+  begin
+    LBase64 := TNetEncoding.Base64.EncodeBytesToString(TEncoding.UTF8.GetBytes(AContent)).Replace(#13, '').Replace(#10, '');
+    ExecuteJS('window.ACP.receiveMessage("' + LBase64 + '")');
+  end;
 end;
 
 procedure TAgentControl.BreakGrouping; begin System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin ExecuteJS('window.ACP.breakGrouping()'); end)); end;

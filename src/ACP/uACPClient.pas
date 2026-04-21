@@ -4,11 +4,9 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.SyncObjs,
-  JsonDataObjects, uAgentProcess;
+  JsonDataObjects, uAgentProcess, uAgentTypes;
 
 type
-  TRPCDirection = (rdIncoming, rdOutgoing, rdInternal);
-  
   TACPResponseAnonCallback = reference to procedure(AResponse: TJsonObject);
 
   TACPReceiveEvent = procedure(Sender: TObject;

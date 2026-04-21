@@ -11,6 +11,10 @@ type
     procedure UpdateSession(ASession: TSessionInfo);
     procedure UpdateSessionList;
     procedure UpdateFileList(const ARootPath: string = '');
+    procedure ShowPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
+    procedure StartStreaming(const ASessionId, AType: string);
+    procedure EndStreaming(const ASessionId, AType: string);
+    procedure ReceiveMessage(const ASessionId, AContent: string);
     procedure ExecuteJS(const AScript: string);
   end;
 

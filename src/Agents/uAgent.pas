@@ -15,6 +15,7 @@ type
   TAgentStateChangeEvent = procedure(Sender: TObject; const OldState, NewState: TAgentState) of object;
   TAgentResponseEvent = procedure(Sender: TObject; const SessionId, Text: string) of object;
   TAgentChunkEvent = procedure(Sender: TObject; const SessionId, Chunk, FullText: string) of object;
+  TAgentStreamingEndEvent = procedure(Sender: TObject; const SessionId, AType: string) of object;
   TAgentFSWriteEvent = procedure(Sender: TObject; const SessionId, Path, OldContent, NewContent: string) of object;
 
   TSessionInfo = class
@@ -28,6 +29,8 @@ type
     IsActive: Boolean;
     IsWaitForResponse: Boolean;
     IsPinned: Boolean;
+    IsThoughtStreaming: Boolean;
+    IsMessageStreaming: Boolean;
     LogPath: string;
     DiffsPath: string; // Directory for diff blocks
     Cwd: string; // Workspace directory
@@ -52,6 +55,7 @@ type
     FOnResponse: TAgentResponseEvent;
     FOnMessageChunk: TAgentChunkEvent;
     FOnThoughtChunk: TAgentChunkEvent;
+    FOnStreamingEnd: TAgentStreamingEndEvent;
     FOnFSWrite: TAgentFSWriteEvent;
     procedure SetState(const Value: TAgentState);
   protected
@@ -68,6 +72,7 @@ type
     procedure DoResponse(const SessionId, Text: string);
     procedure DoMessageChunk(const SessionId, Chunk, FullText: string);
     procedure DoThoughtChunk(const SessionId, Chunk, FullText: string);
+    procedure DoStreamingEnd(const SessionId, AType: string);
     procedure DoFSWrite(const SessionId, Path, OldContent, NewContent: string);
     
     property AgentName: string read FAgentName write FAgentName;
@@ -81,6 +86,7 @@ type
     property OnResponse: TAgentResponseEvent read FOnResponse write FOnResponse;
     property OnMessageChunk: TAgentChunkEvent read FOnMessageChunk write FOnMessageChunk;
     property OnThoughtChunk: TAgentChunkEvent read FOnThoughtChunk write FOnThoughtChunk;
+    property OnStreamingEnd: TAgentStreamingEndEvent read FOnStreamingEnd write FOnStreamingEnd;
     property OnFSWrite: TAgentFSWriteEvent read FOnFSWrite write FOnFSWrite;
   end;
 
@@ -218,6 +224,11 @@ end;
 procedure TAgent.DoThoughtChunk(const SessionId, Chunk, FullText: string);
 begin
   if Assigned(FOnThoughtChunk) then FOnThoughtChunk(Self, SessionId, Chunk, FullText);
+end;
+
+procedure TAgent.DoStreamingEnd(const SessionId, AType: string);
+begin
+  if Assigned(FOnStreamingEnd) then FOnStreamingEnd(Self, SessionId, AType);
 end;
 
 procedure TAgent.DoFSWrite(const SessionId, Path, OldContent, NewContent: string);
