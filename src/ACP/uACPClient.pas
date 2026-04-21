@@ -304,19 +304,32 @@ begin
       if (vID <> '') and not Assigned(pResult) and Assigned(pParams) then
         pResult := pParams;
 
-      // --- Improved Response Matching ---
+      // --- Improved Response Matching (Method 3: Session/Prompt special handling) ---
       Callback := nil;
-      // Only treat as a Response if it contains 'result' or 'error' and has no 'method'
       if (vID <> '') and (vID <> '0') and (ParsedObj.S['method'] = '') and 
          (Assigned(pResult) or Assigned(pError)) then 
       begin
-        if FCallbacks.TryGetValue(vID, Callback) then
+        var LIsPrompt := SameText(vMethod, 'session/prompt');
+        var LShouldCallback := True;
+        
+        // If it's a prompt response, only trigger callback if stopReason is end_turn
+        if LIsPrompt and Assigned(pResult) then
         begin
-          FCallbacks.Remove(vID);
-          if Assigned(FOnRawData) then
-            FOnRawData(Self, rdInternal, 'Callback FOUND and matching for ID: ' + vID);
+          var LStopReason := pResult.S['stopReason'];
+          if (LStopReason <> '') and not SameText(LStopReason, 'end_turn') then
+            LShouldCallback := False;
         end;
-        FPendingMethods.Remove(vID);
+
+        if LShouldCallback then
+        begin
+          if FCallbacks.TryGetValue(vID, Callback) then
+          begin
+            FCallbacks.Remove(vID);
+            if Assigned(FOnRawData) then
+              FOnRawData(Self, rdInternal, 'Callback FOUND and matching for ID: ' + vID);
+          end;
+          FPendingMethods.Remove(vID);
+        end;
       end;
 
       if Assigned(Callback) then

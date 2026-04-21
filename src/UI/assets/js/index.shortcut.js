@@ -46,7 +46,13 @@ class ShortcutManager {
             }
             return;
         }
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.acp.sendMessage(); }
+        if (e.key === 'Enter' && !e.shiftKey) { 
+            e.preventDefault(); 
+            const s = this.acp.allSessions.find(sess => sess.active);
+            if (s && !s.isWaitForResponse && !s.loading && s.isActive) {
+                this.acp.sendMessage(); 
+            }
+        }
     }
     _navigate(isCommand, dir) {
         if (isCommand) {

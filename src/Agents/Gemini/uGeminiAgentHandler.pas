@@ -76,6 +76,7 @@ begin
               begin
                 LGemini.SetSessionLogPath(LSid, ASession.LogPath);
                 ASession.IsLoading := False;
+                ASession.IsRestoring := False;
                 ASession.IsActive := True;
                 ASession.LastHistoryTick := 0;
                 if Assigned(FAgentControl) then

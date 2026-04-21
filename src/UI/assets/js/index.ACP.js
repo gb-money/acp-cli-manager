@@ -561,7 +561,6 @@ window.ACP = {
             window.ACP.isMessageStreaming = false;
         }
         window.ACP.currentStreamingContainerId = null;
-        window.ACP.breakGrouping();
     },
 
     receiveMessage: (base64) => {
@@ -617,11 +616,22 @@ window.ACP = {
             const json = window.ACP.decodeBase64Utf8(base64);
             const parsed = JSON.parse(json);
             const { id, toolCall, options } = parsed;
+            
+            if (!window.ACP.lastAiMsgId) {
+                window.ACP.lastAiMsgId = window.ACP.addMessageToUI('ai', '', window.ACP.getLocalTimeString());
+            }
+
             const actionContainerId = `${window.ACP.lastAiMsgId}-actions`;
-            const container = document.getElementById(actionContainerId);
+            let container = document.getElementById(actionContainerId);
+            
+            if (!container) {
+                window.ACP.lastAiMsgId = window.ACP.addMessageToUI('ai', '', window.ACP.getLocalTimeString());
+                container = document.getElementById(`${window.ACP.lastAiMsgId}-actions`);
+            }
+
             if (!container) return;
 
-            const isOther = toolCall.kind === 'other';
+            const isOther = toolCall && toolCall.kind === 'other';
             
             container.classList.remove('hidden');
             container.className = isOther 
@@ -634,14 +644,9 @@ window.ACP = {
             ];
 
             container.innerHTML = displayOptions.map(opt => {
-                let icon = 'check', color = 'text-primary';
-                if (opt.kind === 'allow_always' || opt.optionId.includes('always')) icon = 'done_all';
-                if (opt.kind === 'reject_once' || opt.optionId === 'cancel') { icon = 'close'; color = 'text-error'; }
-                
                 return `
                     <button onclick="window.sendAcp('permission-response?id=${id}&optionId=${opt.optionId}'); this.parentElement.classList.add('opacity-50', 'pointer-events-none')"
-                        class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/20 text-[11px] font-semibold text-on-surface transition-all shadow-sm active:scale-95 group">
-                        ${isOther ? '' : `<span class="material-symbols-outlined text-[14px] ${color}">${icon}</span>`}
+                        class="flex items-center justify-center px-4 py-2 rounded-xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/20 text-[11px] font-semibold text-on-surface transition-all shadow-sm active:scale-95">
                         <span class="truncate">${opt.name}</span>
                     </button>`;
             }).join('');
@@ -855,7 +860,7 @@ window.ACP = {
     renderCommands: (commands) => {
         const container = document.getElementById('commandListContainer');
         if (!container) return;
-        container.innerHTML = '<div class="dropdown-header">COMMANDS</div>' + commands.map((c, i) => `
+        container.innerHTML = commands.map((c, i) => `
             <div onmousedown="event.preventDefault(); window.ACP.applyCommand('${c.name}')"
                 class="cmd-item w-full flex items-center gap-4 px-5 py-3.5 cursor-pointer transition-colors ${i === window.ACP.selectedCommandIndex ? 'active' : ''}">
                 <div class="icon-box w-7 h-7 rounded bg-surface-container flex items-center justify-center transition-colors"><span class="material-icons text-sm">terminal</span></div>
@@ -869,7 +874,7 @@ window.ACP = {
     renderFiles: (files) => {
         const container = document.getElementById('fileListContainer');
         if (!container) return;
-        container.innerHTML = '<div class="dropdown-header">WORKSPACE FILES</div>' + files.map((f, i) => `
+        container.innerHTML = files.map((f, i) => `
             <div onmousedown="event.preventDefault(); window.ACP.applyFile('${f}')"
                 class="cmd-item w-full flex items-center gap-4 px-5 py-3 cursor-pointer transition-colors ${i === window.ACP.selectedFileIndex ? 'active' : ''}">
                 <span class="material-icons text-sm ${i === window.ACP.selectedFileIndex ? 'text-primary' : 'text-on-surface-variant/40'}">description</span>
@@ -910,14 +915,50 @@ window.ACP = {
         window.ACP.showCommands(false);
     },
     applyFile: (path) => {
+        const userInput = document.getElementById('userInput');
         const pill = document.createElement('span');
         let safeFullPath = encodeURIComponent(path);
         pill.className = 'text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors';
         pill.setAttribute('onclick', `if(window.pillTimer) clearTimeout(window.pillTimer); if(event.detail===1){window.pillTimer=setTimeout(()=>window.sendUi('open-file-viewer?path=' + '${safeFullPath}'), 250);}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}`);
         pill.contentEditable = 'false';
-        const label = path.includes(' ') ? `@"${path}"` : `@${path}`;
+        
+        // Extract only the filename for the label
+        const fileName = path.split(/[/\\]/).pop();
+        const label = fileName.includes(' ') ? `@"${fileName}"` : `@${fileName}`;
         pill.innerText = label;
-        window.ACP.replaceTriggerRange('@', pill); window.ACP.showFiles(false);
+        // Keep the full path in a data attribute for reference if needed, 
+        // but the actual content is determined by the label text or the path passed to actions.
+        pill.setAttribute('data-path', path);
+
+        const hasTrigger = window.ACP.getTriggerInfo('@') !== null;
+        if (hasTrigger) {
+            window.ACP.replaceTriggerRange('@', pill);
+        } else {
+            const selection = window.getSelection();
+            let isInsideInput = false;
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                isInsideInput = userInput.contains(range.commonAncestorContainer);
+                
+                if (isInsideInput) {
+                    range.insertNode(pill);
+                    range.setStartAfter(pill);
+                    const space = document.createTextNode('\u00A0');
+                    range.insertNode(space);
+                    range.setStartAfter(space);
+                    range.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
+            }
+            
+            if (!isInsideInput) {
+                userInput.appendChild(pill);
+                userInput.appendChild(document.createTextNode('\u00A0'));
+            }
+            userInput.focus();
+        }
+        window.ACP.showFiles(false);
     }, setWorkspaceFiles: (files) => { window.ACP.workspaceFiles = files; },
     showTyping: (show) => { window.ACP.showProcessing(show); },
     changeModel: (sessionId, modelId) => {
@@ -1087,16 +1128,16 @@ window.ACP.updateActiveSessionUI = (activeSession) => {
     if (activeSession.models && document.getElementById('modelSelectBtn')) {
         const currentModelId = activeSession.models.currentModelId || '';
         let currentModelLabel = currentModelId;
-        const dropdown = document.getElementById('modelDropdown');
-        if (dropdown && Array.isArray(activeSession.models.availableModels)) {
-            dropdown.innerHTML = '<div class="dropdown-header">AVAILABLE MODELS</div>';
+        const listContainer = document.getElementById('modelListContainer');
+        if (listContainer && Array.isArray(activeSession.models.availableModels)) {
+            listContainer.innerHTML = '';
             activeSession.models.availableModels.forEach(m => {
                 const mId = typeof m === 'string' ? m : m.modelId;
                 const mName = typeof m === 'string' ? m : (m.name || m.modelId);
                 const mDesc = typeof m === 'object' ? m.description : '';
                 const isActiveModel = mId === currentModelId;
                 if (isActiveModel) currentModelLabel = mName;
-                dropdown.innerHTML += `
+                listContainer.innerHTML += `
                     <button onclick="window.sendAcp('change-model?modelId=${mId}'); document.getElementById('modelDropdown').classList.add('hidden');"
                         class="cmd-item w-full text-left px-5 py-3 transition-colors flex items-center justify-between">
                         <div class="flex flex-col min-w-0">

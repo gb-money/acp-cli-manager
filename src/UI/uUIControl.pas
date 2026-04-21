@@ -10,6 +10,7 @@ type
   TOpenExplorerEvent = procedure(Sender: TObject) of object;
   TOpenFileViewerEvent = procedure(Sender: TObject; const APath: string) of object;
   TOpenDiffViewerEvent = procedure(Sender: TObject; const ASessionId, APath, AHashId: string) of object;
+  TOpenFileDialogEvent = procedure(Sender: TObject) of object;
   TUIReadyEvent = procedure(Sender: TObject) of object;
 
   TUIControl = class
@@ -20,6 +21,7 @@ type
     FOnOpenExplorer: TOpenExplorerEvent;
     FOnOpenFileViewer: TOpenFileViewerEvent;
     FOnOpenDiffViewer: TOpenDiffViewerEvent;
+    FOnOpenFileDialog: TOpenFileDialogEvent;
     FOnUIReady: TUIReadyEvent;
     
     procedure DoSearchComplete(const AResults: TArray<TSearchSessionResult>);
@@ -27,6 +29,7 @@ type
     procedure HandleOpenExplorer(const Params: TDictionary<string, string>);
     procedure HandleOpenFileViewer(const Params: TDictionary<string, string>);
     procedure HandleOpenDiffViewer(const Params: TDictionary<string, string>);
+    procedure HandleOpenFileDialog(const Params: TDictionary<string, string>);
     procedure HandleUIReady(const Params: TDictionary<string, string>);
     procedure HandleSearchConversations(const Params: TDictionary<string, string>);
   public
@@ -36,6 +39,7 @@ type
     property OnOpenExplorer: TOpenExplorerEvent read FOnOpenExplorer write FOnOpenExplorer;
     property OnOpenFileViewer: TOpenFileViewerEvent read FOnOpenFileViewer write FOnOpenFileViewer;
     property OnOpenDiffViewer: TOpenDiffViewerEvent read FOnOpenDiffViewer write FOnOpenDiffViewer;
+    property OnOpenFileDialog: TOpenFileDialogEvent read FOnOpenFileDialog write FOnOpenFileDialog;
     property OnUIReady: TUIReadyEvent read FOnUIReady write FOnUIReady;
   end;
 
@@ -69,8 +73,14 @@ begin
   if Action = 'open-explorer' then HandleOpenExplorer(Params)
   else if Action = 'open-file-viewer' then HandleOpenFileViewer(Params)
   else if Action = 'open-diff-viewer' then HandleOpenDiffViewer(Params)
+  else if Action = 'open-file-dialog' then HandleOpenFileDialog(Params)
   else if Action = 'ready' then HandleUIReady(Params)
   else if Action = 'search-conversations' then HandleSearchConversations(Params);
+end;
+
+procedure TUIControl.HandleOpenFileDialog(const Params: TDictionary<string, string>);
+begin
+  if Assigned(FOnOpenFileDialog) then FOnOpenFileDialog(Self);
 end;
 
 procedure TUIControl.HandleSearchConversations(const Params: TDictionary<string, string>);

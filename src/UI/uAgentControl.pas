@@ -54,7 +54,6 @@ type
     procedure HandleResumeSession(const Params: TDictionary<string, string>);
     procedure HandleNextPrevSession(ADir: Integer);
     procedure HandleGetFileContent(const Params: TDictionary<string, string>);
-    procedure HandleOpenFileDialog(const Params: TDictionary<string, string>);
     procedure HandleGetFileHistory(const Params: TDictionary<string, string>);
     
     function IsIgnoredDir(const ADirName: string): Boolean;
@@ -66,6 +65,7 @@ type
     destructor Destroy; override;
     function HandleRequest(const AUrl: string): Boolean;
     procedure RegisterAgent(AType: TAgentType; AAgent: TAgent);
+    procedure HandleOpenFileDialog(const Params: TDictionary<string, string>);
     procedure AddSession(ASession: TSessionInfo);
     procedure DeleteSession(ASession: TSessionInfo);
     procedure DeleteSessionUI(const ASessionId: string);
@@ -153,6 +153,7 @@ begin
     AAgent.OnEndTurn := DoAgentEndTurn;
     if AAgent is TACPAgent then
     begin
+      TACPAgent(AAgent).SessionManager := FSessionMgr;
       TACPAgent(AAgent).OnRawData := DoAgentRawData;
       TACPAgent(AAgent).OnPermissionRequest := DoAgentPermissionRequest;
       TACPAgent(AAgent).OnSessionMetadataUpdate := DoAgentSessionMetadataUpdate;
@@ -689,15 +690,47 @@ end;
 procedure TAgentControl.BreakGrouping; begin System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin ExecuteJS('window.ACP.breakGrouping()'); end)); end;
 
 procedure TAgentControl.UpdateFileList(const ARootPath: string);
-var LFiles: TStringDynArray; LArray: TJsonArray; LPath, LRelPath, LTargetRoot: string;
+var
+  LArray: TJsonArray;
+  LTargetRoot: string;
+
+  procedure ScanDir(const ADir: string);
+  var
+    LFile, LSubDir: string;
+    LRelPath: string;
+  begin
+    try
+      // Collect files in current dir
+      for LFile in TDirectory.GetFiles(ADir) do
+      begin
+        LRelPath := ExtractRelativePath(LTargetRoot, LFile);
+        LArray.Add(LRelPath.Replace('\', '/'));
+      end;
+
+      // Recurse into subdirs
+      for LSubDir in TDirectory.GetDirectories(ADir) do
+      begin
+        if not IsIgnoredDir(TPath.GetFileName(LSubDir)) then
+          ScanDir(LSubDir);
+      end;
+    except
+      // Skip inaccessible directories
+    end;
+  end;
+
 begin
-  LTargetRoot := ARootPath; if LTargetRoot = '' then LTargetRoot := FWorkspaceRoot; if not TDirectory.Exists(LTargetRoot) then Exit;
-  LTargetRoot := IncludeTrailingPathDelimiter(LTargetRoot); LArray := TJsonArray.Create;
+  LTargetRoot := ARootPath;
+  if LTargetRoot = '' then LTargetRoot := FWorkspaceRoot;
+  if not TDirectory.Exists(LTargetRoot) then Exit;
+
+  LTargetRoot := IncludeTrailingPathDelimiter(LTargetRoot);
+  LArray := TJsonArray.Create;
   try
-    LFiles := TDirectory.GetFiles(LTargetRoot, '*', TSearchOption.soTopDirectoryOnly);
-    for LPath in LFiles do begin LRelPath := ExtractRelativePath(LTargetRoot, LPath); LArray.Add(LRelPath.Replace('\', '/')); end;
+    ScanDir(ExcludeTrailingPathDelimiter(LTargetRoot));
     ExecuteJS('window.ACP.setWorkspaceFiles(' + LArray.ToJSON + ')');
-  finally LArray.Free; end;
+  finally
+    LArray.Free;
+  end;
 end;
 
 procedure TAgentControl.ShowPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);

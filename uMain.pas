@@ -32,6 +32,7 @@ type
     procedure DoOpenExplorer(Sender: TObject);
     procedure DoOpenFileViewer(Sender: TObject; const APath: string);
     procedure DoOpenDiffViewer(Sender: TObject; const ASessionId, APath, AHashId: string);
+    procedure DoOpenFileDialogRequested(Sender: TObject);
     procedure DoUIReady(Sender: TObject);
     procedure DoRawDataForDebug(Sender: TObject; Direction: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const RawText: string);
     function GetOrCreateAgent(AType: TAgentType): TAgent;
@@ -81,6 +82,7 @@ begin
   FUIControl.OnOpenExplorer := DoOpenExplorer;
   FUIControl.OnOpenFileViewer := DoOpenFileViewer;
   FUIControl.OnOpenDiffViewer := DoOpenDiffViewer;
+  FUIControl.OnOpenFileDialog := DoOpenFileDialogRequested;
   FUIControl.OnUIReady := DoUIReady;
 
   // Agent Control handles conversation UI logic
@@ -157,6 +159,12 @@ begin
   if not Assigned(frmDiffViewer) then frmDiffViewer := TfrmDiffViewer.Create(Application);
   frmDiffViewer.ViewDiffSession(FSessionMgr, ASessionId, APath, AHashId);
   frmDiffViewer.Show;
+end;
+
+procedure TS.DoOpenFileDialogRequested(Sender: TObject);
+begin
+  if Assigned(FAgentControl) then
+    FAgentControl.HandleOpenFileDialog(nil);
 end;
 
 procedure TS.DoRawDataForDebug(Sender: TObject; Direction: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const RawText: string);
