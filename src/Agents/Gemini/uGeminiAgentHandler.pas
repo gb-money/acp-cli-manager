@@ -3,7 +3,7 @@ unit uGeminiAgentHandler;
 interface
 
 uses
-  System.Classes, System.SysUtils, uAgentHandler, uAgent, uGeminiAgent, uSessionManager, uAgentTypes;
+  System.Classes, System.SysUtils, uAgentHandler, uAgent, uGeminiAgent, uSessionManager, uAgentTypes, JsonDataObjects;
 
 type
   TGeminiAgentHandler = class(TAgentHandler)
@@ -11,12 +11,13 @@ type
     procedure CreateNewSession(const AWorkspaceDir: string); override;
     procedure ResumeSession(ASession: TSessionInfo); override;
     procedure Prompt(ASession: TSessionInfo; const AText: string); override;
+    procedure ProcessRequestPermission(const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray); override;
   end;
 
 implementation
 
 uses
-  uACPAgent, uConversationService, FMX.Forms, JsonDataObjects, uAgentControl,
+  uACPAgent, uConversationService, FMX.Forms, uAgentControl,
   System.RegularExpressions, System.IOUtils;
 
 procedure TGeminiAgentHandler.ResumeSession(ASession: TSessionInfo);
@@ -209,6 +210,15 @@ begin
   end).Start;
 end;
 
+procedure TGeminiAgentHandler.ProcessRequestPermission(const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
+begin
+  TThread.Queue(nil, TThreadProcedure(procedure
+  begin
+    if Assigned(FAgentControl) then
+      (FAgentControl as TAgentControl).ShowPermissionUI(SessionId, ID, Method, ToolCall.ToJSON(False), Options.ToJSON(False));
+  end));
+end;
+
 procedure TGeminiAgentHandler.Prompt(ASession: TSessionInfo; const AText: string);
 var
   LGemini: TGeminiAgent;
@@ -322,7 +332,10 @@ begin
       ItemObj.S['text'] := AText;
     end;
 
-    LGemini.ACPClient.Send('session/prompt', LParams, 
+    // Use a captured session to ensure the correct session is unlocked 
+    // regardless of the current ActiveSession in FSessionMgr.
+    var LTargetSession := ASession;
+    LGemini.ACPClient.Send('session/prompt', LParams,
       procedure(AResponse: TJsonObject)
       var
         LD_Callback: TSessionData;
@@ -333,12 +346,20 @@ begin
           LD_Callback.IsProcessing := False; 
           LGemini.Sessions.AddOrSetValue(LSid, LD_Callback);
         end;
+
         if Assigned(AResponse) and not AResponse.Contains('error') then
         begin
           LStopReason := AResponse.O['result'].S['stopReason'];
-          if LStopReason = '' then LStopReason := 'end_turn';
-          if LGemini.Sessions.TryGetValue(LSid, LD_Callback) then
-            LGemini.DoResponse(LSid, LD_Callback.FullMessage + '||STOP:' + LStopReason);
+          
+          // CRITICAL: Only unlock UI if stopReason is end_turn
+          if SameText(LStopReason, 'end_turn') then
+          begin
+            TThread.Queue(nil, TThreadProcedure(procedure
+            begin
+              LTargetSession.IsWaitForResponse := False;
+              LGemini.DoResponse(LSid, LD_Callback.FullMessage + '||STOP:' + LStopReason);
+            end));
+          end;
         end;
       end);
   finally LParams.Free; end;

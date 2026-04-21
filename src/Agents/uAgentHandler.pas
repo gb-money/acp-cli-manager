@@ -3,7 +3,7 @@ unit uAgentHandler;
 interface
 
 uses
-  System.Classes, System.SysUtils, uAgent, uSessionManager;
+  System.Classes, System.SysUtils, uAgent, uSessionManager, JsonDataObjects;
 
 type
   IAgentControl = interface
@@ -24,6 +24,7 @@ type
     procedure CreateNewSession(const AWorkspaceDir: string); virtual; abstract;
     procedure ResumeSession(ASession: TSessionInfo); virtual; abstract;
     procedure Prompt(ASession: TSessionInfo; const AText: string); virtual; abstract;
+    procedure ProcessRequestPermission(const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray); virtual; abstract;
   end;
 
 implementation

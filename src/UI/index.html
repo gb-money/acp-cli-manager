@@ -640,174 +640,6 @@
                 if (menu) menu.classList.toggle('hidden');
             },
 
-            updateActiveSessionUI: (activeSession) => {
-                if (!activeSession) {
-                    window.ACP.activeSessionId = '';
-                    const header = document.getElementById('activeAgentHeader');
-                    if (header) header.innerText = 'No Session';
-                    const inputArea = document.getElementById('mainInputArea');
-                    if (inputArea) inputArea.classList.add('hidden');
-                    const chatCanvas = document.getElementById('mainChatCanvas');
-                    if (chatCanvas) chatCanvas.classList.add('hidden');
-                    const emptyArea = document.getElementById('mainEmptyArea');
-                    if (emptyArea) emptyArea.classList.remove('hidden');
-                    const canvas = document.getElementById('mainChatCanvasInner');
-                    if (canvas) canvas.innerHTML = '';
-                    return;
-                }
-
-                if (window.ACP.activeSessionId !== activeSession.id) {
-                    window.ACP.activeSessionId = activeSession.id;
-                    const canvas = document.getElementById('mainChatCanvasInner');
-                    if (canvas) canvas.innerHTML = '';
-                }
-
-                const header = document.getElementById('activeAgentHeader');
-                if (header) header.innerText = activeSession.name;
-
-                const inputArea = document.getElementById('mainInputArea');
-                if (inputArea) inputArea.classList.remove('hidden');
-
-                const chatCanvas = document.getElementById('mainChatCanvas');
-                if (chatCanvas) chatCanvas.classList.remove('hidden');
-
-                const emptyArea = document.getElementById('mainEmptyArea');
-                if (emptyArea) emptyArea.classList.add('hidden');
-
-                if (activeSession.commands) window.ACP.availableCommands = activeSession.commands;
-
-                const isActive = activeSession.isActive;
-                const isWaitForResponse = activeSession.isWaitForResponse;
-                const isLoading = activeSession.loading;
-                
-                const setDisabled = (val) => {
-                    const modelSelectBtn = document.getElementById('modelSelectBtn');
-                    const attachBtn = document.getElementById('attachBtn');
-                    const toolsBtn = document.getElementById('toolsBtn');
-                    if (modelSelectBtn) modelSelectBtn.disabled = val;
-                    if (attachBtn) attachBtn.disabled = val;
-                    if (toolsBtn) toolsBtn.disabled = val;
-                };
-
-                const sendBtn = document.getElementById('send-button');
-                const userInput = document.getElementById('userInput');
-
-                if (sendBtn && userInput) {
-                    if (isLoading || !isActive) {
-                        sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] ${isLoading ? 'animate-spin' : ''}">${isLoading ? 'refresh' : 'autorenew'}</span>`;
-                        sendBtn.onclick = isLoading ? null : () => window.ACP.resumeSession();
-                        userInput.setAttribute('contenteditable', 'false');
-                        setDisabled(true);
-                        sendBtn.disabled = false;
-                    } else {
-                        sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">send</span>`;
-                        sendBtn.onclick = () => window.ACP.sendMessage();
-                        userInput.setAttribute('contenteditable', 'true');
-                        setDisabled(false);
-                        sendBtn.disabled = isWaitForResponse;
-                    }
-                }
-
-                if (activeSession.models && document.getElementById('modelSelectBtn')) {
-                    const currentModelId = activeSession.models.currentModelId || '';
-                    let currentModelLabel = currentModelId;
-                    const dropdown = document.getElementById('modelDropdown');
-                    if (dropdown && Array.isArray(activeSession.models.availableModels)) {
-                        dropdown.innerHTML = '<div class="dropdown-header">AVAILABLE MODELS</div>';
-                        activeSession.models.availableModels.forEach(m => {
-                            const mId = typeof m === 'string' ? m : m.modelId;
-                            const mName = typeof m === 'string' ? m : (m.name || m.modelId);
-                            const mDesc = typeof m === 'object' ? m.description : '';
-                            const isActiveModel = mId === currentModelId;
-                            if (isActiveModel) currentModelLabel = mName;
-                            dropdown.innerHTML += `
-                                <button onclick="window.sendAcp('change-model?modelId=${mId}'); document.getElementById('modelDropdown').classList.add('hidden');"
-                                    class="cmd-item w-full text-left px-5 py-3 transition-colors flex items-center justify-between">
-                                    <div class="flex flex-col min-w-0">
-                                        <span class="text-sm font-bold ${isActiveModel ? 'text-primary' : 'text-on-surface'}">${mName}</span>
-                                        ${mDesc ? `<span class="text-[10px] text-on-surface-variant/60 truncate mt-0.5">${mDesc}</span>` : ''}
-                                    </div>
-                                    ${isActiveModel ? '<span class="material-icons text-primary text-sm">check</span>' : ''}
-                                </button>`;
-                        });
-                    }
-                    const labelSpan = document.getElementById('modelSelectBtn').querySelector('span:nth-child(2)');
-                    if (labelSpan) {
-                        labelSpan.innerText = currentModelLabel || 'Select Model';
-                        labelSpan.className = 'text-on-surface font-medium';
-                    }
-                }
-            },
-
-            updateSessionList: (data) => {
-                let sessions = null;
-                if (Array.isArray(data)) {
-                    sessions = data;
-                } else if (typeof data === 'string') {
-                    const json = window.ACP.decodeBase64Utf8(data);
-                    if (json) {
-                        try { sessions = JSON.parse(json); } catch (e) { console.error('updateSessionList JSON parse error:', e); }
-                    }
-                }
-
-                if (!sessions) return;
-                window.ACP.allSessions = sessions;
-
-                const container = document.getElementById('sessionListContainer');
-                if (!container) return;
-
-                window.ACP.updateActiveSessionUI(sessions.find(s => s.active));
-                container.innerHTML = sessions.map(s => window.ACP.renderSessionItemHtml(s)).join('') + '<div class="h-32"></div>';
-            },
-
-            renderSessionItemHtml: (s) => {
-                if (!s) return '';
-                return `
-                    <div id="session-item-${s.id}" onclick="window.sendAcp('select-session?id=${s.id}')" 
-                        class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer group relative overflow-visible ${s.active ? 'bg-surface-container-high border-l-[3px] border-primary' : 'hover:bg-surface-container-high/50 text-on-surface-variant hover:text-on-surface border-l-[3px] border-transparent'}">
-                        <div class="relative z-10 shrink-0">
-                            <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/20">
-                                <span class="material-icons text block ${s.active ? 'text-primary' : ''}">${s.active ? 'forum' : 'chat_bubble_outline'}</span>
-                            </div>
-                            <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 ${s.online ? 'bg-primary' : 'bg-gray-400'} rounded-full border-2 border-surface-container-lowest"></div>
-                        </div>
-                        <div class="flex-1 min-w-0 z-10 pr-2">
-                            <div class="text-sm font-headline ${s.active ? 'font-semibold text-primary' : 'font-medium'} truncate flex items-center gap-1.5">
-                                <span class="truncate name-label">${s.name || 'Untitled'}</span>
-                                ${s.pinned ? '<span class="material-symbols-outlined text-[12px] text-primary shrink-0">push_pin</span>' : ''}
-                            </div>
-                            <div class="text-xs workspace-label ${s.active ? 'text-on-surface-variant' : 'opacity-60'} truncate">${s.workspace || ''}</div>
-                            ${(s.lastConversationDate && s.lastConversationDate > 0) ? `<div class="text-[9px] text-on-surface-variant/40 mt-0.5">Last active: ${new Date(s.lastConversationDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>` : ''}
-                        </div>
-                        
-                        <div class="relative z-20 shrink-0">
-                            <button onclick="window.ACP.toggleSessionMenu(event, '${s.id}')" 
-                                class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-highest transition-all opacity-0 group-hover:opacity-100 focus:opacity-100">
-                                <span class="material-icons text-[20px] leading-none">more_vert</span>
-                            </button>
-                            <div id="session-menu-${s.id}" class="hidden absolute right-0 top-full mt-1 w-52 bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[100] py-1.5 overflow-hidden">
-                                <button onclick="event.stopPropagation(); window.sendAcp('pin-session?id=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
-                                    <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">push_pin</span></div>
-                                    <span class="flex-1">${s.pinned ? 'Unpin Session' : 'Pin Session'}</span>
-                                </button>
-                                <button onclick="event.stopPropagation(); window.sendUi('open-explorer?path=' + encodeURIComponent('${(s.workspace || '').replace(/\\/g, '\\\\')}'));" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
-                                    <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">folder</span></div>
-                                    <span class="flex-1">Open Explorer</span>
-                                </button>
-                                <button onclick="event.stopPropagation(); window.sendUi('open-diff-viewer?sessionId=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
-                                    <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">text_compare</span></div>
-                                    <span class="flex-1">Open Diff Viewer</span>
-                                </button>
-                                <div class="h-px bg-outline-variant/10 my-1 mx-2"></div>
-                                <button onclick="event.stopPropagation(); if(confirm('Delete this session?')) window.sendAcp('delete-session?id=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-error hover:bg-error/10 transition-colors text-left">
-                                    <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px] text-error">delete</span></div>
-                                    <span class="flex-1">Delete Session</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>`;
-            },
-
             AddSession: (data) => {
                 let s = (typeof data === 'string') ? JSON.parse(window.ACP.decodeBase64Utf8(data)) : data;
                 if (!s) return;
@@ -826,7 +658,6 @@
                 const item = document.getElementById(`session-item-${sessionId}`);
                 if (item) item.remove();
                 
-                // If the deleted session was active, reset UI
                 if (window.ACP.activeSessionId === sessionId) {
                     window.ACP.activeSessionId = '';
                     window.ACP.updateActiveSessionUI(null);
@@ -846,7 +677,6 @@
                 window.ACP.allSessions[idx] = s;
                 const oldActiveId = window.ACP.activeSessionId;
 
-                // Handle active state transition
                 if (s.active && oldActiveId && oldActiveId !== s.id) {
                     const prevIdx = window.ACP.allSessions.findIndex(item => item.id === oldActiveId);
                     if (prevIdx !== -1) {
@@ -870,6 +700,161 @@
                 if (s.active) {
                     window.ACP.updateActiveSessionUI(s);
                 }
+            },
+
+            streamThought: (data) => {
+                if (window.ACP.lastBlockType === 'message') {
+                    window.ACP.breakGrouping();
+                }
+                if (window.ACP.lastBlockType !== 'thought' || !window.ACP.lastAiThoughtId) {
+                    window.ACP.lastAiThoughtId = window.ACP.createThoughtContainer(data.timestamp);
+                    window.ACP.lastBlockType = 'thought';
+                    window.ACP.accumulatedThought = '';
+                }
+                window.ACP.accumulatedThought = data.content;
+                window.ACP.parseAndRenderThought(window.ACP.accumulatedThought, window.ACP.lastAiThoughtId.contentId);
+                const div = document.getElementById(window.ACP.lastAiThoughtId.contentId);
+                if (div) div.classList.remove('hidden');
+                const outer = document.getElementById('mainChatCanvas');
+                outer.scrollTop = outer.scrollHeight;
+            },
+
+            renderContent: (content) => {
+                let rendered = content;
+                rendered = rendered.replace(/(@(?:"[^"]+"|[^\s\xa0\n]+))/g, (match) => {
+                    let rawPath = match.substring(1).replace(/(^"|"$)/g, '');
+                    let displayPath = rawPath;
+                    let fullPath = rawPath;
+                    if (rawPath.startsWith('file:///')) {
+                        fullPath = decodeURIComponent(rawPath.substring(8));
+                        let lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+                        displayPath = fullPath.substring(lastSlash + 1);
+                    }
+                    let safeFullPath = encodeURIComponent(fullPath);
+                    return `<span class="text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors" contenteditable="false" onclick="if(event.detail===1){window.sendUi('open-file-viewer?path=' + '${safeFullPath}')}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}">@${displayPath}</span>`;
+                });
+                return window.marked ? marked.parse(rendered) : rendered;
+            },
+
+            streamMessage: (data) => {
+                const { content, role, stopReason, timestamp } = data;
+                const targetRole = role === 'user' ? 'me' : 'ai';
+
+                if (window.ACP.lastBlockType === 'thought') {
+                    window.ACP.finalizeThought();
+                    window.ACP.lastAiThoughtId = null;
+                }
+
+                if (!window.ACP.lastAiMsgId || window.ACP.lastBlockType !== 'message' || window.ACP.lastMessageRole !== targetRole) {
+                    window.ACP.lastAiMsgId = window.ACP.addMessageToUI(targetRole, '', timestamp);
+                    window.ACP.lastBlockType = 'message';
+                    window.ACP.lastMessageRole = targetRole;
+                }
+
+                const targetDiv = document.getElementById(window.ACP.lastAiMsgId);
+                if (targetDiv) {
+                    targetDiv.innerHTML = window.ACP.renderContent(content);
+                }
+                if (stopReason) window.ACP.showProcessing(false);
+                const outer = document.getElementById('mainChatCanvas');
+                outer.scrollTop = outer.scrollHeight;
+            },
+
+            ShowPermissionUI: (base64) => {
+                try {
+                    const json = window.ACP.decodeBase64Utf8(base64);
+                    const parsed = JSON.parse(json);
+                    const { id, toolCall, options } = parsed;
+                    const actionContainerId = `${window.ACP.lastAiMsgId}-actions`;
+                    const container = document.getElementById(actionContainerId);
+                    if (!container) return;
+
+                    const isOther = toolCall.kind === 'other';
+                    
+                    container.classList.remove('hidden');
+                    container.className = isOther 
+                        ? `mt-4 pt-4 border-t border-outline-variant/10 grid grid-cols-2 md:grid-cols-4 gap-2`
+                        : `mt-4 pt-4 border-t border-outline-variant/10 flex flex-wrap gap-2`;
+
+                    const displayOptions = options || [
+                        { optionId: 'proceed_once', name: 'Allow', kind: 'allow_once' }, 
+                        { optionId: 'cancel', name: 'Reject', kind: 'reject_once' }
+                    ];
+
+                    container.innerHTML = displayOptions.map(opt => {
+                        let icon = 'check', color = 'text-primary';
+                        if (opt.kind === 'allow_always' || opt.optionId.includes('always')) icon = 'done_all';
+                        if (opt.kind === 'reject_once' || opt.optionId === 'cancel') { icon = 'close'; color = 'text-error'; }
+                        
+                        return `
+                            <button onclick="window.sendAcp('permission-response?id=${id}&optionId=${opt.optionId}'); this.parentElement.classList.add('opacity-50', 'pointer-events-none')"
+                                class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/20 text-[11px] font-semibold text-on-surface transition-all shadow-sm active:scale-95 group">
+                                ${isOther ? '' : `<span class="material-symbols-outlined text-[14px] ${color}">${icon}</span>`}
+                                <span class="truncate">${opt.name}</span>
+                            </button>`;
+                    }).join('');
+
+                    if (window.ACP.isProcessingActive) window.ACP.showProcessing(true);
+                    const outer = document.getElementById('mainChatCanvas');
+                    outer.scrollTop = outer.scrollHeight;
+                } catch (e) { console.error('ShowPermissionUI error:', e); }
+            },
+
+            updateFileHistoryBase64: (base64) => {
+                try {
+                    const binary = window.atob(base64);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    const json = new TextDecoder().decode(bytes);
+                    const history = JSON.parse(json);
+                    const container = document.getElementById('fileHistoryContainer');
+                    if (!container) return;
+                    if (!history || history.length === 0) {
+                        container.innerHTML = '<div class="p-8 text-center text-xs text-on-surface-variant italic opacity-30">No history available</div>';
+                        return;
+                    }
+                    const grouped = {};
+                    history.forEach(item => {
+                        const file = item.path.split(/[\/\\]/).pop();
+                        if (!grouped[file]) grouped[file] = { path: item.path, entries: [] };
+                        grouped[file].entries.push(item);
+                    });
+                    container.innerHTML = Object.keys(grouped).map(file => {
+                        const data = grouped[file];
+                        const lastTime = data.entries[0].timestamp.split(' ')[1];
+                        const entriesHtml = data.entries.map((e, idx) => {
+                            const time = e.timestamp.split(' ')[1];
+                            const isFirst = idx === 0;
+                            const colorClass = isFirst ? 'bg-primary' : 'bg-on-surface-variant';
+                            const safePath = encodeURIComponent(e.path);
+                            return `
+                                <div class="relative cursor-pointer hover:bg-white/5 p-1 rounded" onclick="window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=${safePath}&hashId=${e.id}')">
+                                    <span class="absolute -left-[21px] top-2 w-2 h-2 rounded-full ${colorClass} border-2 border-surface-container-low"></span>
+                                    <p class="text-xs text-on-surface hover:text-primary transition-colors">Diff: ${e.id || 'Snap'}</p>
+                                    <p class="text-[10px] text-on-surface-variant font-mono mt-0.5">${time}</p>
+                                </div>`;
+                        }).join('');
+                        const safeDataPath = encodeURIComponent(data.path);
+                        return `
+                            <div class="bg-surface-container rounded-xl border border-outline-variant/10 overflow-hidden mb-2 select-none">
+                                <div onclick="this.nextElementSibling.classList.toggle('hidden'); const icon = this.querySelector('.chevron'); icon.innerText = icon.innerText === 'expand_more' ? 'chevron_right' : 'expand_more';" 
+                                     ondblclick="window.sendUi('open-file-viewer?path=${safeDataPath}')"
+                                     class="p-3 flex items-start gap-3 cursor-pointer hover:bg-surface-container-high transition-colors">
+                                    <span class="material-symbols-outlined text-primary mt-0.5 text-[18px]">description</span>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium text-on-surface truncate" title="${data.path}">${file}</p>
+                                        <p class="text-xs text-on-surface-variant mt-0.5">Last Modified ${lastTime}</p>
+                                    </div>
+                                    <span class="material-symbols-outlined text-on-surface-variant text-[16px] chevron">chevron_right</span>
+                                </div>
+                                <div class="hidden px-4 pb-3 pt-1 border-t border-outline-variant/5 bg-surface-container-low/50">
+                                    <div class="relative pl-4 mt-2 space-y-3 before:absolute before:inset-y-0 before:left-[7px] before:w-px before:bg-outline-variant/20">
+                                        ${entriesHtml}
+                                    </div>
+                                </div>
+                            </div>`;
+                    }).join('');
+                } catch (e) { console.error('File History render error:', e); }
             },
 
             loadHistoryBase64: (base64) => {
@@ -958,37 +943,27 @@
 
                 try {
                     const node = info.node;
-                    // Ensure we are still dealing with the same node and content
                     if (node.parentNode) {
                         const range = document.createRange();
                         range.setStart(node, info.startIndex);
                         range.setEnd(node, info.endIndex);
-
-                        // Use more aggressive deletion: direct data manipulation if deleteContents fails
                         range.deleteContents();
-
-                        // If browser didn't delete (sometimes happens in hybrid apps), force it
                         if (node.textContent.substring(info.startIndex, info.startIndex + (info.endIndex - info.startIndex)) === info.triggerChar + window.ACP.getTriggerInfo(triggerChar)) {
                             node.deleteData(info.startIndex, info.endIndex - info.startIndex);
                         }
-
                         const inserted = (typeof replacement === 'string') ? document.createTextNode(replacement) : replacement;
                         range.insertNode(inserted);
                         range.setStartAfter(inserted);
-
                         const space = document.createTextNode('\u00A0');
                         range.insertNode(space);
                         range.setStartAfter(space);
                         range.collapse(true);
-
                         const sel = window.getSelection();
                         sel.removeAllRanges();
                         sel.addRange(range);
                     }
-
                     document.getElementById('userInput').focus();
                 } catch (e) { console.error('Replace error:', e); }
-
                 window.ACP.lastTriggerInfo = null;
             },
 
@@ -1473,6 +1448,646 @@
                 else this.acp.applyFile(this.acp.filteredFiles[this.acp.selectedFileIndex]);
             }
         }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('userInput');
+            if (input) {
+                input.addEventListener('input', function () {
+                    window.ACP.handleSlashCommand(this.innerText);
+                    window.ACP.handleAtCommand(this.innerText);
+                });
+            }
+
+            // Initialize Shortcut Managers
+            window.acpShortcutManager = new ACPShortcutManager(window.ACP);
+            window.acpShortcutManager.init();
+            window.shortcutManager = new ShortcutManager(window.ACP);
+            window.shortcutManager.init();
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('[id^="session-menu-"]') && !e.target.closest('button[onclick*="toggleSessionMenu"]')) {
+                    document.querySelectorAll('[id^="session-menu-"]').forEach(m => m.classList.add('hidden'));
+                }
+                if (!e.target.closest('#newChatDropdown') && !e.target.closest('button[onclick*="toggleDropdown"]')) {
+                    const d = document.getElementById('newChatDropdown');
+                    if (d) { d.classList.add('opacity-0', 'invisible'); setTimeout(() => d.classList.add('hidden'), 200); }
+                }
+                if (!e.target.closest('#modelDropdown') && !e.target.closest('#modelSelectBtn')) {
+                    const md = document.getElementById('modelDropdown');
+                    if (md) md.classList.add('hidden');
+                }
+                if (!e.target.closest('#searchSessionDropdownContainer')) {
+                    const ssm = document.getElementById('searchSessionMenu');
+                    if (ssm) ssm.classList.add('hidden');
+                }
+                const link = e.target.closest('a');
+                if (link && link.href && !link.href.startsWith('javascript:') && !(link.getAttribute('href') && link.getAttribute('href').startsWith('#'))) {
+                    e.preventDefault(); e.stopPropagation(); window.location.href = link.href;
+                }
+            }, true);
+
+            window.sendUi('ready');
+        });
+
+        // --- Core ACP Message Handlers ---
+        window.ACP.updateActiveSessionUI = (activeSession) => {
+            if (!activeSession) {
+                window.ACP.activeSessionId = '';
+                const header = document.getElementById('activeAgentHeader');
+                if (header) header.innerText = 'No Session';
+                const inputArea = document.getElementById('mainInputArea');
+                if (inputArea) inputArea.classList.add('hidden');
+                const chatCanvas = document.getElementById('mainChatCanvas');
+                if (chatCanvas) chatCanvas.classList.add('hidden');
+                const emptyArea = document.getElementById('mainEmptyArea');
+                if (emptyArea) emptyArea.classList.remove('hidden');
+                const canvas = document.getElementById('mainChatCanvasInner');
+                if (canvas) canvas.innerHTML = '';
+                return;
+            }
+
+            if (window.ACP.activeSessionId !== activeSession.id) {
+                window.ACP.activeSessionId = activeSession.id;
+                const canvas = document.getElementById('mainChatCanvasInner');
+                if (canvas) canvas.innerHTML = '';
+            }
+
+            const header = document.getElementById('activeAgentHeader');
+            if (header) header.innerText = activeSession.name;
+
+            const inputArea = document.getElementById('mainInputArea');
+            if (inputArea) inputArea.classList.remove('hidden');
+
+            const chatCanvas = document.getElementById('mainChatCanvas');
+            if (chatCanvas) chatCanvas.classList.remove('hidden');
+
+            const emptyArea = document.getElementById('mainEmptyArea');
+            if (emptyArea) emptyArea.classList.add('hidden');
+
+            if (activeSession.commands) window.ACP.availableCommands = activeSession.commands;
+
+            const isActive = activeSession.isActive;
+            const isWaitForResponse = activeSession.isWaitForResponse;
+            const isLoading = activeSession.loading;
+            
+            const setDisabled = (val) => {
+                const modelSelectBtn = document.getElementById('modelSelectBtn');
+                const attachBtn = document.getElementById('attachBtn');
+                const toolsBtn = document.getElementById('toolsBtn');
+                if (modelSelectBtn) modelSelectBtn.disabled = val;
+                if (attachBtn) attachBtn.disabled = val;
+                if (toolsBtn) toolsBtn.disabled = val;
+            };
+
+            const sendBtn = document.getElementById('send-button');
+            const userInput = document.getElementById('userInput');
+
+            if (sendBtn && userInput) {
+                if (isLoading || !isActive) {
+                    sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] ${isLoading ? 'animate-spin' : ''}">${isLoading ? 'refresh' : 'autorenew'}</span>`;
+                    sendBtn.onclick = isLoading ? null : () => window.ACP.resumeSession();
+                    userInput.setAttribute('contenteditable', 'false');
+                    setDisabled(true);
+                    sendBtn.disabled = false;
+                } else {
+                    sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">send</span>`;
+                    sendBtn.onclick = () => window.ACP.sendMessage();
+                    userInput.setAttribute('contenteditable', 'true');
+                    setDisabled(false);
+                    sendBtn.disabled = isWaitForResponse;
+                }
+            }
+
+            if (activeSession.models && document.getElementById('modelSelectBtn')) {
+                const currentModelId = activeSession.models.currentModelId || '';
+                let currentModelLabel = currentModelId;
+                const dropdown = document.getElementById('modelDropdown');
+                if (dropdown && Array.isArray(activeSession.models.availableModels)) {
+                    dropdown.innerHTML = '<div class="dropdown-header">AVAILABLE MODELS</div>';
+                    activeSession.models.availableModels.forEach(m => {
+                        const mId = typeof m === 'string' ? m : m.modelId;
+                        const mName = typeof m === 'string' ? m : (m.name || m.modelId);
+                        const mDesc = typeof m === 'object' ? m.description : '';
+                        const isActiveModel = mId === currentModelId;
+                        if (isActiveModel) currentModelLabel = mName;
+                        dropdown.innerHTML += `
+                            <button onclick="window.sendAcp('change-model?modelId=${mId}'); document.getElementById('modelDropdown').classList.add('hidden');"
+                                class="cmd-item w-full text-left px-5 py-3 transition-colors flex items-center justify-between">
+                                <div class="flex flex-col min-w-0">
+                                    <span class="text-sm font-bold ${isActiveModel ? 'text-primary' : 'text-on-surface'}">${mName}</span>
+                                    ${mDesc ? `<span class="text-[10px] text-on-surface-variant/60 truncate mt-0.5">${mDesc}</span>` : ''}
+                                </div>
+                                ${isActiveModel ? '<span class="material-icons text-primary text-sm">check</span>' : ''}
+                            </button>`;
+                    });
+                }
+                const labelSpan = document.getElementById('modelSelectBtn').querySelector('span:nth-child(2)');
+                if (labelSpan) {
+                    labelSpan.innerText = currentModelLabel || 'Select Model';
+                    labelSpan.className = 'text-on-surface font-medium';
+                }
+            }
+        };
+
+        window.ACP.updateSessionList = (data) => {
+            let sessions = null;
+            if (Array.isArray(data)) {
+                sessions = data;
+            } else if (typeof data === 'string') {
+                const json = window.ACP.decodeBase64Utf8(data);
+                if (json) {
+                    try { sessions = JSON.parse(json); } catch (e) { console.error('updateSessionList JSON parse error:', e); }
+                }
+            }
+
+            if (!sessions) return;
+            window.ACP.allSessions = sessions;
+
+            const container = document.getElementById('sessionListContainer');
+            if (!container) return;
+
+            window.ACP.updateActiveSessionUI(sessions.find(s => s.active));
+            container.innerHTML = sessions.map(s => window.ACP.renderSessionItemHtml(s)).join('') + '<div class="h-32"></div>';
+        };
+
+        window.ACP.renderSessionItemHtml = (s) => {
+            if (!s) return '';
+            return `
+                <div id="session-item-${s.id}" onclick="window.sendAcp('select-session?id=${s.id}')" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer group relative overflow-visible ${s.active ? 'bg-surface-container-high border-l-[3px] border-primary' : 'hover:bg-surface-container-high/50 text-on-surface-variant hover:text-on-surface border-l-[3px] border-transparent'}">
+                    <div class="relative z-10 shrink-0">
+                        <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/20">
+                            <span class="material-icons text block ${s.active ? 'text-primary' : ''}">${s.active ? 'forum' : 'chat_bubble_outline'}</span>
+                        </div>
+                        <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 ${s.online ? 'bg-primary' : 'bg-gray-400'} rounded-full border-2 border-surface-container-lowest"></div>
+                    </div>
+                    <div class="flex-1 min-w-0 z-10 pr-2">
+                        <div class="text-sm font-headline ${s.active ? 'font-semibold text-primary' : 'font-medium'} truncate flex items-center gap-1.5">
+                            <span class="truncate name-label">${s.name || 'Untitled'}</span>
+                            ${s.pinned ? '<span class="material-symbols-outlined text-[12px] text-primary shrink-0">push_pin</span>' : ''}
+                        </div>
+                        <div class="text-xs workspace-label ${s.active ? 'text-on-surface-variant' : 'opacity-60'} truncate">${s.workspace || ''}</div>
+                        ${(s.lastConversationDate && s.lastConversationDate > 0) ? `<div class="text-[9px] text-on-surface-variant/40 mt-0.5">Last active: ${new Date(s.lastConversationDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>` : ''}
+                    </div>
+                    
+                    <div class="relative z-20 shrink-0">
+                        <button onclick="window.ACP.toggleSessionMenu(event, '${s.id}')" 
+                            class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-highest transition-all opacity-0 group-hover:opacity-100 focus:opacity-100">
+                            <span class="material-icons text-[20px] leading-none">more_vert</span>
+                        </button>
+                        <div id="session-menu-${s.id}" class="hidden absolute right-0 top-full mt-1 w-52 bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[100] py-1.5 overflow-hidden">
+                            <button onclick="event.stopPropagation(); window.sendAcp('pin-session?id=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
+                                <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">push_pin</span></div>
+                                <span class="flex-1">${s.pinned ? 'Unpin Session' : 'Pin Session'}</span>
+                            </button>
+                            <button onclick="event.stopPropagation(); window.sendUi('open-explorer?path=' + encodeURIComponent('${(s.workspace || '').replace(/\\/g, '\\\\')}'));" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
+                                <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">folder</span></div>
+                                <span class="flex-1">Open Explorer</span>
+                            </button>
+                            <button onclick="event.stopPropagation(); window.sendUi('open-diff-viewer?sessionId=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
+                                <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">text_compare</span></div>
+                                <span class="flex-1">Open Diff Viewer</span>
+                            </button>
+                            <div class="h-px bg-outline-variant/10 my-1 mx-2"></div>
+                            <button onclick="event.stopPropagation(); if(confirm('Delete this session?')) window.sendAcp('delete-session?id=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-error hover:bg-error/10 transition-colors text-left">
+                                <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px] text-error">delete</span></div>
+                                <span class="flex-1">Delete Session</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+        };
+
+        window.ACP.AddSession = (data) => {
+            let s = (typeof data === 'string') ? JSON.parse(window.ACP.decodeBase64Utf8(data)) : data;
+            if (!s) return;
+            
+            const idx = window.ACP.allSessions.findIndex(item => item.id === s.id);
+            if (idx === -1) {
+                window.ACP.allSessions.push(s);
+            } else {
+                window.ACP.allSessions[idx] = s;
+            }
+            window.ACP.updateSessionList(window.ACP.allSessions);
+        };
+
+        window.ACP.DeleteSession = (sessionId) => {
+            window.ACP.allSessions = window.ACP.allSessions.filter(s => s.id !== sessionId);
+            const item = document.getElementById(`session-item-${sessionId}`);
+            if (item) item.remove();
+            
+            if (window.ACP.activeSessionId === sessionId) {
+                window.ACP.activeSessionId = '';
+                window.ACP.updateActiveSessionUI(null);
+            }
+        };
+
+        window.ACP.updateSession = (data) => {
+            let s = (typeof data === 'string') ? JSON.parse(window.ACP.decodeBase64Utf8(data)) : data;
+            if (!s) return;
+
+            const idx = window.ACP.allSessions.findIndex(item => item.id === s.id);
+            if (idx === -1) {
+                console.error('updateSession: Session ID not found. Use AddSession for new items.', s.id);
+                return;
+            }
+
+            window.ACP.allSessions[idx] = s;
+            const oldActiveId = window.ACP.activeSessionId;
+
+            if (s.active && oldActiveId && oldActiveId !== s.id) {
+                const prevIdx = window.ACP.allSessions.findIndex(item => item.id === oldActiveId);
+                if (prevIdx !== -1) {
+                    window.ACP.allSessions[prevIdx].active = false;
+                    const prevItem = document.getElementById(`session-item-${oldActiveId}`);
+                    if (prevItem) {
+                        const temp = document.createElement('div');
+                        temp.innerHTML = window.ACP.renderSessionItemHtml(window.ACP.allSessions[prevIdx]);
+                        if (temp.firstElementChild) prevItem.replaceWith(temp.firstElementChild);
+                    }
+                }
+            }
+
+            const oldItem = document.getElementById(`session-item-${s.id}`);
+            if (oldItem) {
+                const temp = document.createElement('div');
+                temp.innerHTML = window.ACP.renderSessionItemHtml(s);
+                if (temp.firstElementChild) oldItem.replaceWith(temp.firstElementChild);
+            }
+
+            if (s.active) {
+                window.ACP.updateActiveSessionUI(s);
+            }
+        };
+
+        window.ACP.streamThought = (data) => {
+            if (window.ACP.lastBlockType === 'message') {
+                window.ACP.breakGrouping();
+            }
+            if (window.ACP.lastBlockType !== 'thought' || !window.ACP.lastAiThoughtId) {
+                window.ACP.lastAiThoughtId = window.ACP.createThoughtContainer(data.timestamp);
+                window.ACP.lastBlockType = 'thought';
+                window.ACP.accumulatedThought = '';
+            }
+            window.ACP.accumulatedThought = data.content;
+            window.ACP.parseAndRenderThought(window.ACP.accumulatedThought, window.ACP.lastAiThoughtId.contentId);
+            const div = document.getElementById(window.ACP.lastAiThoughtId.contentId);
+            if (div) div.classList.remove('hidden');
+            const outer = document.getElementById('mainChatCanvas');
+            outer.scrollTop = outer.scrollHeight;
+        };
+
+        window.ACP.renderContent = (content) => {
+            let rendered = content;
+            rendered = rendered.replace(/(@(?:"[^"]+"|[^\s\xa0\n]+))/g, (match) => {
+                let rawPath = match.substring(1).replace(/(^"|"$)/g, '');
+                let displayPath = rawPath;
+                let fullPath = rawPath;
+                if (rawPath.startsWith('file:///')) {
+                    fullPath = decodeURIComponent(rawPath.substring(8));
+                    let lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+                    displayPath = fullPath.substring(lastSlash + 1);
+                }
+                let safeFullPath = encodeURIComponent(fullPath);
+                return `<span class="text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors" contenteditable="false" onclick="if(event.detail===1){window.sendUi('open-file-viewer?path=' + '${safeFullPath}')}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}">@${displayPath}</span>`;
+            });
+            return window.marked ? marked.parse(rendered) : rendered;
+        };
+
+        window.ACP.streamMessage = (data) => {
+            const { content, role, stopReason, timestamp } = data;
+            const targetRole = role === 'user' ? 'me' : 'ai';
+
+            if (window.ACP.lastBlockType === 'thought') {
+                window.ACP.finalizeThought();
+                window.ACP.lastAiThoughtId = null;
+            }
+
+            if (!window.ACP.lastAiMsgId || window.ACP.lastBlockType !== 'message' || window.ACP.lastMessageRole !== targetRole) {
+                window.ACP.lastAiMsgId = window.ACP.addMessageToUI(targetRole, '', timestamp);
+                window.ACP.lastBlockType = 'message';
+                window.ACP.lastMessageRole = targetRole;
+            }
+
+            const targetDiv = document.getElementById(window.ACP.lastAiMsgId);
+            if (targetDiv) {
+                targetDiv.innerHTML = window.ACP.renderContent(content);
+            }
+            if (stopReason) window.ACP.showProcessing(false);
+            const outer = document.getElementById('mainChatCanvas');
+            outer.scrollTop = outer.scrollHeight;
+        };
+
+        window.ACP.ShowPermissionUI = (base64) => {
+            try {
+                const json = window.ACP.decodeBase64Utf8(base64);
+                const parsed = JSON.parse(json);
+                const { id, toolCall, options } = parsed;
+                const actionContainerId = `${window.ACP.lastAiMsgId}-actions`;
+                const container = document.getElementById(actionContainerId);
+                if (!container) return;
+
+                const isOther = toolCall.kind === 'other';
+                
+                container.classList.remove('hidden');
+                container.className = isOther 
+                    ? `mt-4 pt-4 border-t border-outline-variant/10 grid grid-cols-2 md:grid-cols-4 gap-2`
+                    : `mt-4 pt-4 border-t border-outline-variant/10 flex flex-wrap gap-2`;
+
+                const displayOptions = options || [
+                    { optionId: 'proceed_once', name: 'Allow', kind: 'allow_once' }, 
+                    { optionId: 'cancel', name: 'Reject', kind: 'reject_once' }
+                ];
+
+                container.innerHTML = displayOptions.map(opt => {
+                    let icon = 'check', color = 'text-primary';
+                    if (opt.kind === 'allow_always' || opt.optionId.includes('always')) icon = 'done_all';
+                    if (opt.kind === 'reject_once' || opt.optionId === 'cancel') { icon = 'close'; color = 'text-error'; }
+                    
+                    return `
+                        <button onclick="window.sendAcp('permission-response?id=${id}&optionId=${opt.optionId}'); this.parentElement.classList.add('opacity-50', 'pointer-events-none')"
+                            class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/20 text-[11px] font-semibold text-on-surface transition-all shadow-sm active:scale-95 group">
+                            ${isOther ? '' : `<span class="material-symbols-outlined text-[14px] ${color}">${icon}</span>`}
+                            <span class="truncate text-center">${opt.name}</span>
+                        </button>`;
+                }).join('');
+
+                if (window.ACP.isProcessingActive) window.ACP.showProcessing(true);
+                const outer = document.getElementById('mainChatCanvas');
+                outer.scrollTop = outer.scrollHeight;
+            } catch (e) { console.error('ShowPermissionUI error:', e); }
+        };
+
+        window.ACP.updateFileHistoryBase64 = (base64) => {
+            try {
+                const binary = window.atob(base64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const json = new TextDecoder().decode(bytes);
+                const history = JSON.parse(json);
+                const container = document.getElementById('fileHistoryContainer');
+                if (!container) return;
+                if (!history || history.length === 0) {
+                    container.innerHTML = '<div class="p-8 text-center text-xs text-on-surface-variant italic opacity-30">No history available</div>';
+                    return;
+                }
+                const grouped = {};
+                history.forEach(item => {
+                    const file = item.path.split(/[\/\\]/).pop();
+                    if (!grouped[file]) grouped[file] = { path: item.path, entries: [] };
+                    grouped[file].entries.push(item);
+                });
+                container.innerHTML = Object.keys(grouped).map(file => {
+                    const data = grouped[file];
+                    const lastTime = data.entries[0].timestamp.split(' ')[1];
+                    const entriesHtml = data.entries.map((e, idx) => {
+                        const time = e.timestamp.split(' ')[1];
+                        const isFirst = idx === 0;
+                        const colorClass = isFirst ? 'bg-primary' : 'bg-on-surface-variant';
+                        const safePath = encodeURIComponent(e.path);
+                        return `
+                            <div class="relative cursor-pointer hover:bg-white/5 p-1 rounded" onclick="window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=${safePath}&hashId=${e.id}')">
+                                <span class="absolute -left-[21px] top-2 w-2 h-2 rounded-full ${colorClass} border-2 border-surface-container-low"></span>
+                                <p class="text-xs text-on-surface hover:text-primary transition-colors">Diff: ${e.id || 'Snap'}</p>
+                                <p class="text-[10px] text-on-surface-variant font-mono mt-0.5">${time}</p>
+                            </div>`;
+                    }).join('');
+                    const safeDataPath = encodeURIComponent(data.path);
+                    return `
+                        <div class="bg-surface-container rounded-xl border border-outline-variant/10 overflow-hidden mb-2 select-none">
+                            <div onclick="this.nextElementSibling.classList.toggle('hidden'); const icon = this.querySelector('.chevron'); icon.innerText = icon.innerText === 'expand_more' ? 'chevron_right' : 'expand_more';" 
+                                 ondblclick="window.sendUi('open-file-viewer?path=${safeDataPath}')"
+                                 class="p-3 flex items-start gap-3 cursor-pointer hover:bg-surface-container-high transition-colors">
+                                <span class="material-symbols-outlined text-primary mt-0.5 text-[18px]">description</span>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium text-on-surface truncate" title="${data.path}">${file}</p>
+                                    <p class="text-xs text-on-surface-variant mt-0.5">Last Modified ${lastTime}</p>
+                                </div>
+                                <span class="material-symbols-outlined text-on-surface-variant text-[16px] chevron">chevron_right</span>
+                            </div>
+                            <div class="hidden px-4 pb-3 pt-1 border-t border-outline-variant/5 bg-surface-container-low/50">
+                                <div class="relative pl-4 mt-2 space-y-3 before:absolute before:inset-y-0 before:left-[7px] before:w-px before:bg-outline-variant/20">
+                                    ${entriesHtml}
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+            } catch (e) { console.error('File History render error:', e); }
+        };
+
+        window.ACP.loadHistoryBase64 = (base64) => {
+            try {
+                const binary = window.atob(base64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const json = new TextDecoder().decode(bytes);
+                const data = JSON.parse(json);
+
+                const outer = document.getElementById('mainChatCanvas');
+                const wasSmooth = outer.classList.contains('scroll-smooth');
+                if (wasSmooth) outer.classList.remove('scroll-smooth');
+
+                document.getElementById('mainChatCanvasInner').innerHTML = '';
+                window.ACP.breakGrouping();
+
+                data.forEach(msg => {
+                    const r = msg.role;
+                    const targetRole = r === 'user' ? 'me' : 'ai';
+                    if (r === 'thought') {
+                        const tIds = window.ACP.createThoughtContainer(msg.timestamp);
+                        window.ACP.parseAndRenderThought(msg.content, tIds.contentId);
+                        window.ACP.lastAiThoughtId = tIds;
+                        window.ACP.lastBlockType = 'thought';
+                        window.ACP.finalizeThought();
+                    } else {
+                        const id = window.ACP.addMessageToUI(targetRole, '', msg.timestamp);
+                        const div = document.getElementById(id);
+                        if (div) div.innerHTML = window.ACP.renderContent(msg.content);
+                    }
+                    window.ACP.breakGrouping();
+                });
+
+                setTimeout(() => {
+                    outer.scrollTop = outer.scrollHeight;
+                    if (wasSmooth) outer.classList.add('scroll-smooth');
+                }, 50);
+
+            } catch (e) { console.error('History load error:', e); }
+        };
+
+        window.ACP.clearChat = () => {
+            document.getElementById('mainChatCanvasInner').innerHTML = '';
+            window.ACP.breakGrouping();
+            window.ACP.lastRenderedDate = null;
+            window.ACP.showProcessing(false);
+        };
+
+        window.ACP.breakGrouping = () => {
+            if (window.ACP.lastBlockType === 'thought') window.ACP.finalizeThought();
+            window.ACP.lastAiMsgId = '';
+            window.ACP.lastAiThoughtId = null;
+            window.ACP.lastBlockType = '';
+            window.ACP.lastMessageRole = '';
+        };
+
+        window.ACP.getTriggerInfo = (triggerChar) => {
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return null;
+            const range = sel.getRangeAt(0);
+            const node = range.startContainer;
+            if (node.nodeType !== Node.TEXT_NODE) return null;
+
+            const text = node.textContent.substring(0, range.startOffset);
+            const lastTriggerIndex = text.lastIndexOf(triggerChar);
+            if (lastTriggerIndex === -1) return null;
+
+            const lastWord = text.substring(lastTriggerIndex);
+            if (/[\s\xa0\n]/.test(lastWord)) return null;
+            if (lastTriggerIndex > 0 && !/[\s\xa0\n]/.test(text[lastTriggerIndex - 1])) return null;
+
+            window.ACP.lastTriggerInfo = {
+                node: node,
+                triggerChar: triggerChar,
+                startIndex: lastTriggerIndex,
+                endIndex: range.startOffset
+            };
+
+            return lastWord.substring(1).toLowerCase();
+        };
+
+        window.ACP.replaceTriggerRange = (triggerChar, replacement) => {
+            const info = window.ACP.lastTriggerInfo;
+            if (!info || info.triggerChar !== triggerChar) return;
+
+            try {
+                const node = info.node;
+                if (node.parentNode) {
+                    const range = document.createRange();
+                    range.setStart(node, info.startIndex);
+                    range.setEnd(node, info.endIndex);
+                    range.deleteContents();
+                    if (node.textContent.substring(info.startIndex, info.startIndex + (info.endIndex - info.startIndex)) === info.triggerChar + window.ACP.getTriggerInfo(triggerChar)) {
+                        node.deleteData(info.startIndex, info.endIndex - info.startIndex);
+                    }
+                    const inserted = (typeof replacement === 'string') ? document.createTextNode(replacement) : replacement;
+                    range.insertNode(inserted);
+                    range.setStartAfter(inserted);
+                    const space = document.createTextNode('\u00A0');
+                    range.insertNode(space);
+                    range.setStartAfter(space);
+                    range.collapse(true);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+                document.getElementById('userInput').focus();
+            } catch (e) { console.error('Replace error:', e); }
+            window.ACP.lastTriggerInfo = null;
+        };
+
+        window.ACP.scrollToActive = (containerId) => {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const active = container.querySelector('.cmd-item.active');
+            if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        };
+
+        window.ACP.handleSlashCommand = () => {
+            const query = window.ACP.getTriggerInfo('/');
+            if (query !== null) {
+                const filtered = (window.ACP.availableCommands || []).filter(c => query === "" || c.name.toLowerCase().includes(query));
+                if (filtered.length > 0) {
+                    window.ACP.filteredCommands = filtered; window.ACP.selectedCommandIndex = 0;
+                    window.ACP.renderCommands(filtered); window.ACP.showCommands(true);
+                    return;
+                }
+            }
+            window.ACP.showCommands(false);
+        };
+
+        window.ACP.handleAtCommand = () => {
+            const query = window.ACP.getTriggerInfo('@');
+            if (query !== null) {
+                const filtered = (window.ACP.workspaceFiles || []).filter(f => query === "" || f.toLowerCase().includes(query)).slice(0, 20);
+                if (filtered.length > 0) {
+                    window.ACP.filteredFiles = filtered; window.ACP.selectedFileIndex = 0;
+                    window.ACP.renderFiles(filtered); window.ACP.showFiles(true);
+                    return;
+                }
+            }
+            window.ACP.showFiles(false);
+        };
+
+        window.ACP.renderCommands = (commands) => {
+            const container = document.getElementById('commandListContainer');
+            if (!container) return;
+            container.innerHTML = '<div class="dropdown-header">COMMANDS</div>' + commands.map((c, i) => `
+                <div onmousedown="event.preventDefault(); window.ACP.applyCommand('${c.name}')"
+                    class="cmd-item w-full flex items-center gap-4 px-5 py-3.5 cursor-pointer transition-colors ${i === window.ACP.selectedCommandIndex ? 'active' : ''}">
+                    <div class="icon-box w-7 h-7 rounded bg-surface-container flex items-center justify-center transition-colors"><span class="material-icons text-sm">terminal</span></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-bold font-mono text-highlight">/${c.name}</div>
+                        ${c.description ? `<div class="text-[11px] text-on-surface-variant/60 truncate mt-0.5">${c.description}</div>` : ''}
+                    </div>
+                </div>`).join('');
+        };
+
+        window.ACP.renderFiles = (files) => {
+            const container = document.getElementById('fileListContainer');
+            if (!container) return;
+            container.innerHTML = '<div class="dropdown-header">WORKSPACE FILES</div>' + files.map((f, i) => `
+                <div onmousedown="event.preventDefault(); window.ACP.applyFile('${f}')"
+                    class="cmd-item w-full flex items-center gap-4 px-5 py-3 cursor-pointer transition-colors ${i === window.ACP.selectedFileIndex ? 'active' : ''}">
+                    <span class="material-icons text-sm ${i === window.ACP.selectedFileIndex ? 'text-primary' : 'text-on-surface-variant/40'}">description</span>
+                    <span class="text-xs font-mono truncate text-highlight">${f}</span>
+                </div>`).join('');
+        };
+
+        window.ACP.showCommands = (show) => { document.getElementById('commandDropdown').classList.toggle('hidden', !show); };
+        window.ACP.showFiles = (show) => { document.getElementById('fileDropdown').classList.toggle('hidden', !show); };
+        window.ACP.showToolbox = () => {
+            const filtered = window.ACP.availableCommands || [];
+            window.ACP.filteredCommands = filtered;
+            window.ACP.selectedCommandIndex = 0;
+            window.ACP.renderCommands(filtered);
+            window.ACP.showCommands(true);
+            document.getElementById('userInput').focus();
+        };
+        window.ACP.applyCommand = (name) => {
+            const hasTrigger = window.ACP.getTriggerInfo('/') !== null;
+            if (hasTrigger) {
+                window.ACP.replaceTriggerRange('/', '/' + name);
+            } else {
+                const selection = window.getSelection();
+                if (selection.rangeCount) {
+                    const range = selection.getRangeAt(0);
+                    const textNode = document.createTextNode('/' + name);
+                    range.insertNode(textNode);
+                    range.setStartAfter(textNode);
+                    const space = document.createTextNode('\u00A0');
+                    range.insertNode(space);
+                    range.setStartAfter(space);
+                    range.collapse(true);
+                    selection.removeAllRanges(); selection.addRange(range);
+                } else {
+                    document.getElementById('userInput').innerText += '/' + name + ' ';
+                }
+            }
+            window.ACP.showCommands(false);
+        };
+        window.ACP.applyFile = (path) => {
+            const pill = document.createElement('span');
+            let safeFullPath = encodeURIComponent(path);
+            pill.className = 'text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors';
+            pill.setAttribute('onclick', `if(window.pillTimer) clearTimeout(window.pillTimer); if(event.detail===1){window.pillTimer=setTimeout(()=>window.sendUi('open-file-viewer?path=' + '${safeFullPath}'), 250);}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}`);
+            pill.contentEditable = 'false';
+            const label = path.includes(' ') ? `@"${path}"` : `@${path}`;
+            pill.innerText = label;
+            window.ACP.replaceTriggerRange('@', pill); window.ACP.showFiles(false);
+        }; 
+        window.ACP.setWorkspaceFiles = (files) => { window.ACP.workspaceFiles = files; };
+        window.ACP.showTyping = (show) => { window.ACP.showProcessing(show); };
+        window.ACP.parseStructuredPrompt = async (text) => { return text; };
 
         window.addEventListener('DOMContentLoaded', () => {
             const input = document.getElementById('userInput');

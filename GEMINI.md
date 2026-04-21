@@ -51,9 +51,10 @@ The project utilizes a hybrid architecture where the UI is rendered in HTML/JS a
 
 ### B. Delphi-to-Web (Outbound Communication)
 - **Mechanism**: Data is pushed to the Web UI using `FWebBrowser.EvaluateJavaScript`.
+- **Mandatory Encoding**: To prevent string escaping issues (quotes, newlines, backslashes) and ensure data integrity, **ALL** data sent from Delphi to the Web UI MUST be Base64 encoded.
 - **Data Encoding Standard**:
   1. Generate JSON using **`JsonDataObjects`**.
-  2. Encode the JSON string into **Base64** to prevent string escaping issues (e.g., quotes, newlines, backslashes).
+  2. Encode the JSON string into **Base64**.
   3. Pass the Base64 string to a JavaScript bridge function (e.g., `window.ACP.loadHistoryBase64("...")`).
   4. The Web UI must decode the string using `atob()` and parse it back to JSON.
 - **Thread Safety**: All JavaScript evaluations MUST be executed on the **Main Thread** using `TThread.Queue` or `TThread.Synchronize`.

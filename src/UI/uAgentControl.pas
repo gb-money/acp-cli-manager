@@ -74,7 +74,7 @@ type
     procedure UpdateThoughtStreaming(const ASessionId, AContent: string);
     procedure BreakGrouping;
     procedure UpdateFileList(const ARootPath: string = '');
-    procedure RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
+    procedure ShowPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
     procedure ShowTyping(const AShow: Boolean);
     procedure ExecuteJS(const AScript: string);
     property OnNewChat: TNewChatEvent read FOnNewChat write FOnNewChat;
@@ -199,7 +199,7 @@ begin
       end;
       TConversationService.AppendLog(LSession, LDirStr, RawText);
 
-      // --- NEW: Conditional Conversation Date Update ---
+      // --- Conditional Conversation Date Update ---
       if Assigned(AObj) then
       begin
         LMethod := AObj.S['method'];
@@ -214,7 +214,7 @@ begin
     end;
   end;
 
-  // 2. IMPORTANT: Relay to subscribers (uMain.DoRawDataForDebug)
+  // 2. Relay to subscribers (uMain.DoRawDataForDebug)
   if Assigned(FOnRawData) then
     FOnRawData(Self, Direction, SessionId, AObj, RawText);
 end;
@@ -224,7 +224,6 @@ var LSession: TSessionInfo;
 begin
   LSession := FSessionMgr.GetSessionById(SessionId);
   if Assigned(LSession) then LSession.UpdateConversationDate;
-
   System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateMessageStreaming(SessionId, FullText, 'ai', ''); end));
 end;
 
@@ -233,7 +232,6 @@ var LSession: TSessionInfo;
 begin
   LSession := FSessionMgr.GetSessionById(SessionId);
   if Assigned(LSession) then LSession.UpdateConversationDate;
-
   System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateThoughtStreaming(SessionId, FullText); end));
 end;
 
@@ -251,10 +249,17 @@ begin
 end;
 
 procedure TAgentControl.DoAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
-var LSid, LID, LMethod, LToolCall, LOptions: string;
+var
+  LSession: TSessionInfo;
+  LHandler: TAgentHandler;
 begin
-  LSid := SessionId; LID := ID; LMethod := Method; LToolCall := ToolCall.ToJSON(False); LOptions := Options.ToJSON(False);
-  System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin RequestPermissionUI(LSid, LID, LMethod, LToolCall, LOptions); end));
+  LSession := FSessionMgr.GetSessionById(SessionId);
+  if Assigned(LSession) then
+  begin
+    LHandler := GetHandler(LSession.AgentType);
+    if Assigned(LHandler) then
+      LHandler.ProcessRequestPermission(ID, Method, SessionId, ToolCall, Options);
+  end;
 end;
 
 procedure TAgentControl.DoAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
@@ -264,7 +269,6 @@ begin
   System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin
     LSession := FSessionMgr.GetSessionById(LSid);
     if Assigned(LSession) then begin
-      LSession.IsWaitForResponse := False;
       if LSession.IsLoading then begin LSession.IsLoading := False; LSession.IsActive := True; UpdateFileList(LSession.Cwd); end;
       UpdateSession(LSession);
     end;
@@ -351,14 +355,20 @@ begin
 end;
 
 procedure TAgentControl.HandleSendMessage(const Params: TDictionary<string, string>);
-var LText: string; LActive: TSessionInfo;
+var LText: string; LActive: TSessionInfo; LHandler: TAgentHandler;
 begin
   if Params.TryGetValue('text', LText) and (LText <> '') then begin
     LActive := FSessionMgr.ActiveSession;
     if Assigned(LActive) and Assigned(LActive.Agent) then begin
       LActive.IsWaitForResponse := True; UpdateSession(LActive);
       ExecuteJS('window.ACP.lastAiMsgId = ""; window.ACP.lastAiThoughtId = ""; window.ACP.lastBlockType = "";');
-      ShowTyping(True); LActive.Agent.SendPrompt(LActive.SessionId, LText);
+      ShowTyping(True); 
+      
+      LHandler := GetHandler(LActive.AgentType);
+      if Assigned(LHandler) then
+        LHandler.Prompt(LActive, LText)
+      else
+        LActive.Agent.SendPrompt(LActive.SessionId, LText);
     end;
   end;
 end;
@@ -565,14 +575,18 @@ begin
   finally LArray.Free; end;
 end;
 
-procedure TAgentControl.RequestPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
-var LData: TJsonObject;
+procedure TAgentControl.ShowPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
+var
+  LData: TJsonObject;
+  LJson, LBase64: string;
 begin
   LData := TJsonObject.Create;
   try
     LData.S['sessionId'] := ASessionId; LData.S['id'] := AID; LData.S['method'] := AMethod;
     if AToolCallJson <> '' then LData.O['toolCall'].FromJSON(AToolCallJson); if AOptionsJson <> '' then LData.A['options'].FromJSON(AOptionsJson);
-    ExecuteJS('window.ACP.renderPermissionRequest(' + LData.ToJSON(False) + ')');
+    LJson := LData.ToJSON(False);
+    LBase64 := TNetEncoding.Base64.EncodeBytesToString(TEncoding.UTF8.GetBytes(LJson)).Replace(#13, '').Replace(#10, '');
+    ExecuteJS('window.ACP.ShowPermissionUI("' + LBase64 + '")');
   finally LData.Free; end;
 end;
 

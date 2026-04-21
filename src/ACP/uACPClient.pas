@@ -306,19 +306,17 @@ begin
       if (vID <> '') and not Assigned(pResult) and Assigned(pParams) then
         pResult := pParams;
 
+      // --- Improved Response Matching ---
       Callback := nil;
-      if (vID <> '') and (vID <> '0') then 
+      // Only treat as a Response if it contains 'result' or 'error' and has no 'method'
+      if (vID <> '') and (vID <> '0') and (ParsedObj.S['method'] = '') and 
+         (Assigned(pResult) or Assigned(pError)) then 
       begin
         if FCallbacks.TryGetValue(vID, Callback) then
         begin
           FCallbacks.Remove(vID);
           if Assigned(FOnRawData) then
-            FOnRawData(Self, rdInternal, 'Callback FOUND and matching for ID: ' + vID + ' (Method: ' + vMethod + ')');
-        end
-        else
-        begin
-          if Assigned(FOnRawData) then
-            FOnRawData(Self, rdInternal, 'Callback NOT FOUND for ID: ' + vID + ' (Method: ' + vMethod + ')');
+            FOnRawData(Self, rdInternal, 'Callback FOUND and matching for ID: ' + vID);
         end;
         FPendingMethods.Remove(vID);
       end;
