@@ -541,11 +541,6 @@ begin
     FOnSessionMetadataUpdate(Self, SessionId);
 end;
 
-  FSessions.AddOrSetValue(SessionId, Data);
-  if Changed and Assigned(FOnSessionMetadataUpdate) then
-    FOnSessionMetadataUpdate(Self, SessionId);
-end;
-
 procedure TACPAgent.HandleInternalTerminated(Sender: TObject; ExitCode: Cardinal);
 begin
   State := asDisconnected;

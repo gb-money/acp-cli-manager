@@ -12,7 +12,7 @@ type
     class procedure ProcessLogEntry(ALogEntry: TJsonObject; LMessages: TJsonArray; var LLastMsg: TJsonObject);
   public
     class function GetConversationsBySessionId(ASession: TSessionInfo): TJsonArray;
-    class procedure AppendLog(ASession: TSessionInfo; const ADirection, ARawText: string);
+    class procedure AppendLog(ASession: TSessionInfo; const ADirection, ARawText: string; AUpdateDate: Boolean = True);
     class procedure SaveFileDiff(ASession: TSessionInfo; const APath, AOldText, ANewText: string);
     class procedure StartRestoration(ASession: TSessionInfo);
     class procedure FinalizeRestoration(ASession: TSessionInfo);
@@ -202,7 +202,7 @@ begin
   end;
 end;
 
-class procedure TConversationService.AppendLog(ASession: TSessionInfo; const ADirection, ARawText: string; AUpdateDate: Boolean);
+class procedure TConversationService.AppendLog(ASession: TSessionInfo; const ADirection, ARawText: string; AUpdateDate: Boolean = True);
 var
   LLogObj: TJsonObject;
   LTargetFile, LJSON: string;
