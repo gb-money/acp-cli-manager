@@ -363,6 +363,7 @@ var
   LType: TAgentType; 
   LHandler: TAgentHandler;
   LPrevActive: TSessionInfo;
+  LAgent: TAgent;
 begin
   if Params.TryGetValue('agent', LAgentName) then begin
     if Assigned(FOnNewChat) then FOnNewChat(Self, LAgentName);
@@ -371,6 +372,17 @@ begin
     else if SameText(LAgentName, 'codex') then LType := atCodex
     else Exit;
     
+    // Guard: Prevent creating new chat while agent is initializing
+    if FAgentList.TryGetValue(LType, LAgent) then
+    begin
+      if LAgent.State in [asConnecting, asInitializing] then
+      begin
+        ExecuteJS(Format('window.ACP.showModal("warning", "%s Initializing", ' +
+          '"The agent is currently starting up. Please wait until the initialization is complete before creating a new chat.")', [LAgentName]));
+        Exit;
+      end;
+    end;
+
     if not SelectDirectory('Select Project Workspace for ' + LAgentName, '', LSelectedDir) then Exit;
 
     // Deselect current active session to prevent dual-selection UI bug
@@ -427,9 +439,18 @@ procedure TAgentControl.HandleSelectSession(const Params: TDictionary<string, st
 var LSid: string; begin if Params.TryGetValue('id', LSid) then HandleSelectSession(FSessionMgr.GetSessionById(LSid)); end;
 
 procedure TAgentControl.HandleSelectSession(ASession: TSessionInfo);
+var
+  LPrevActive: TSessionInfo;
 begin
   if Assigned(ASession) then begin
-    FSessionMgr.SelectSession(ASession); UpdateSessionList;
+    LPrevActive := FSessionMgr.ActiveSession;
+    FSessionMgr.SelectSession(ASession); 
+    
+    // UI 부분 갱신: 이전 세션의 포커스 해제 및 새 세션의 포커스 설정
+    if Assigned(LPrevActive) and (LPrevActive <> ASession) then
+      UpdateSession(LPrevActive);
+    UpdateSession(ASession);
+
     var LCaptured := ASession;
     System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
     var LInnerMsg: TJsonArray; LInnerJson, LBase64: string; LBytes: TBytes;
@@ -715,6 +736,18 @@ begin
             if Assigned(LModels) then begin
               Result.O['models'].Assign(LModels); 
               Result.S['currentModelId'] := LModels.S['currentModelId'];
+            end;
+          finally LModels.Free; end;
+        except
+        end;
+      end;
+      if LData.ModesJson <> '' then begin
+        try
+          LModels := TJsonObject.Parse(LData.ModesJson) as TJsonObject;
+          try 
+            if Assigned(LModels) then begin
+              Result.O['modes'].Assign(LModels); 
+              Result.S['currentModeId'] := LModels.S['currentModeId'];
             end;
           finally LModels.Free; end;
         except

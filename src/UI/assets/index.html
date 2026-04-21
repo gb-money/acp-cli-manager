@@ -214,6 +214,44 @@
             </aside>
         </div>
     </main>
+    <!-- Global Modal Component -->
+    <div id="modalOverlay" class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300">
+        <div id="modalContainer" class="bg-surface-container-highest border border-outline-variant/20 rounded-[32px] p-8 max-w-[360px] w-full mx-4 shadow-2xl shadow-black/50 transform scale-95 transition-transform duration-300">
+            <div class="text-center">
+                <div id="modalIconBox" class="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner relative overflow-hidden">
+                    <div id="modalIconBg" class="absolute inset-0 opacity-10"></div>
+                    <span id="modalIcon" class="material-symbols-outlined text-5xl relative z-10"></span>
+                </div>
+                <h3 id="modalTitle" class="font-headline font-bold text-xl text-on-surface mb-3 tracking-tight"></h3>
+                <p id="modalDescription" class="text-sm text-on-surface-variant leading-relaxed mb-8 px-2"></p>
+                <button onclick="window.ACP.closeModal()" class="w-full py-3.5 px-6 rounded-2xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-bold text-sm transition-all active:scale-95 border border-outline-variant/20 shadow-lg">
+                    Dismiss
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Confirm Modal -->
+    <div id="confirmOverlay" class="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300">
+        <div id="confirmContainer" class="bg-surface-container-highest border border-outline-variant/20 rounded-[32px] p-8 max-w-[360px] w-full mx-4 shadow-2xl shadow-black/50 transform scale-95 transition-transform duration-300">
+            <div class="text-center">
+                <div id="confirmIconBox" class="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner relative overflow-hidden">
+                    <div id="confirmIconBg" class="absolute inset-0 opacity-10"></div>
+                    <span id="confirmIcon" class="material-symbols-outlined text-5xl relative z-10"></span>
+                </div>
+                <h3 id="confirmTitle" class="font-headline font-bold text-xl text-on-surface mb-3 tracking-tight"></h3>
+                <p id="confirmDescription" class="text-sm text-on-surface-variant leading-relaxed mb-8 px-2"></p>
+                <div class="flex gap-3">
+                    <button onclick="window.ACP.closeConfirm()" class="flex-1 py-3.5 px-4 rounded-2xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/20 text-on-surface font-bold text-sm transition-all active:scale-95">
+                        Cancel
+                    </button>
+                    <button id="confirmOkBtn" class="flex-1 py-3.5 px-4 rounded-2xl bg-primary text-on-primary font-bold text-sm transition-all active:scale-95 shadow-lg shadow-primary/20">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

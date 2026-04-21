@@ -920,6 +920,86 @@ window.ACP = {
         window.ACP.replaceTriggerRange('@', pill); window.ACP.showFiles(false);
     }, setWorkspaceFiles: (files) => { window.ACP.workspaceFiles = files; },
     showTyping: (show) => { window.ACP.showProcessing(show); },
+    showModal: (type, title, desc) => {
+        const overlay = document.getElementById('modalOverlay');
+        const container = document.getElementById('modalContainer');
+        const icon = document.getElementById('modalIcon');
+        const iconBg = document.getElementById('modalIconBg');
+        const titleEl = document.getElementById('modalTitle');
+        const descEl = document.getElementById('modalDescription');
+
+        const configs = {
+            warning: { icon: 'warning', color: 'text-warning', bg: 'bg-warning' },
+            info: { icon: 'info', color: 'text-primary', bg: 'bg-primary' },
+            question: { icon: 'help', color: 'text-secondary', bg: 'bg-secondary' },
+            error: { icon: 'error', color: 'text-error', bg: 'bg-error' }
+        };
+
+        const config = configs[type] || configs.info;
+        
+        icon.className = 'material-symbols-outlined text-5xl relative z-10 ' + config.color;
+        iconBg.className = 'absolute inset-0 opacity-10 ' + config.bg;
+        
+        icon.innerText = config.icon;
+        titleEl.innerText = title;
+        descEl.innerText = desc;
+
+        overlay.classList.remove('hidden');
+        setTimeout(() => {
+            overlay.classList.remove('opacity-0');
+            container.classList.remove('scale-95');
+        }, 10);
+    },
+    closeModal: () => {
+        const overlay = document.getElementById('modalOverlay');
+        const container = document.getElementById('modalContainer');
+        overlay.classList.add('opacity-0');
+        container.classList.add('scale-95');
+        setTimeout(() => overlay.classList.add('hidden'), 300);
+    },
+    showConfirm: (type, title, desc, onConfirm) => {
+        const overlay = document.getElementById('confirmOverlay');
+        const container = document.getElementById('confirmContainer');
+        const icon = document.getElementById('confirmIcon');
+        const iconBg = document.getElementById('confirmIconBg');
+        const titleEl = document.getElementById('confirmTitle');
+        const descEl = document.getElementById('confirmDescription');
+        const okBtn = document.getElementById('confirmOkBtn');
+
+        const configs = {
+            warning: { icon: 'warning', color: 'text-warning', bg: 'bg-warning' },
+            info: { icon: 'info', color: 'text-primary', bg: 'bg-primary' },
+            question: { icon: 'help', color: 'text-secondary', bg: 'bg-secondary' },
+            error: { icon: 'error', color: 'text-error', bg: 'bg-error' }
+        };
+
+        const config = configs[type] || configs.question;
+        
+        icon.className = 'material-symbols-outlined text-5xl relative z-10 ' + config.color;
+        iconBg.className = 'absolute inset-0 opacity-10 ' + config.bg;
+        
+        icon.innerText = config.icon;
+        titleEl.innerText = title;
+        descEl.innerText = desc;
+
+        okBtn.onclick = () => {
+            if (onConfirm) onConfirm();
+            window.ACP.closeConfirm();
+        };
+
+        overlay.classList.remove('hidden');
+        setTimeout(() => {
+            overlay.classList.remove('opacity-0');
+            container.classList.remove('scale-95');
+        }, 10);
+    },
+    closeConfirm: () => {
+        const overlay = document.getElementById('confirmOverlay');
+        const container = document.getElementById('confirmContainer');
+        overlay.classList.add('opacity-0');
+        container.classList.add('scale-95');
+        setTimeout(() => overlay.classList.add('hidden'), 300);
+    },
     parseStructuredPrompt: async (text) => { return text; }
 };
 
@@ -1083,7 +1163,7 @@ window.ACP.renderSessionItemHtml = (s) => {
                         <span class="flex-1">Open Diff Viewer</span>
                     </button>
                     <div class="h-px bg-outline-variant/10 my-1 mx-2"></div>
-                    <button onclick="event.stopPropagation(); if(confirm('Delete this session?')) window.sendAcp('delete-session?id=${s.id}');" class="w-full flex items-center px-4 py-2.5 text-xs text-error hover:bg-error/10 transition-colors text-left">
+                    <button onclick="event.stopPropagation(); window.ACP.showConfirm('error', 'Delete Session', 'Are you sure you want to delete this session? All conversation history will be permanently removed.', () => window.sendAcp('delete-session?id=${s.id}'));" class="w-full flex items-center px-4 py-2.5 text-xs text-error hover:bg-error/10 transition-colors text-left">
                         <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px] text-error">delete</span></div>
                         <span class="flex-1">Delete Session</span>
                     </button>

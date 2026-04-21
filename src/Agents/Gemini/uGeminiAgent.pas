@@ -156,6 +156,11 @@ begin
 
           if NewSessionId <> '' then
           begin
+            if LResult.Contains('modes') then
+              HandleModes(NewSessionId, LResult.O['modes']);
+            if LResult.Contains('models') then
+              HandleModels(NewSessionId, LResult.O['models']);
+
             DoStatusChange('Session Created: ' + NewSessionId);
             if Assigned(ACallback) then ACallback(NewSessionId);
           end

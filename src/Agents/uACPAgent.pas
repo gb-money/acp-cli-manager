@@ -59,6 +59,9 @@ type
     procedure FinalizeRestoration(const SessionId: string);
     function IsRestoringSession(const SessionId: string): Boolean;
 
+    procedure HandleModes(const ASessionId: string; AModes: TJsonObject);
+    procedure HandleModels(const ASessionId: string; AModels: TJsonObject);
+
     procedure LoadSession(const SessionId: string; ACallback: TProc<string>); virtual; abstract;
     procedure CreateNewSession(const Cwd: string; const Mode: string; ACallback: TProc<string>); virtual; abstract;
     
@@ -172,6 +175,38 @@ begin
     Result := False;
 end;
 
+procedure TACPAgent.HandleModes(const ASessionId: string; AModes: TJsonObject);
+var
+  LData: TSessionData;
+begin
+  if not Assigned(AModes) or (ASessionId = '') then Exit;
+  
+  if not FSessions.TryGetValue(ASessionId, LData) then
+    LData := Default(TSessionData);
+    
+  LData.ModesJson := AModes.ToJSON(False);
+  FSessions.AddOrSetValue(ASessionId, LData);
+  
+  if Assigned(FOnSessionMetadataUpdate) then
+    FOnSessionMetadataUpdate(Self, ASessionId);
+end;
+
+procedure TACPAgent.HandleModels(const ASessionId: string; AModels: TJsonObject);
+var
+  LData: TSessionData;
+begin
+  if not Assigned(AModels) or (ASessionId = '') then Exit;
+  
+  if not FSessions.TryGetValue(ASessionId, LData) then
+    LData := Default(TSessionData);
+    
+  LData.ModelsJson := AModels.ToJSON(False);
+  FSessions.AddOrSetValue(ASessionId, LData);
+  
+  if Assigned(FOnSessionMetadataUpdate) then
+    FOnSessionMetadataUpdate(Self, ASessionId);
+end;
+
 procedure TACPAgent.ReplyPermission(const ID, OptionId: string);
 var
   Res, Outcome: TJsonObject;
@@ -189,8 +224,9 @@ end;
 
 function TACPAgent.GetSessionList: TArray<string>;
 var
-  LBaseDir, LAgentDir, LSessionDir, LHistoryPath: string;
+  LBaseDir, LAgentDir, LSessionDir, LMetadataPath, LJsonText: string;
   LSessionIds: TStringList;
+  LMeta: TJsonObject;
 begin
   LSessionIds := TStringList.Create;
   try
@@ -205,12 +241,32 @@ begin
         var LSid := TPath.GetFileName(LSessionDir);
         if LSid.StartsWith('pending-') then Continue;
 
-        LHistoryPath := TPath.Combine(LSessionDir, 'history.json');
-        if TFile.Exists(LHistoryPath) and (TFile.GetSize(LHistoryPath) > 10) then
+        LMetadataPath := TPath.Combine(LSessionDir, 'metadata.json');
+        var LIsValid := False;
+        
+        if TFile.Exists(LMetadataPath) then
+        begin
+          try
+            LJsonText := TFile.ReadAllText(LMetadataPath, TEncoding.UTF8);
+            LMeta := TJsonObject.Parse(LJsonText) as TJsonObject;
+            try
+              // lastConversationDate 키가 존재하고 값이 있는 경우만 유효한 세션으로 간주
+              if Assigned(LMeta) and (LMeta.Contains('lastConversationDate')) then
+                LIsValid := True;
+            finally
+              LMeta.Free;
+            end;
+          except
+            LIsValid := False;
+          end;
+        end;
+
+        if LIsValid then
           LSessionIds.Add(LSid)
         else
         begin
           try
+            // 유효하지 않은(대화 기록이 없는) 세션 폴더 삭제
             TDirectory.Delete(LSessionDir, True);
           except
           end;
