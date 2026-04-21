@@ -13,7 +13,7 @@ type
 
   TAgentStatusChangeEvent = procedure(Sender: TObject; const Msg: string) of object;
   TAgentStateChangeEvent = procedure(Sender: TObject; const OldState, NewState: TAgentState) of object;
-  TAgentResponseEvent = procedure(Sender: TObject; const SessionId, Text: string) of object;
+  TAgentEndTurnEvent = procedure(Sender: TObject; const SessionId, StopReason: string) of object;
   TAgentChunkEvent = procedure(Sender: TObject; const SessionId, Chunk, FullText: string) of object;
   TAgentStreamingEndEvent = procedure(Sender: TObject; const SessionId, AType: string) of object;
   TAgentFSWriteEvent = procedure(Sender: TObject; const SessionId, Path, OldContent, NewContent: string) of object;
@@ -52,7 +52,7 @@ type
     FWorkspace: string;
     FOnStatusChange: TAgentStatusChangeEvent;
     FOnStateChange: TAgentStateChangeEvent;
-    FOnResponse: TAgentResponseEvent;
+    FOnEndTurn: TAgentEndTurnEvent;
     FOnMessageChunk: TAgentChunkEvent;
     FOnThoughtChunk: TAgentChunkEvent;
     FOnStreamingEnd: TAgentStreamingEndEvent;
@@ -69,7 +69,7 @@ type
     procedure Stop; virtual; abstract;
     procedure SendPrompt(const SessionId, AText: string); virtual; abstract;
     
-    procedure DoResponse(const SessionId, Text: string);
+    procedure DoEndTurn(const SessionId, StopReason: string); virtual;
     procedure DoMessageChunk(const SessionId, Chunk, FullText: string);
     procedure DoThoughtChunk(const SessionId, Chunk, FullText: string);
     procedure DoStreamingEnd(const SessionId, AType: string);
@@ -83,7 +83,7 @@ type
     
     property OnStatusChange: TAgentStatusChangeEvent read FOnStatusChange write FOnStatusChange;
     property OnStateChange: TAgentStateChangeEvent read FOnStateChange write FOnStateChange;
-    property OnResponse: TAgentResponseEvent read FOnResponse write FOnResponse;
+    property OnEndTurn: TAgentEndTurnEvent read FOnEndTurn write FOnEndTurn;
     property OnMessageChunk: TAgentChunkEvent read FOnMessageChunk write FOnMessageChunk;
     property OnThoughtChunk: TAgentChunkEvent read FOnThoughtChunk write FOnThoughtChunk;
     property OnStreamingEnd: TAgentStreamingEndEvent read FOnStreamingEnd write FOnStreamingEnd;
@@ -206,9 +206,9 @@ begin
   if Assigned(FOnMessageChunk) then FOnMessageChunk(Self, SessionId, Chunk, FullText);
 end;
 
-procedure TAgent.DoResponse(const SessionId, Text: string);
+procedure TAgent.DoEndTurn(const SessionId, StopReason: string);
 begin
-  if Assigned(FOnResponse) then FOnResponse(Self, SessionId, Text);
+  if Assigned(FOnEndTurn) then FOnEndTurn(Self, SessionId, StopReason);
 end;
 
 procedure TAgent.DoStateChange(const OldState, NewState: TAgentState);

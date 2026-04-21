@@ -29,10 +29,11 @@ type
     FAgents: TDictionary<TAgentType, TAgent>;
     FInitialized: Boolean;
     
-    procedure DoRawDataForDebug(Sender: TObject; Direction: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const RawText: string);
     procedure DoOpenExplorer(Sender: TObject);
     procedure DoOpenFileViewer(Sender: TObject; const APath: string);
     procedure DoOpenDiffViewer(Sender: TObject; const ASessionId, APath, AHashId: string);
+    procedure DoUIReady(Sender: TObject);
+    procedure DoRawDataForDebug(Sender: TObject; Direction: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const RawText: string);
     function GetOrCreateAgent(AType: TAgentType): TAgent;
   public
   end;
@@ -80,6 +81,7 @@ begin
   FUIControl.OnOpenExplorer := DoOpenExplorer;
   FUIControl.OnOpenFileViewer := DoOpenFileViewer;
   FUIControl.OnOpenDiffViewer := DoOpenDiffViewer;
+  FUIControl.OnUIReady := DoUIReady;
 
   // Agent Control handles conversation UI logic
   FAgentControl := TAgentControl.Create(WebBrowserMain, FSessionMgr);
@@ -105,6 +107,12 @@ begin
     else Result := nil;
   end
   else Result := LAgent;
+end;
+
+procedure TS.DoUIReady(Sender: TObject);
+begin
+  if Assigned(FAgentControl) then
+    FAgentControl.UpdateSessionList;
 end;
 
 procedure TS.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
@@ -169,7 +177,7 @@ begin
   if not FInitialized then begin
     FInitialized := True;
     FSessionMgr.SelectSession(nil);
-    LHtmlPath := TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'index.html');
+    LHtmlPath := TPath.Combine(TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'assets'), 'index.html');
     if TFile.Exists(LHtmlPath) then WebBrowserMain.Navigate('file://' + LHtmlPath);
     if Assigned(frmDebugRPC) then frmDebugRPC.Show;
   end;

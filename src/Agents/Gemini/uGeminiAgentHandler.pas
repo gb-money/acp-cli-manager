@@ -12,6 +12,7 @@ type
     procedure ResumeSession(ASession: TSessionInfo); override;
     procedure Prompt(ASession: TSessionInfo; const AText: string); override;
     procedure ProcessRequestPermission(const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray); override;
+    procedure EndTurn(ASession: TSessionInfo; const StopReason: string);
   end;
 
 implementation
@@ -75,7 +76,6 @@ begin
               begin
                 LGemini.SetSessionLogPath(LSid, ASession.LogPath);
                 ASession.IsLoading := False;
-                ASession.IsRestoring := False;
                 ASession.IsActive := True;
                 ASession.LastHistoryTick := 0;
                 if Assigned(FAgentControl) then
@@ -155,41 +155,38 @@ begin
       // 3. Proceed with CreateNewSession if Ready
       if LGemini.State = asReady then
       begin
-        TThread.Queue(nil, TThreadProcedure(procedure
+        LGemini.Workspace := AWorkspaceDir;
+        LGemini.CreateNewSession(AWorkspaceDir, '', procedure(SessionId: string)
+        var LSid: string;
         begin
-          LGemini.Workspace := AWorkspaceDir;
-          LGemini.CreateNewSession(AWorkspaceDir, '', procedure(SessionId: string)
-          var LSid: string;
+          LSid := SessionId;
+          TThread.Queue(nil, TThreadProcedure(procedure 
+          var
+            LOldId: string;
           begin
-            LSid := SessionId;
-            TThread.Queue(nil, TThreadProcedure(procedure 
-            var
-              LOldId: string;
-            begin
-              if LSid <> '' then begin 
-                // 1. Capture old ID and Update state
-                LOldId := LPendingSession.SessionId;
-                LPendingSession.IsLoading := False; 
-                LPendingSession.IsActive := True; 
-                
-                // 2. Finalize to real Session ID (Back-end)
-                FSessionMgr.FinalizeSessionId(LPendingSession, LSid); 
-                LGemini.SetSessionLogPath(LSid, LPendingSession.LogPath); 
-                
-                // 3. Sync UI: Remove old ID entry and Add new finalized one
-                if Assigned(FAgentControl) then begin
-                  (FAgentControl as TAgentControl).DeleteSessionUI(LOldId);
-                  (FAgentControl as TAgentControl).AddSession(LPendingSession); 
-                  (FAgentControl as TAgentControl).UpdateFileList(AWorkspaceDir); 
-                end;
-              end
-              else begin
-                if Assigned(FAgentControl) then
-                  (FAgentControl as TAgentControl).DeleteSession(LPendingSession);
+            if LSid <> '' then begin 
+              // 1. Capture old ID and Update state
+              LOldId := LPendingSession.SessionId;
+              LPendingSession.IsLoading := False; 
+              LPendingSession.IsActive := True; 
+              
+              // 2. Finalize to real Session ID (Back-end)
+              FSessionMgr.FinalizeSessionId(LPendingSession, LSid); 
+              LGemini.SetSessionLogPath(LSid, LPendingSession.LogPath); 
+              
+              // 3. Sync UI: Remove old ID entry and Add new finalized one
+              if Assigned(FAgentControl) then begin
+                (FAgentControl as TAgentControl).DeleteSessionUI(LOldId);
+                (FAgentControl as TAgentControl).AddSession(LPendingSession); 
+                (FAgentControl as TAgentControl).UpdateFileList(AWorkspaceDir); 
               end;
-            end));
-          end);
-        end));
+            end
+            else begin
+              if Assigned(FAgentControl) then
+                (FAgentControl as TAgentControl).DeleteSession(LPendingSession);
+            end;
+          end));
+        end);
       end
       else
       begin
@@ -356,13 +353,23 @@ begin
           begin
             TThread.Queue(nil, TThreadProcedure(procedure
             begin
-              LTargetSession.IsWaitForResponse := False;
-              LGemini.DoResponse(LSid, LD_Callback.FullMessage + '||STOP:' + LStopReason);
+              EndTurn(LTargetSession, LStopReason);
             end));
           end;
         end;
       end);
   finally LParams.Free; end;
+end;
+
+procedure TGeminiAgentHandler.EndTurn(ASession: TSessionInfo; const StopReason: string);
+begin
+  if not Assigned(ASession) then Exit;
+
+  if FAgent is TACPAgent then
+    TACPAgent(FAgent).EndTurn(ASession.SessionId, StopReason);
+
+  if Assigned(FAgentControl) then
+    (FAgentControl as TAgentControl).UpdateSession(ASession);
 end;
 
 end.

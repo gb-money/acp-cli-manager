@@ -30,7 +30,7 @@ type
     procedure DoAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
     procedure DoAgentThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
     procedure DoAgentStreamingEnd(Sender: TObject; const SessionId, AType: string);
-    procedure DoAgentResponse(Sender: TObject; const SessionId, Text: string);
+    procedure DoAgentEndTurn(Sender: TObject; const SessionId, StopReason: string);
     procedure DoAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
     procedure DoAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
     procedure DoAgentRawData(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string);
@@ -149,7 +149,7 @@ begin
     AAgent.OnMessageChunk := DoAgentMessageChunk;
     AAgent.OnThoughtChunk := DoAgentThoughtChunk;
     AAgent.OnStreamingEnd := DoAgentStreamingEnd;
-    AAgent.OnResponse := DoAgentResponse;
+    AAgent.OnEndTurn := DoAgentEndTurn;
     if AAgent is TACPAgent then
     begin
       TACPAgent(AAgent).OnRawData := DoAgentRawData;
@@ -228,7 +228,7 @@ procedure TAgentControl.DoAgentMessageChunk(Sender: TObject; const SessionId, Ch
 var LSession: TSessionInfo;
 begin
   LSession := FSessionMgr.GetSessionById(SessionId);
-  if Assigned(LSession) then
+  if Assigned(LSession) and (not LSession.IsRestoring) then
   begin
     LSession.UpdateConversationDate;
     if not LSession.IsMessageStreaming then
@@ -242,7 +242,7 @@ procedure TAgentControl.DoAgentThoughtChunk(Sender: TObject; const SessionId, Ch
 var LSession: TSessionInfo;
 begin
   LSession := FSessionMgr.GetSessionById(SessionId);
-  if Assigned(LSession) then
+  if Assigned(LSession) and (not LSession.IsRestoring) then
   begin
     LSession.UpdateConversationDate;
     if not LSession.IsThoughtStreaming then
@@ -257,24 +257,22 @@ begin
   EndStreaming(SessionId, AType);
 end;
 
-procedure TAgentControl.DoAgentResponse(Sender: TObject; const SessionId, Text: string);
+procedure TAgentControl.DoAgentEndTurn(Sender: TObject; const SessionId, StopReason: string);
 var
-  LActualText, LStopReason, LSid: string;
   LSession: TSessionInfo;
 begin
-  LActualText := Text; LStopReason := 'end_turn'; LSid := SessionId;
-  var LStopIdx := Text.IndexOf('||STOP:');
-  if LStopIdx >= 0 then begin LActualText := Text.Substring(0, LStopIdx); LStopReason := Text.Substring(LStopIdx + 7); end;
-  LSession := FSessionMgr.GetSessionById(LSid);
-  
+  LSession := FSessionMgr.GetSessionById(SessionId);
   if Assigned(LSession) then
   begin
-    LSession.IsWaitForResponse := False;
-    if LSession.IsThoughtStreaming then EndStreaming(LSid, 'thought');
-    if LSession.IsMessageStreaming then EndStreaming(LSid, 'message');
+    if LSession.IsThoughtStreaming then EndStreaming(SessionId, 'thought');
+    if LSession.IsMessageStreaming then EndStreaming(SessionId, 'message');
   end;
   
-  System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateMessageStreaming(LSid, LActualText, 'ai', LStopReason); ShowTyping(False); if Assigned(LSession) then UpdateSession(LSession); end));
+  System.Classes.TThread.Queue(nil, TThreadProcedure(procedure 
+  begin 
+    ShowTyping(False); 
+    if Assigned(LSession) then UpdateSession(LSession); 
+  end));
 end;
 
 procedure TAgentControl.DoAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
@@ -388,20 +386,25 @@ begin
 end;
 
 procedure TAgentControl.HandleSendMessage(const Params: TDictionary<string, string>);
-var LText: string; LActive: TSessionInfo; LHandler: TAgentHandler;
+var LText, LBase64: string; LActive: TSessionInfo; LHandler: TAgentHandler;
 begin
   if Params.TryGetValue('text', LText) and (LText <> '') then begin
     LActive := FSessionMgr.ActiveSession;
     if Assigned(LActive) and Assigned(LActive.Agent) then begin
       LActive.IsWaitForResponse := True; UpdateSession(LActive);
-      ExecuteJS('window.ACP.lastAiMsgId = ""; window.ACP.lastAiThoughtId = ""; window.ACP.lastBlockType = "";');
-      ShowTyping(True); 
       
       LHandler := GetHandler(LActive.AgentType);
       if Assigned(LHandler) then
         LHandler.Prompt(LActive, LText)
       else
         LActive.Agent.SendPrompt(LActive.SessionId, LText);
+
+      // Render user message in UI immediately via JS
+      LBase64 := TNetEncoding.Base64.EncodeBytesToString(TEncoding.UTF8.GetBytes(LText)).Replace(#13, '').Replace(#10, '');
+      ExecuteJS(Format('window.ACP.addUserMessage("%s")', [LBase64]));
+      
+      ExecuteJS('window.ACP.lastAiMsgId = ""; window.ACP.lastAiThoughtId = ""; window.ACP.lastBlockType = "";');
+      ShowTyping(True);
     end;
   end;
 end;

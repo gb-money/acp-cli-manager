@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>ACP Agent Manager</title>
+    
+    <!-- Dependencies -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-dark.min.css">
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <link href="https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg" rel="icon">
+
+    <!-- Project Assets -->
+    <link href="css/index.css" rel="stylesheet">
+    <script src="js/tailwind.config.js"></script>
+    <script src="js/index.ACP.js"></script>
+    <script src="js/index.shortcut.js"></script>
+</head>
+
+<body class="bg-surface text-on-surface font-body h-screen flex overflow-hidden antialiased selection:bg-primary/30 selection:text-primary">
+    <nav class="bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-72 flex-shrink-0 flex flex-col z-50 shadow-2xl shadow-black/60 relative">
+        <div class="p-6 pb-4">
+            <div class="flex items-center gap-3 mb-6">
+                <button class="w-10 h-10 rounded-lg bg-surface-container-high hover:bg-surface-container-highest flex items-center justify-center border border-outline-variant/20 shadow-lg transition-colors cursor-pointer focus:outline-none" title="Toggle Sidebar">
+                    <span class="material-symbols-outlined text-primary text-xl">menu</span>
+                </button>
+                <div>
+                    <h1 class="font-headline font-bold text-lg tracking-tight text-on-surface leading-tight">ACP Manager</h1>
+                    <p class="text-xs font-label text-on-surface-variant">Nocturnal Architect</p>
+                </div>
+            </div>
+            <div class="relative w-full group">
+                <button onclick="window.ACP.toggleDropdown(event)" class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all duration-200 group active:scale-95">
+                    <span class="material-symbols-outlined text-lg group-hover:text-primary transition-colors">add</span>
+                    <span class="font-headline font-medium text-sm">New Chat</span>
+                </button>
+                <div id="newChatDropdown" class="hidden absolute left-0 top-full mt-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[100] opacity-0 invisible transition-all duration-200">
+                    <div class="py-1">
+                        <button onclick="window.sendAcp('new-chat?agent=gemini'); window.ACP.toggleDropdown()" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left group/item">
+                            <div class="flex items-center gap-3"><img src="https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg" class="w-[18px] h-[18px] object-contain group-hover/item:scale-110 transition-transform" alt="Gemini">Gemini CLI</div>
+                            <span class="text-[10px] font-mono opacity-40 group-hover/item:opacity-60 transition-opacity">Alt+N+G</span>
+                        </button>
+                        <button class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface transition-colors text-left group/item opacity-30 cursor-not-allowed" disabled>
+                            <div class="flex items-center gap-3"><img src="https://cdn.agentclientprotocol.com/registry/v1/latest/claude-acp.svg" class="w-[18px] h-[18px] object-contain" alt="Claude">Claude</div>
+                        </button>
+                        <button class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface transition-colors text-left group/item opacity-30 cursor-not-allowed" disabled>
+                            <div class="flex items-center gap-3"><img src="https://cdn.agentclientprotocol.com/registry/v1/latest/codex-acp.svg" class="w-[18px] h-[18px] object-contain" alt="Codex">Codex CLI</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="sessionListContainer" class="flex-1 overflow-y-auto px-3 space-y-1 pb-6"></div>
+        <div class="p-4 mt-auto border-t border-white/5 flex items-center justify-between gap-1">
+            <div class="flex items-center gap-1">
+                <button onclick="window.sendUi('open-explorer')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="File Explorer">
+                    <span class="material-symbols-outlined text-lg">folder</span>
+                </button>
+                <button onclick="window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId)" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="Diff Viewer">
+                    <span class="material-symbols-outlined text-lg">text_compare</span>
+                </button>
+            </div>
+            <button class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="Settings">
+                <span class="material-symbols-outlined text-lg group-hover:rotate-45 transition-transform duration-300">settings</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col min-w-0 bg-surface relative z-0">
+        <header class="h-16 flex items-center justify-between px-8 w-full z-10 bg-surface/80 backdrop-blur-md border-b border-outline-variant/10 shrink-0">
+            <div class="flex items-center gap-4">
+                <h2 class="font-headline font-semibold text-on-surface text-lg tracking-tight">ACP Agent Manager</h2>
+                <div class="h-4 w-[1px] bg-outline-variant/30 hidden md:block"></div>
+                <div class="hidden md:flex items-center gap-2 text-sm text-on-surface-variant"><span class="material-icons text-[16px]">chat</span><span id="activeAgentHeader">No Session</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="relative hidden md:block" onclick="window.ACP.toggleSearch(true)">
+                    <span class="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+                    <input class="bg-surface-container-lowest border border-outline-variant/20 rounded-full py-1.5 pl-9 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary w-48 transition-all hover:border-outline-variant/40 cursor-pointer" placeholder="Search Conversations..." type="text" readonly>
+                </div>
+                <button onclick="window.ACP.toggleHistory()" class="w-10 h-10 rounded-lg bg-surface-container-high hover:bg-surface-container-highest flex items-center justify-center border border-outline-variant/20 shadow-lg transition-colors group" title="Toggle File History">
+                    <span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary text-xl">side_navigation</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 flex flex-row overflow-hidden relative">
+            <div class="flex-1 flex flex-col min-w-0 relative">
+                <div id="mainChatCanvas" class="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-2 scroll-smooth hidden">
+                    <div id="mainChatCanvasInner" class="max-w-4xl mx-auto flex flex-col"></div>
+                </div>
+                <div id="mainEmptyArea" class="flex-1 flex items-center justify-center">
+                    <div class="text-center space-y-4">
+                        <div class="w-16 h-16 bg-surface-container-high rounded-full flex items-center justify-center mx-auto border border-outline-variant/20 shadow-xl">
+                            <span class="material-symbols-outlined text-3xl text-primary">chat_bubble</span>
+                        </div>
+                        <h3 class="text-lg font-medium">Ready to start?</h3>
+                        <p class="text-sm text-on-surface-variant">Select a conversation from the sidebar.</p>
+                    </div>
+                </div>
+                <div id="mainInputArea" class="shrink-0 p-4 md:p-8 bg-gradient-to-t from-surface via-surface to-transparent pt-12 z-30 hidden">
+                    <div class="max-w-4xl mx-auto">
+                        <div class="flex items-center mb-2 px-1 gap-2">
+                            <div class="relative"><button id="modelSelectBtn" onclick="document.getElementById('modelDropdown').classList.toggle('hidden')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-lowest border border-outline-variant/30 text-xs font-medium text-on-surface hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-[16px] text-primary">smart_toy</span><span>Select Model</span><span class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_arrow_down</span></button>
+                                <div id="modelDropdown" class="hidden absolute left-0 bottom-full mb-2 w-72 bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[90] max-h-96 overflow-y-auto">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="relative bg-surface-container-lowest border border-outline-variant/30 rounded-2xl shadow-2xl shadow-black/50 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-all duration-300">
+                            <div id="commandDropdown" class="hidden absolute left-0 bottom-full mb-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-[80]">
+                                <div id="commandListContainer" class="max-h-96 overflow-y-auto"></div>
+                            </div>
+                            <div id="fileDropdown" class="hidden absolute left-0 bottom-full mb-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-[80]">
+                                <div id="fileListContainer" class="max-h-96 overflow-y-auto"></div>
+                            </div>
+                            <div id="userInput" contenteditable="true" class="w-full bg-transparent text-on-surface placeholder:text-on-surface-variant/50 border-none outline-none py-4 px-4 min-h-[60px] max-h-[200px] text-sm font-body leading-relaxed" placeholder="Message Gemini-CLI or type '/' for commands..."></div>
+                            <div class="flex items-center justify-between px-3 pb-3 pt-1">
+                                <div class="flex items-center gap-1"><button id="attachBtn" onclick="window.sendUi('open-file-dialog')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Attach file"><span class="material-icons text-[20px]">attach_file</span></button><button id="toolsBtn" onclick="window.ACP.showToolbox();" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Use Tool"><span class="material-icons text-[20px]">construction</span></button>
+                                    <div class="h-4 w-[1px] bg-outline-variant/30 mx-1"></div><span class="px-2 py-1 rounded bg-surface-container text-[10px] font-mono text-on-surface-variant border border-outline-variant/20 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-primary inline-block"></span> Local Context</span>
+                                </div>
+                                <button id="send-button" class="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-on-primary hover:bg-primary-container shadow-lg shadow-primary/20 transition-all duration-200 active:scale-95 group"><span class="material-symbols-outlined text-[20px]">send</span></button>
+                            </div>
+                        </div>
+                        <div class="text-center mt-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <aside id="searchSidebar" class="hidden w-80 bg-surface border-l border-outline-variant/10 flex flex-col h-full shadow-2xl z-20 overflow-hidden">
+                <div class="shrink-0 p-5 border-b border-outline-variant/10 bg-surface-container/30 relative z-[100]">
+                    <div class="flex items-center justify-between mb-5">
+                        <h2 class="text-sm font-headline font-bold text-on-surface flex items-center gap-2 uppercase tracking-wider">
+                            <span class="material-icons text-primary text-[20px]">search</span> Search
+                        </h2>
+                        <button onclick="window.ACP.toggleSearch(false)" class="text-on-surface-variant hover:text-white"><span class="material-icons text-[18px]">close</span></button>
+                    </div>
+                    <div class="relative mb-5">
+                        <input type="text" id="searchQuery" class="w-full bg-surface-container-highest text-on-surface border-none rounded-xl py-2.5 pl-10 pr-4 text-xs focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-on-surface-variant/40" placeholder="Search..." onkeyup="if(event.key==='Enter') window.ACP.executeSearch()">
+                        <span class="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40 text-[16px]">search</span>
+                    </div>
+
+                    <div class="bg-surface-container-low/50 rounded-xl border border-outline-variant/10 overflow-visible">
+                        <button onclick="window.ACP.toggleSearchOptionsAccordion()" class="w-full flex items-center justify-between p-3 text-left hover:bg-surface-container-high transition-colors rounded-t-xl">
+                            <span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">Search Options</span>
+                            <span id="searchOptionsAccordionChevron" class="material-icons text-on-surface-variant/40 text-[18px] transition-transform" style="transform: rotate(180deg)">expand_more</span>
+                        </button>
+                        <div id="searchOptionsAccordionContent" class="px-3 pb-4 pt-1 space-y-4">
+                            <div class="flex flex-col gap-3 mt-1">
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" id="searchThisSessionOnly" onchange="window.ACP.toggleSearchSessionOptions()" class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest">
+                                    <span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Search In Specific Session</span>
+                                </label>
+                                <div id="searchSessionDropdownContainer" class="hidden relative">
+                                    <button id="searchSessionTrigger" onclick="window.ACP.toggleSearchSessionMenu()" class="w-full flex items-center justify-between gap-2 py-2 px-3 rounded-lg border border-outline-variant/20 bg-surface-container-highest text-[10px] text-on-surface hover:bg-surface-container-high transition-all">
+                                        <span class="truncate">Select Session</span>
+                                        <span class="material-icons text-on-surface-variant text-[14px]">expand_more</span>
+                                    </button>
+                                    <div id="searchSessionMenu" class="hidden absolute left-0 top-full mt-1 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[110] max-h-40 overflow-y-auto">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="h-px bg-outline-variant/10"></div>
+                            <div class="flex items-center gap-4">
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchCase" class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Case Sensitive</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchRegex" class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Regex</span></label>
+                            </div>
+                            <div class="h-px bg-outline-variant/10"></div>
+                            <div class="flex flex-col gap-2">
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchUser" checked class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include My Messages</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchAgent" checked class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include Agent Responses</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchThought" class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include Thoughts</span></label>
+                            </div>
+                            <div class="h-px bg-outline-variant/10"></div>
+                            <div class="flex flex-col gap-2">
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchActive" checked class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include Active Sessions</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchInactive" checked class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include Inactive Sessions</span></label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="searchResults" class="flex-1 overflow-y-auto p-3 space-y-3 bg-surface/50 relative z-0">
+                    <div id="searchEmptyState" class="h-full flex flex-col items-center justify-center text-center p-8 opacity-40"><span class="material-icons text-4xl mb-4">manage_search</span>
+                        <p class="text-xs font-medium">Ready to search</p>
+                    </div>
+                    <div id="searchLoadingState" class="hidden h-full flex flex-col items-center justify-center text-center p-8">
+                        <div class="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin mb-4">
+                        </div>
+                        <p class="text-xs font-medium">Searching...</p>
+                    </div>
+                    <div id="searchResultsList" class="hidden space-y-3"></div>
+                </div>
+            </aside>
+
+            <aside id="historySidebar" class="hidden w-80 bg-surface-container-lowest border-l border-outline-variant/10 flex flex-col h-full overflow-hidden shadow-xl z-20">
+                <div class="p-4 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low/50 backdrop-blur-md sticky top-0">
+                    <h3 class="font-headline font-semibold text-on-surface text-sm tracking-wide uppercase">File History
+                    </h3><button onclick="window.ACP.toggleHistory()" class="text-on-surface-variant hover:text-white"><span class="material-icons text-[18px]">close</span></button>
+                </div>
+                <div id="fileHistoryContainer" class="flex-1 overflow-y-auto p-3 space-y-2">
+                    <div class="p-8 text-center text-xs text-on-surface-variant italic opacity-30">No history available
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </main>
+</body>
+
+</html>

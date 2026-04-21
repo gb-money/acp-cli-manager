@@ -49,6 +49,9 @@ type
     procedure Connect; override;
     procedure Stop; override;
 
+    procedure EndTurn(const SessionId, StopReason: string); virtual;
+    procedure UpdateSession(ASession: TSessionInfo); virtual;
+
     function Start: Boolean; virtual; // Make virtual for subclass overrides
     procedure ReplyPermission(const ID, OptionId: string);
     procedure SetSessionLogPath(const SessionId, APath: string);
@@ -95,6 +98,25 @@ end;
 procedure TACPAgent.Connect;
 begin
   Start;
+end;
+
+procedure TACPAgent.EndTurn(const SessionId, StopReason: string);
+var
+  LSession: TSessionInfo;
+begin
+  LSession := FindSessionById(SessionId);
+  if Assigned(LSession) then
+  begin
+    LSession.IsWaitForResponse := False;
+    UpdateSession(LSession);
+  end;
+  
+  DoEndTurn(SessionId, StopReason);
+end;
+
+procedure TACPAgent.UpdateSession(ASession: TSessionInfo);
+begin
+  // Virtual method to be overridden by handler or UI control
 end;
 
 function TACPAgent.Start: Boolean;
@@ -364,84 +386,72 @@ var
   Data: TSessionData;
   I, LIdx: Integer;
   Changed: Boolean;
+  LSession: TSessionInfo;
+  LIsRestoring: Boolean;
 begin
-  if not Assigned(Params) or not Params.Contains('update') then Exit;
+  if not Assigned(Params) then Exit;
   
   SessionId := Params.S['sessionId'];
   if SessionId = '' then Exit;
 
-  if Params.Items[Params.IndexOf('update')].Typ <> jdtObject then Exit;
+  LIdx := Params.IndexOf('update');
+  if (LIdx < 0) or (Params.Items[LIdx].Typ <> jdtObject) then Exit;
+  
   UpdateObj := Params.O['update'];
   UpdateType := UpdateObj.S['sessionUpdate'];
   
   if not FSessions.TryGetValue(SessionId, Data) then
     Data := Default(TSessionData);
 
+  LSession := FindSessionById(SessionId);
+  LIsRestoring := Assigned(LSession) and LSession.IsRestoring;
   Changed := False;
 
-  LIdx := UpdateObj.IndexOf('availableCommands');
-  if (LIdx >= 0) and (UpdateObj.Items[LIdx].Typ = jdtArray) then
-  begin
-    Data.CommandsJson := UpdateObj.A['availableCommands'].ToJSON(False);
-    Changed := True;
-  end;
-
-  LIdx := UpdateObj.IndexOf('models');
-  if (LIdx >= 0) and (UpdateObj.Items[LIdx].Typ = jdtObject) then
-  begin
-    Data.ModelsJson := UpdateObj.O['models'].ToJSON(False);
-    Changed := True;
-  end;
-
-  LIdx := UpdateObj.IndexOf('modes');
-  if (LIdx >= 0) and (UpdateObj.Items[LIdx].Typ = jdtObject) then
-  begin
-    Data.ModesJson := UpdateObj.O['modes'].ToJSON(False);
-    Changed := True;
-  end;
+  // --- Strict Dispatch based on UpdateType ---
 
   if UpdateType = 'available_commands_update' then
   begin
-    if Data.LastChunkType <> '' then DoStreamingEnd(SessionId, Data.LastChunkType);
+    LIdx := UpdateObj.IndexOf('availableCommands');
+    if LIdx >= 0 then
+    begin
+      Data.CommandsJson := UpdateObj.A['availableCommands'].ToJSON(False);
+      Changed := True;
+    end;
+
+    if LIsRestoring then
+    begin
+      if Assigned(LSession) then
+      begin
+        LSession.IsRestoring := False;
+        LSession.IsWaitForResponse := False;
+        TThread.Queue(nil, procedure begin UpdateSession(LSession); end);
+      end;
+      LIsRestoring := False;
+    end;
+
+    if (Data.LastChunkType <> '') and (not LIsRestoring) then DoStreamingEnd(SessionId, Data.LastChunkType);
     Data.CurrentBlockText := '';
     Data.LastChunkType := '';
     Changed := True;
   end
-  else if (UpdateType = 'tool_call_update') or (UpdateType = 'tool_call') then
-  begin
-    if Data.LastChunkType <> '' then DoStreamingEnd(SessionId, Data.LastChunkType);
-    Data.CurrentBlockText := '';
-    Data.LastChunkType := '';
-    if (UpdateType = 'tool_call_update') and UpdateObj.Contains('content') and (UpdateObj.Items[UpdateObj.IndexOf('content')].Typ = jdtArray) then
-    begin
-      for I := 0 to UpdateObj.A['content'].Count - 1 do
-      begin
-        if (UpdateObj.A['content'].Items[I].Typ = jdtObject) and (UpdateObj.A['content'].O[I].S['type'] = 'diff') then
-        begin
-          ContentObj := UpdateObj.A['content'].O[I];
-          DoFSWrite(SessionId, ContentObj.S['path'], ContentObj.S['oldText'], ContentObj.S['newText']);
-        end;
-      end;
-    end;
-  end
-  else if UpdateObj.Contains('content') then
+
+  else if (UpdateType = 'agent_thought_chunk') or (UpdateType = 'agent_message_chunk') or (UpdateType = 'user_message_chunk') then
   begin
     ChunkText := '';
-    I := UpdateObj.IndexOf('content');
-    case UpdateObj.Items[I].Typ of
-      jdtObject: 
-        begin
-          ContentObj := UpdateObj.O['content'];
-          ChunkText := ContentObj.S['text'];
-        end;
-      jdtArray:
-        begin
+    LIdx := UpdateObj.IndexOf('content');
+    if LIdx >= 0 then
+    begin
+      case UpdateObj.Items[LIdx].Typ of
+        jdtObject: ChunkText := UpdateObj.O['content'].S['text'];
+        jdtArray:
           for I := 0 to UpdateObj.A['content'].Count - 1 do
             if UpdateObj.A['content'].Items[I].Typ = jdtObject then
               ChunkText := ChunkText + UpdateObj.A['content'].O[I].S['text'];
-        end;
+      end;
     end;
     
+    if ChunkText = '' then Exit;
+
     CleanType := '';
     if UpdateType = 'agent_thought_chunk' then CleanType := 'thought'
     else if UpdateType = 'agent_message_chunk' then CleanType := 'message'
@@ -451,7 +461,7 @@ begin
     begin
       if Data.LastChunkType <> CleanType then
       begin
-        if Data.LastChunkType <> '' then DoStreamingEnd(SessionId, Data.LastChunkType);
+        if (Data.LastChunkType <> '') and (not LIsRestoring) then DoStreamingEnd(SessionId, Data.LastChunkType);
         Data.CurrentBlockText := '';
         Data.LastChunkType := CleanType;
       end;
@@ -470,15 +480,66 @@ begin
       if CleanType = 'thought' then
       begin
         Data.FullThought := Data.FullThought + ChunkText;
-        DoThoughtChunk(SessionId, ChunkText, LFullText);
+        if not LIsRestoring then DoThoughtChunk(SessionId, ChunkText, LFullText);
       end
       else
       begin
         if CleanType = 'message' then Data.FullMessage := Data.FullMessage + ChunkText;
-        DoMessageChunk(SessionId, ChunkText, LFullText);
+        if not LIsRestoring then DoMessageChunk(SessionId, ChunkText, LFullText);
       end;
     end;
+  end
+
+  else if (UpdateType = 'tool_call_update') or (UpdateType = 'tool_call') then
+  begin
+    if (Data.LastChunkType <> '') and (not LIsRestoring) then DoStreamingEnd(SessionId, Data.LastChunkType);
+    Data.CurrentBlockText := '';
+    Data.LastChunkType := '';
+    
+    LIdx := UpdateObj.IndexOf('content');
+    if (UpdateType = 'tool_call_update') and (LIdx >= 0) and (UpdateObj.Items[LIdx].Typ = jdtArray) then
+    begin
+      for I := 0 to UpdateObj.A['content'].Count - 1 do
+      begin
+        if (UpdateObj.A['content'].Items[I].Typ = jdtObject) and (UpdateObj.A['content'].O[I].S['type'] = 'diff') then
+        begin
+          ContentObj := UpdateObj.A['content'].O[I];
+          DoFSWrite(SessionId, ContentObj.S['path'], ContentObj.S['oldText'], ContentObj.S['newText']);
+        end;
+      end;
+    end;
+  end
+
+  else if UpdateType = 'models_update' then
+  begin
+    LIdx := UpdateObj.IndexOf('models');
+    if LIdx >= 0 then
+    begin
+      Data.ModelsJson := UpdateObj.O['models'].ToJSON(False);
+      Changed := True;
+    end;
+  end
+
+  else if UpdateType = 'modes_update' then
+  begin
+    LIdx := UpdateObj.IndexOf('modes');
+    if LIdx >= 0 then
+    begin
+      Data.ModesJson := UpdateObj.O['modes'].ToJSON(False);
+      Changed := True;
+    end;
+  end
+
+  else
+  begin
+    // Unknown UpdateType
+    DoStatusChange('Unknown session update type: ' + UpdateType);
   end;
+
+  FSessions.AddOrSetValue(SessionId, Data);
+  if Changed and Assigned(FOnSessionMetadataUpdate) then
+    FOnSessionMetadataUpdate(Self, SessionId);
+end;
 
   FSessions.AddOrSetValue(SessionId, Data);
   if Changed and Assigned(FOnSessionMetadataUpdate) then

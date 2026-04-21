@@ -18,7 +18,6 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo Copying HTML Files...
-copy /Y "src\UI\index.html" "Win32\Debug\index.html"
 copy /Y "src\UI\explorer.html" "Win32\Debug\explorer.html"
 copy /Y "src\UI\file_viewer.html" "Win32\Debug\file_viewer.html"
 copy /Y "src\UI\diff_view.html" "Win32\Debug\diff_view.html"

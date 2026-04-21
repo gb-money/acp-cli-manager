@@ -347,7 +347,7 @@ begin
           LStopReason := AResponse.O['result'].S['stopReason'];
           if LStopReason = '' then LStopReason := 'end_turn';
           if Sessions.TryGetValue(SessionId, LD_Callback) then
-            DoResponse(SessionId, LD_Callback.FullMessage + '||STOP:' + LStopReason);
+            EndTurn(SessionId, LStopReason);
         end;
       end);
   finally Params.Free; end;

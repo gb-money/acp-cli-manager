@@ -27,7 +27,7 @@ type
     FCurrentSessionId: string;
     procedure DoStatusChange(Sender: TObject; const Msg: string);
     procedure DoStateChange(Sender: TObject; const OldState, NewState: TAgentState);
-    procedure DoResponse(Sender: TObject; const SessionId, Text: string);
+    procedure DoEndTurn(Sender: TObject; const SessionId, StopReason: string);
     procedure DoThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
     procedure DoMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
     procedure DoRawData(Sender: TObject; const Direction, RawText: string);
@@ -47,7 +47,7 @@ begin
   FAgent := TGeminiAgent.Create(Self);
   FAgent.OnStatusChange := DoStatusChange;
   FAgent.OnStateChange := DoStateChange;
-  FAgent.OnResponse := DoResponse;
+  FAgent.OnEndTurn := DoEndTurn;
   FAgent.OnThoughtChunk := DoThoughtChunk;
   FAgent.OnMessageChunk := DoMessageChunk;
   FAgent.OnRawData := DoRawData;
@@ -146,9 +146,9 @@ begin
   System.Classes.TThread.Queue(nil, procedure begin lblStatus.Text := 'Receiving... (' + IntToStr(Length(FullText)) + ')'; end);
 end;
 
-procedure TfrmTestGemini.DoResponse(Sender: TObject; const SessionId, Text: string);
+procedure TfrmTestGemini.DoEndTurn(Sender: TObject; const SessionId, StopReason: string);
 begin
-  AddLogLine('AI: ' + Text);
+  AddLogLine('AI Turn Ended: ' + StopReason);
   System.Classes.TThread.Queue(nil, procedure begin lblStatus.Text := 'Ready'; end);
 end;
 
