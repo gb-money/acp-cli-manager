@@ -75,14 +75,14 @@ begin
 end;
 
 procedure TProcessReaderThread.QueueOutput(const AText: string);
+var
+  LCapturedOwner: TAgentProcess;
 begin
+  LCapturedOwner := FOwner;
   TThread.Queue(nil, procedure
-  var
-    CurrentOwner: TAgentProcess;
   begin
-    CurrentOwner := FOwner;
-    if Assigned(CurrentOwner) and not CurrentOwner.FIsStopping and Assigned(CurrentOwner.FOnOutput) then
-      CurrentOwner.FOnOutput(CurrentOwner, AText);
+    if Assigned(LCapturedOwner) and not LCapturedOwner.FIsStopping and Assigned(LCapturedOwner.FOnOutput) then
+      LCapturedOwner.FOnOutput(LCapturedOwner, AText);
   end);
 end;
 
@@ -112,17 +112,19 @@ begin
   end;
 
   // 종료 알림 (종료 중이 아닐 때만)
-  if Assigned(FOwner) and not FOwner.FIsStopping then
+  var LCapturedOwner := FOwner;
+  var LCapturedHandle := FProcessHandle;
+  if Assigned(LCapturedOwner) and not LCapturedOwner.FIsStopping then
   begin
     TThread.Queue(nil, procedure
     var
       ExitCode: Cardinal;
     begin
-      if Assigned(FOwner) and not FOwner.FIsStopping then
+      if Assigned(LCapturedOwner) and not LCapturedOwner.FIsStopping then
       begin
         ExitCode := 0;
-        GetExitCodeProcess(FProcessHandle, ExitCode);
-        FOwner.DoTerminated(ExitCode);
+        GetExitCodeProcess(LCapturedHandle, ExitCode);
+        LCapturedOwner.DoTerminated(ExitCode);
       end;
     end);
   end;
@@ -201,6 +203,15 @@ begin
   FillChar(SI, SizeOf(SI), 0); SI.cb := SizeOf(SI);
   SI.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW; SI.wShowWindow := SW_HIDE;
   SI.hStdInput := FStdInRead; SI.hStdOutput := FStdOutWrite; SI.hStdError := FStdOutWrite;
+
+  if FCommandLine = '' then
+  begin
+    DoOutput('ERROR: CommandLine is empty.');
+    CleanupHandles;
+    Exit;
+  end;
+
+  // CreateProcess can modify the string buffer, so we must provide a unique, writable buffer.
   UniqueString(FCommandLine);
   if CreateProcess(nil, PChar(FCommandLine), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, FProcessInfo) then
   begin

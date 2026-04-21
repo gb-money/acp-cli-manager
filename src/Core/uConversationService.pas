@@ -3,7 +3,7 @@ unit uConversationService;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, System.Hash, JsonDataObjects, uSessionManager, uACPAgent;
+  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, System.Hash, JsonDataObjects, uAgent, uSessionManager, uACPAgent;
 
 type
   TConversationService = class
@@ -60,23 +60,27 @@ begin
     for I := 0 to LLines.Count - 1 do
     begin
       LLine := LLines[I].Trim;
-      if LLine = '' then Continue;
+      if (LLine = '') or not (LLine.StartsWith('{') or LLine.StartsWith('[')) then Continue;
 
-      LBase := TJsonBaseObject.Parse(LLine);
       try
-        if Assigned(LBase) then
-        begin
-          if LBase is TJsonObject then
-            ProcessLogEntry(TJsonObject(LBase), Result, LLastMsg)
-          else if LBase is TJsonArray then
+        LBase := TJsonBaseObject.Parse(LLine);
+        try
+          if Assigned(LBase) then
           begin
-            for J := 0 to TJsonArray(LBase).Count - 1 do
-              if TJsonArray(LBase).Items[J].Typ = jdtObject then
-                ProcessLogEntry(TJsonArray(LBase).O[J], Result, LLastMsg);
+            if LBase is TJsonObject then
+              ProcessLogEntry(TJsonObject(LBase), Result, LLastMsg)
+            else if LBase is TJsonArray then
+            begin
+              for J := 0 to TJsonArray(LBase).Count - 1 do
+                if TJsonArray(LBase).Items[J].Typ = jdtObject then
+                  ProcessLogEntry(TJsonArray(LBase).O[J], Result, LLastMsg);
+            end;
           end;
+        finally
+          LBase.Free;
         end;
-      finally
-        LBase.Free;
+      except
+        // Skip corrupt log lines
       end;
     end;
 

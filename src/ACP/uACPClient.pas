@@ -7,13 +7,15 @@ uses
   JsonDataObjects, uAgentProcess;
 
 type
-  TACPResponseAnonCallback = reference to procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject);
+  TRPCDirection = (rdIncoming, rdOutgoing, rdInternal);
+  
+  TACPResponseAnonCallback = reference to procedure(AResponse: TJsonObject);
 
   TACPReceiveEvent = procedure(Sender: TObject;
     const ID, Method: string;
     Params, ResultObj, ErrorObj: TJsonObject) of object;
 
-  TACPRawDataEvent = procedure(Sender: TObject; const Direction, RawText: string) of object;
+  TACPRawDataEvent = procedure(Sender: TObject; Direction: TRPCDirection; const RawText: string) of object;
   TACPErrorEvent = procedure(Sender: TObject; const ErrorMsg: string) of object;
   TACPProcessTerminatedEvent = procedure(Sender: TObject; ExitCode: Cardinal) of object;
 
@@ -119,8 +121,14 @@ begin
   FinalStr := StringReplace(FinalStr, #10, '', [rfReplaceAll]);
 
   if Assigned(FOnRawData) then
-    FOnRawData(Self, 'OUT', FinalStr);
-  FAgentProcess.WriteLine(FinalStr);
+    FOnRawData(Self, rdOutgoing, FinalStr);
+    
+  FBufferLock.Enter;
+  try
+    FAgentProcess.WriteLine(FinalStr);
+  finally
+    FBufferLock.Leave;
+  end;
 end;
 
 procedure TACPClient.Send(const Method: string; Params: TJsonObject; OnResponse: TACPResponseAnonCallback);
@@ -128,25 +136,30 @@ var
   ReqObj: TJsonObject;
   MessageId: string;
 begin
-  Inc(FLastMessageId);
-  MessageId := IntToStr(FLastMessageId);
-
-  ReqObj := TJsonObject.Create;
+  FBufferLock.Enter;
   try
-    ReqObj.S['jsonrpc'] := '2.0';
-    ReqObj.S['method'] := Method;
-    ReqObj.I['id'] := FLastMessageId;
+    Inc(FLastMessageId);
+    MessageId := IntToStr(FLastMessageId);
 
-    if Assigned(Params) then
-      ReqObj.O['params'].Assign(Params);
+    ReqObj := TJsonObject.Create;
+    try
+      ReqObj.S['jsonrpc'] := '2.0';
+      ReqObj.S['method'] := Method;
+      ReqObj.I['id'] := FLastMessageId;
 
-    if Assigned(OnResponse) then
-      FCallbacks.Add(MessageId, OnResponse);
-    FPendingMethods.AddOrSetValue(MessageId, Method);
+      if Assigned(Params) then
+        ReqObj.O['params'].Assign(Params);
 
-    SendRaw(ReqObj.ToJSON(False));
+      if Assigned(OnResponse) then
+        FCallbacks.Add(MessageId, OnResponse);
+      FPendingMethods.AddOrSetValue(MessageId, Method);
+
+      SendRaw(ReqObj.ToJSON(False));
+    finally
+      ReqObj.Free;
+    end;
   finally
-    ReqObj.Free;
+    FBufferLock.Leave;
   end;
 end;
 
@@ -237,10 +250,21 @@ begin
     if LineStr = '' then Continue;
 
     if Assigned(FOnRawData) then
-      FOnRawData(Self, 'IN', LineStr);
+      FOnRawData(Self, rdIncoming, LineStr);
 
-    LBaseObj := TJsonBaseObject.Parse(LineStr);
+    LBaseObj := nil;
     try
+      try
+        LBaseObj := TJsonBaseObject.Parse(LineStr);
+      except
+        on E: Exception do
+        begin
+          if Assigned(FOnRawData) then
+            FOnRawData(Self, rdInternal, 'JSON Parse Error: ' + E.Message + ' Source: ' + LineStr);
+          Continue; // Skip invalid JSON and continue loop
+        end;
+      end;
+
       if (LBaseObj = nil) or not (LBaseObj is TJsonObject) then
         Continue;
 
@@ -289,12 +313,12 @@ begin
         begin
           FCallbacks.Remove(vID);
           if Assigned(FOnRawData) then
-            FOnRawData(Self, 'SYS', 'Callback FOUND and matching for ID: ' + vID + ' (Method: ' + vMethod + ')');
+            FOnRawData(Self, rdInternal, 'Callback FOUND and matching for ID: ' + vID + ' (Method: ' + vMethod + ')');
         end
         else
         begin
           if Assigned(FOnRawData) then
-            FOnRawData(Self, 'SYS', 'Callback NOT FOUND for ID: ' + vID + ' (Method: ' + vMethod + ')');
+            FOnRawData(Self, rdInternal, 'Callback NOT FOUND for ID: ' + vID + ' (Method: ' + vMethod + ')');
         end;
         FPendingMethods.Remove(vID);
       end;
@@ -302,11 +326,11 @@ begin
       if Assigned(Callback) then
       begin
         try
-          Callback(not Assigned(pError), pResult, pError);
+          Callback(ParsedObj);
         except
           on E: Exception do
             if Assigned(FOnRawData) then
-              FOnRawData(Self, 'SYS', 'Exception in RPC Callback: ' + E.Message);
+              FOnRawData(Self, rdInternal, 'Exception in RPC Callback: ' + E.Message);
         end;
       end;
 

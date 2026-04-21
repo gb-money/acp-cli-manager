@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.Types, FMX.WebBrowser, System.IOUtils, System.NetEncoding,
-  JsonDataObjects, uSessionManager, uWebACPCommandHandler, System.Generics.Collections, System.Generics.Defaults;
+  JsonDataObjects, uAgent, uSessionManager, uWebACPCommandHandler, System.Generics.Collections, System.Generics.Defaults;
 
 type
   TDiffViewerControl = class
@@ -157,7 +157,7 @@ begin
         LFilePath := LFoundObj.S['path'];
         LFoundObj.Free;
 
-        System.Classes.TThread.Queue(nil, procedure
+        System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
         var
           LScript: string;
           LOld64, LNew64: string;
@@ -169,7 +169,7 @@ begin
           LScript := Format('var o=decodeURIComponent(escape(window.atob("%s"))); var n=decodeURIComponent(escape(window.atob("%s"))); window.ACP.loadDiffFromData("%s", "%s", o, n);',
             [LOld64, LNew64, LFileName, LFilePath.Replace('\', '\\').Replace('"', '\"')]);
           FWebBrowser.EvaluateJavaScript(LScript);
-        end);
+        end));
       end;
     end;
   end;
@@ -198,10 +198,10 @@ begin
     finally
       LSessions.Free;
     end;
-    System.Classes.TThread.Queue(nil, procedure
+    System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
     begin
       FWebBrowser.EvaluateJavaScript('window.ACP.updateSessionList(' + LArray.ToJSON(False) + ')');
-    end);
+    end));
   finally
     LArray.Free;
   end;
@@ -262,13 +262,13 @@ begin
       end;
     end;
     
-    System.Classes.TThread.Queue(nil, procedure
+    System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
     var
       LBase64: string;
     begin
       LBase64 := TNetEncoding.Base64.Encode(LArray.ToJSON(False)).Replace(#13, '').Replace(#10, '');
       FWebBrowser.EvaluateJavaScript('window.ACP.updateFileHistoryBase64("' + LBase64 + '")');
-    end);
+    end));
   finally
     for I := 0 to LList.Count - 1 do LList[I].Free;
     LList.Free;

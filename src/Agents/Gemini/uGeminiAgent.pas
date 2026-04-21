@@ -4,7 +4,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.RegularExpressions, System.IOUtils, 
-  JsonDataObjects, uAgent, uACPAgent, uACPClient, uACPProtocol;
+  JsonDataObjects, uAgent, uACPAgent, uACPClient, uACPProtocol, System.SyncObjs;
 
 type
   TModelsAvailableEvent = procedure(Sender: TObject; AModels: TStrings) of object;
@@ -12,13 +12,6 @@ type
 
   TGeminiAgent = class(TACPAgent)
   private
-    FAvailableModels: TStringList;
-    FCurrentModelId: string;
-    FOnModelsAvailable: TModelsAvailableEvent;
-
-    procedure SendInitialize;
-    procedure ExtractAvailableModels(Target: TJsonObject);
-    procedure ExtractSessionMetadata(const SessionId: string; Target: TJsonObject);
   protected
     procedure DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject); override;
   public
@@ -26,6 +19,10 @@ type
     destructor Destroy; override;
     
     procedure Connect; override;
+    function Start: Boolean; override; // Synchronous start for this agent
+    procedure Initialize; override;
+    procedure Stop; override;
+    
     procedure CreateNewSession(const Cwd: string; const Mode: string; ACallback: TProc<string>); override;
     procedure LoadSession(const SessionId: string; ACallback: TProc<string>); override;
     procedure SendPrompt(const SessionId, AText: string); override;
@@ -33,9 +30,6 @@ type
     procedure CancelPrompt(const SessionId: string);
     
     function IsReady: Boolean;
-    property CurrentModelId: string read FCurrentModelId;
-    property AvailableModels: TStringList read FAvailableModels;
-    property OnModelsAvailable: TModelsAvailableEvent read FOnModelsAvailable write FOnModelsAvailable;
   end;
 
 implementation
@@ -45,14 +39,19 @@ implementation
 constructor TGeminiAgent.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  AgentName := 'Gemini';
-  FAvailableModels := TStringList.Create;
+  AgentName := 'gemini';
 end;
 
 destructor TGeminiAgent.Destroy;
 begin
-  FAvailableModels.Free;
   inherited;
+end;
+
+function TGeminiAgent.Start: Boolean;
+begin
+  // Set CommandLine before starting the process engine
+  ACPClient.CommandLine := 'cmd /c gemini --acp';
+  Result := inherited Start;
 end;
 
 procedure TGeminiAgent.Connect;
@@ -60,80 +59,79 @@ begin
   inherited Connect;
   DoStatusChange('Starting Gemini process...');
   State := asConnecting;
-  ACPClient.CommandLine := 'cmd /c gemini --acp';
-  if ACPClient.Start then
-    SendInitialize
-  else
+  
+  TThread.CreateAnonymousThread(procedure
   begin
-    DoStatusChange('ERR: Failed to start gemini process.');
-    State := asError;
-  end;
+    try
+      // In background thread, we can call synchronous Start and Initialize
+      if Start then
+      begin
+        Initialize;
+      end
+      else
+      begin
+        TThread.Queue(nil, procedure
+        begin
+          DoStatusChange('ERR: Failed to start gemini process. (Check if gemini-cli is installed)');
+          State := asError;
+        end);
+      end;
+    except
+      on E: Exception do
+      begin
+        var LErrorMsg := E.Message;
+        TThread.Queue(nil, procedure
+        begin
+          DoStatusChange('ERR: ' + LErrorMsg);
+          State := asError;
+        end);
+      end;
+    end;
+  end).Start;
 end;
 
-procedure TGeminiAgent.SendInitialize;
+procedure TGeminiAgent.Initialize;
 var
   Params: TJsonObject;
+  WaitEvent: TEvent;
 begin
-  DoStatusChange('Sending initialize request...');
-  State := asInitializing;
-  Params := TACPProtocol.CreateInitializeParams('acp-manager', '0.0.1');
+  // Initialize MUST be called from a background thread as it blocks
+  WaitEvent := TEvent.Create(nil, False, False, '');
   try
-    ACPClient.Send('initialize', Params,
-      procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
-      begin
-        if Success then
+    DoStatusChange('Sending initialize request...');
+    State := asInitializing;
+    Params := TACPProtocol.CreateInitializeParams('acp-manager', '0.0.1');
+    try
+      ACPClient.Send('initialize', Params,
+        procedure(AResponse: TJsonObject)
         begin
-          DoStatusChange('Initialized successfully.');
-          State := asReady;
-        end
-        else
-        begin
-          DoStatusChange('ERR: Initialization failed.');
-          State := asError;
-        end;
-      end);
+          try
+            if Assigned(AResponse) and not AResponse.Contains('error') then
+            begin
+              DoStatusChange('Initialized successfully.');
+              State := asReady;
+            end
+            else
+            begin
+              DoStatusChange('ERR: Initialization failed.');
+              State := asError;
+            end;
+          finally
+            WaitEvent.SetEvent;
+          end;
+        end);
+    finally
+      Params.Free;
+    end;
+
+    // Block current thread until callback signals or 10s timeout
+    if WaitEvent.WaitFor(10000) <> wrSignaled then
+    begin
+      DoStatusChange('ERR: Initialization timed out.');
+      State := asError;
+    end;
   finally
-    Params.Free;
-  end;
-end;
-
-procedure TGeminiAgent.ExtractSessionMetadata(const SessionId: string; Target: TJsonObject);
-var
-  Data: TSessionData;
-  Changed: Boolean;
-begin
-  if not Assigned(Target) then Exit;
-  
-  if not Sessions.TryGetValue(SessionId, Data) then
-    Data := Default(TSessionData);
-    
-  Changed := False;
-
-  if Target.Contains('modes') then
-  begin
-    Data.ModesJson := Target.O['modes'].ToJSON(False);
-    Changed := True;
-  end;
-  
-  if Target.Contains('models') then
-  begin
-    Data.ModelsJson := Target.O['models'].ToJSON(False);
-    Changed := True;
-  end;
-
-  if Target.Contains('availableCommands') then
-  begin
-    Data.CommandsJson := Target.A['availableCommands'].ToJSON(False);
-    Changed := True;
-  end;
-
-  if Changed then
-  begin
-    Sessions.AddOrSetValue(SessionId, Data);
-    ExtractAvailableModels(Target);
-    
-    if Assigned(OnSessionMetadataUpdate) then
-      OnSessionMetadataUpdate(Self, SessionId);
+    WaitEvent.Free;
   end;
 end;
 
@@ -145,18 +143,19 @@ begin
   Params := TACPProtocol.CreateSessionNewParams(Cwd, Mode);
   try
     ACPClient.Send('session/new', Params,
-      procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
+      procedure(AResponse: TJsonObject)
       var
         NewSessionId: string;
+        LResult: TJsonObject;
       begin
-        if Success and Assigned(ResultObj) then
+        if Assigned(AResponse) and not AResponse.Contains('error') then
         begin
-          NewSessionId := ResultObj.S['sessionId'];
-          if NewSessionId = '' then NewSessionId := ResultObj.S['session_id'];
+          LResult := AResponse.O['result'];
+          NewSessionId := LResult.S['sessionId'];
+          if NewSessionId = '' then NewSessionId := LResult.S['session_id'];
 
           if NewSessionId <> '' then
           begin
-            ExtractSessionMetadata(NewSessionId, ResultObj);
             DoStatusChange('Session Created: ' + NewSessionId);
             if Assigned(ACallback) then ACallback(NewSessionId);
           end
@@ -165,8 +164,10 @@ begin
         end
         else
         begin
-          if Assigned(ErrorObj) then DoStatusChange('Session Failed: ' + ErrorObj.ToJSON(False))
-          else DoStatusChange('Session Failed: Unknown error');
+          if Assigned(AResponse) and AResponse.Contains('error') then 
+            DoStatusChange('Session Failed: ' + AResponse.O['error'].ToJSON(False))
+          else 
+            DoStatusChange('Session Failed: Unknown error');
           if Assigned(ACallback) then ACallback('');
         end;
       end);
@@ -178,39 +179,42 @@ end;
 procedure TGeminiAgent.LoadSession(const SessionId: string; ACallback: TProc<string>);
 var
   Params: TJsonObject;
+  LSid: string;
 begin
-  DoStatusChange('Loading Session: ' + SessionId);
+  LSid := SessionId;
+  DoStatusChange('Loading Session: ' + LSid);
   Params := TJsonObject.Create;
   try
-    Params.S['sessionId'] := SessionId;
+    Params.S['sessionId'] := LSid;
     Params.S['cwd'] := Workspace;
     Params.A['mcpServers']; 
     
     ACPClient.Send('session/load', Params,
-      procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
+      procedure(AResponse: TJsonObject)
       var
         LErrMsg: string;
+        LError: TJsonObject;
       begin
-        if Success then
+        if Assigned(AResponse) and not AResponse.Contains('error') then
         begin
-          ExtractSessionMetadata(SessionId, ResultObj);
-          DoStatusChange('Session Loaded: ' + SessionId);
+          DoStatusChange('Session Loaded: ' + LSid);
           State := asReady;
-          if Assigned(ACallback) then ACallback(SessionId);
+          if Assigned(ACallback) then ACallback(LSid);
         end
         else
         begin
           LErrMsg := 'Session Load Failed';
-          if Assigned(ErrorObj) then
+          if Assigned(AResponse) and AResponse.Contains('error') then
           begin
-            LErrMsg := LErrMsg + ' (Code: ' + IntToStr(ErrorObj.I['code']) + ')';
-            if ErrorObj.Contains('data') and ErrorObj.O['data'].Contains('details') then
-              LErrMsg := LErrMsg + ': ' + ErrorObj.O['data'].S['details'];
+            LError := AResponse.O['error'];
+            LErrMsg := LErrMsg + ' (Code: ' + IntToStr(LError.I['code']) + ')';
+            if LError.Contains('data') and LError.O['data'].Contains('details') then
+              LErrMsg := LErrMsg + ': ' + LError.O['data'].S['details'];
           end;
           
           DoStatusChange(LErrMsg);
           State := asReady; 
-          if Assigned(ACallback) then ACallback(''); // Signal uMain to delete the session
+          if Assigned(ACallback) then ACallback(''); 
         end;
       end);
   finally
@@ -220,7 +224,7 @@ end;
 
 procedure TGeminiAgent.SendPrompt(const SessionId, AText: string);
 var
-  Data: TSessionData;
+  LD: TSessionData;
   Params, ItemObj: TJsonObject;
   PromptArr: TJsonArray;
   LMatchValue, LPart: string;
@@ -232,15 +236,15 @@ var
   LMatch: TMatch;
   LWorkspaceName: string;
 begin
-  if not Sessions.TryGetValue(SessionId, Data) then
-    Data := Default(TSessionData);
+  if not Sessions.TryGetValue(SessionId, LD) then
+    LD := Default(TSessionData);
 
-  Data.FullThought := '';
-  Data.FullMessage := '';
-  Data.CurrentBlockText := '';
-  Data.LastChunkType := '';
-  Data.IsProcessing := True; 
-  Sessions.AddOrSetValue(SessionId, Data);
+  LD.FullThought := '';
+  LD.FullMessage := '';
+  LD.CurrentBlockText := '';
+  LD.LastChunkType := '';
+  LD.IsProcessing := True; 
+  Sessions.AddOrSetValue(SessionId, LD);
 
   Params := TJsonObject.Create;
   try
@@ -249,13 +253,11 @@ begin
 
     LWorkspaceName := TPath.GetFileName(ExcludeTrailingPathDelimiter(Workspace));
 
-    // Regex to find @file or @"file with spaces"
     LLastPos := 1;
     LMatches := TRegEx.Matches(AText, '(@"(?:[^"]+)"|@[^\s\xa0\n]+)');
     
     for LMatch in LMatches do
     begin
-      // 1. Add text before match
       if LMatch.Index > LLastPos then
       begin
         LPart := Copy(AText, LLastPos, LMatch.Index - LLastPos);
@@ -267,16 +269,14 @@ begin
         end;
       end;
 
-      // 2. Process file
       LMatchValue := LMatch.Value;
-      LFilePath := Trim(LMatchValue.Substring(1)); // Remove @
+      LFilePath := Trim(LMatchValue.Substring(1)); 
       
       if LFilePath.StartsWith('"') and LFilePath.EndsWith('"') then
         LFilePath := Copy(LFilePath, 2, Length(LFilePath) - 2);
 
       LFilePath := LFilePath.Replace('/', PathDelim);
 
-      // DEFENSE: If path starts with workspace folder name, strip it to prevent duplication
       if LFilePath.StartsWith(LWorkspaceName + PathDelim, True) then
         LFilePath := LFilePath.Substring(Length(LWorkspaceName) + 1);
 
@@ -296,18 +296,11 @@ begin
               SetLength(LBytes, LStream.Size);
               LStream.ReadBuffer(LBytes[0], LStream.Size);
               LFileContent := TEncoding.UTF8.GetString(LBytes);
-              DoStatusChange('Success: Loaded ' + IntToStr(LStream.Size) + ' bytes');
-            end
-            else DoStatusChange('Warning: File is empty');
+            end;
           finally LStream.Free; end;
         except
-          on E: Exception do begin
-            LFileContent := '';
-            DoStatusChange('Error reading file: ' + E.Message);
-          end;
         end;
-      end
-      else DoStatusChange('Error: File NOT FOUND at ' + LFilePath);
+      end;
 
       ItemObj := PromptArr.AddObject;
       ItemObj.S['type'] := 'resource';
@@ -320,7 +313,6 @@ begin
       LLastPos := LMatch.Index + LMatch.Length;
     end;
 
-    // 3. Add remaining text
     if LLastPos <= Length(AText) then
     begin
       LPart := Copy(AText, LLastPos, MaxInt);
@@ -340,22 +332,22 @@ begin
     end;
 
     ACPClient.Send('session/prompt', Params, 
-      procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
+      procedure(AResponse: TJsonObject)
       var
-        LData: TSessionData;
+        LD_Callback: TSessionData;
         LStopReason: string;
       begin
-        if Sessions.TryGetValue(SessionId, LData) then
+        if Sessions.TryGetValue(SessionId, LD_Callback) then
         begin
-          LData.IsProcessing := False; 
-          Sessions.AddOrSetValue(SessionId, LData);
+          LD_Callback.IsProcessing := False; 
+          Sessions.AddOrSetValue(SessionId, LD_Callback);
         end;
-        if Success and Assigned(ResultObj) then
+        if Assigned(AResponse) and not AResponse.Contains('error') then
         begin
-          LStopReason := ResultObj.S['stopReason'];
+          LStopReason := AResponse.O['result'].S['stopReason'];
           if LStopReason = '' then LStopReason := 'end_turn';
-          if Sessions.TryGetValue(SessionId, LData) then
-            DoResponse(SessionId, LData.FullMessage + '||STOP:' + LStopReason);
+          if Sessions.TryGetValue(SessionId, LD_Callback) then
+            DoResponse(SessionId, LD_Callback.FullMessage + '||STOP:' + LStopReason);
         end;
       end);
   finally Params.Free; end;
@@ -369,40 +361,23 @@ begin
 end;
 
 procedure TGeminiAgent.ChangeModel(const SessionId, AModelId: string);
-var P, LModels: TJsonObject; LData: TSessionData;
+var P: TJsonObject;
 begin
-  if Sessions.TryGetValue(SessionId, LData) then
-  begin
-    if LData.ModelsJson <> '' then
-    begin
-      LModels := TJsonObject.Parse(LData.ModelsJson) as TJsonObject;
-      try LModels.S['currentModelId'] := AModelId; LData.ModelsJson := LModels.ToJSON(False); Sessions.AddOrSetValue(SessionId, LData); finally LModels.Free; end;
-    end;
-  end;
   P := TJsonObject.Create;
   try
     P.S['sessionId'] := SessionId; P.S['modelId'] := AModelId;
-    ACPClient.Send('session/set_model', P, procedure(Success: Boolean; ResultObj, ErrorObj: TJsonObject)
-      begin if Success then DoStatusChange('Model changed to ' + AModelId + ' (Session: ' + SessionId + ')'); end);
+    ACPClient.Send('session/set_model', P, procedure(AResponse: TJsonObject)
+      begin if Assigned(AResponse) and not AResponse.Contains('error') then DoStatusChange('Model changed to ' + AModelId + ' (Session: ' + SessionId + ')'); end);
   finally P.Free; end;
-end;
-
-procedure TGeminiAgent.ExtractAvailableModels(Target: TJsonObject);
-var ModelsObj: TJsonObject; I: Integer;
-begin
-  if not Target.Contains('models') or (Target.O['models'] = nil) then Exit;
-  ModelsObj := Target.O['models']; FCurrentModelId := ModelsObj.S['currentModelId'];
-  if ModelsObj.Contains('availableModels') and (ModelsObj.A['availableModels'] <> nil) then
-  begin
-    FAvailableModels.Clear;
-    for I := 0 to ModelsObj.A['availableModels'].Count - 1 do
-      if ModelsObj.A['availableModels'].Items[I].Typ = jdtObject then FAvailableModels.Add(ModelsObj.A['availableModels'].O[I].S['modelId']);
-    if Assigned(FOnModelsAvailable) then FOnModelsAvailable(Self, FAvailableModels);
-  end;
 end;
 
 function TGeminiAgent.IsReady: Boolean; begin Result := State = asReady; end;
 procedure TGeminiAgent.DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject);
 begin inherited; if Assigned(ErrorObj) and (ErrorObj.Count > 0) then DoStatusChange('ERR: ' + ErrorObj.ToJSON(True)); end;
+
+procedure TGeminiAgent.Stop;
+begin
+  inherited;
+end;
 
 end.

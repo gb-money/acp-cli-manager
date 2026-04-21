@@ -3,9 +3,12 @@ unit uAgent;
 interface
 
 uses
-  System.Classes, System.SysUtils;
+  System.Classes, System.SysUtils, uAgentTypes, JsonDataObjects;
 
 type
+  TAgent = class;
+  TSessionInfo = class;
+
   TAgentState = (asDisconnected, asConnecting, asInitializing, asReady, asError);
 
   TAgentStatusChangeEvent = procedure(Sender: TObject; const Msg: string) of object;
@@ -14,9 +17,33 @@ type
   TAgentChunkEvent = procedure(Sender: TObject; const SessionId, Chunk, FullText: string) of object;
   TAgentFSWriteEvent = procedure(Sender: TObject; const SessionId, Path, OldContent, NewContent: string) of object;
 
+  TSessionInfo = class
+  public
+    Agent: TAgent;
+    AgentType: TAgentType;
+    SessionId: string;
+    Name: string;
+    IsLoading: Boolean;
+    IsRestoring: Boolean;
+    IsActive: Boolean;
+    IsWaitForResponse: Boolean;
+    IsPinned: Boolean;
+    LogPath: string;
+    DiffsPath: string; // Directory for diff blocks
+    Cwd: string; // Workspace directory
+    CreatedAt: TDateTime;
+    LastConversationDate: TDateTime;
+    LastHistoryTick: Cardinal; // Last time a history chunk was received
+    constructor Create(AAgent: TAgent; AType: TAgentType; const ASessionId, AName: string; const ACwd: string = '');
+    procedure SaveMetadata;
+    procedure LoadMetadata;
+    procedure MarkActivity;
+  end;
+
   TAgent = class(TComponent)
   private
     FAgentName: string;
+    FAgentType: TAgentType;
     FState: TAgentState;
     FWorkspace: string;
     FOnStatusChange: TAgentStatusChangeEvent;
@@ -27,6 +54,7 @@ type
     FOnFSWrite: TAgentFSWriteEvent;
     procedure SetState(const Value: TAgentState);
   protected
+    function GetSessionList: TArray<string>; virtual; abstract;
     procedure DoStatusChange(const Msg: string);
     procedure DoStateChange(const OldState, NewState: TAgentState);
     procedure DoResponse(const SessionId, Text: string);
@@ -36,12 +64,15 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     procedure Connect; virtual; abstract;
+    procedure Initialize; virtual; abstract;
     procedure Stop; virtual; abstract;
     procedure SendPrompt(const SessionId, AText: string); virtual; abstract;
     
     property AgentName: string read FAgentName write FAgentName;
+    property AgentType: TAgentType read FAgentType write FAgentType;
     property State: TAgentState read FState write SetState;
     property Workspace: string read FWorkspace write FWorkspace;
+    property SessionList: TArray<string> read GetSessionList;
     
     property OnStatusChange: TAgentStatusChangeEvent read FOnStatusChange write FOnStatusChange;
     property OnStateChange: TAgentStateChangeEvent read FOnStateChange write FOnStateChange;
@@ -52,6 +83,101 @@ type
   end;
 
 implementation
+
+uses
+  System.IOUtils;
+
+{ TSessionInfo }
+
+constructor TSessionInfo.Create(AAgent: TAgent; AType: TAgentType; const ASessionId, AName: string; const ACwd: string);
+begin
+  Agent := AAgent;
+  AgentType := AType;
+  SessionId := ASessionId;
+  Name := AName;
+  Cwd := ACwd;
+  IsLoading := False;
+  IsActive := False;
+  IsPinned := False;
+  CreatedAt := Now;
+  LastConversationDate := Now;
+  LastHistoryTick := 0;
+end;
+
+procedure TSessionInfo.MarkActivity;
+begin
+  LastHistoryTick := TThread.GetTickCount;
+end;
+
+procedure TSessionInfo.SaveMetadata;
+var
+  LDir, LFile, LHome: string;
+  LObj: TJsonObject;
+begin
+  if SessionId.StartsWith('pending-') then
+    Exit;
+
+  LHome := GetEnvironmentVariable('USERPROFILE');
+  if LHome = '' then
+    LHome := TPath.GetHomePath;
+  LDir := TPath.Combine(TPath.Combine(LHome, '.acp-cli-manager'), 'sessions');
+  LDir := TPath.Combine(LDir, Agent.AgentName.ToLower + '-cli');
+  LDir := TPath.Combine(LDir, SessionId);
+
+  if not TDirectory.Exists(LDir) then
+    TDirectory.CreateDirectory(LDir);
+
+  LFile := TPath.Combine(LDir, 'metadata.json');
+  LObj := TJsonObject.Create;
+  try
+    LObj.S['sessionId'] := SessionId;
+    LObj.S['name'] := Name;
+    LObj.S['cwd'] := Cwd;
+    LObj.I['agentType'] := Ord(AgentType);
+    LObj.B['pinned'] := IsPinned;
+    LObj.D['createdAt'] := CreatedAt;
+    LObj.D['lastConversationDate'] := LastConversationDate;
+    LObj.SaveToFile(LFile);
+  finally
+    LObj.Free;
+  end;
+end;
+
+procedure TSessionInfo.LoadMetadata;
+var
+  LDir, LFile, LHome: string;
+  LObj: TJsonObject;
+begin
+  if SessionId.StartsWith('pending-') then
+    Exit;
+
+  LHome := GetEnvironmentVariable('USERPROFILE');
+  if LHome = '' then
+    LHome := TPath.GetHomePath;
+  LDir := TPath.Combine(TPath.Combine(LHome, '.acp-cli-manager'), 'sessions');
+  LDir := TPath.Combine(LDir, Agent.AgentName.ToLower + '-cli');
+  LDir := TPath.Combine(LDir, SessionId);
+
+  LFile := TPath.Combine(LDir, 'metadata.json');
+  if not TFile.Exists(LFile) then
+    Exit;
+
+  LObj := TJsonObject.Create;
+  try
+    LObj.LoadFromFile(LFile);
+    Name := LObj.S['name'];
+    Cwd := LObj.S['cwd'];
+    if LObj.Contains('agentType') then
+      AgentType := TAgentType(LObj.I['agentType']);
+    IsPinned := LObj.B['pinned'];
+    if LObj.Contains('createdAt') then
+      CreatedAt := LObj.D['createdAt'];
+    if LObj.Contains('lastConversationDate') then
+      LastConversationDate := LObj.D['lastConversationDate'];
+  finally
+    LObj.Free;
+  end;
+end;
 
 { TAgent }
 

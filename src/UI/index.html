@@ -8,12 +8,16 @@
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com" rel="preconnect">
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap"
+        rel="stylesheet">
     <link href="https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg" rel="icon">
     <link href="https://fonts.googleapis.com" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet">
+
     <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
@@ -29,18 +33,61 @@
         }
     </script>
     <style>
-        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
-        .material-symbols-outlined[data-weight="fill"] { font-variation-settings: 'FILL' 1, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #262626; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #484847; }
-        
-        .markdown-body { background: transparent !important; color: #e6edf3 !important; font-family: inherit !important; font-size: 0.9375rem !important; }
-        .markdown-body pre { background: #000 !important; border: 1px solid rgba(72, 72, 71, 0.5) !important; border-radius: 0.75rem !important; padding: 1rem !important; margin: 1rem 0 !important; overflow-x: auto; }
-        .markdown-body code { font-family: 'JetBrains Mono', monospace !important; color: #ffffff !important; }
-        .markdown-body p { margin-bottom: 1rem !important; line-height: 1.6 !important; }
-        .markdown-body p:last-child { margin-bottom: 0 !important; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .material-symbols-outlined[data-weight="fill"] {
+            font-variation-settings: 'FILL' 1, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #484847;
+        }
+
+        .markdown-body {
+            background: transparent !important;
+            color: #e6edf3 !important;
+            font-family: inherit !important;
+            font-size: 0.9375rem !important;
+        }
+
+        .markdown-body pre {
+            background: #000 !important;
+            border: 1px solid rgba(72, 72, 71, 0.5) !important;
+            border-radius: 0.75rem !important;
+            padding: 1rem !important;
+            margin: 1rem 0 !important;
+            overflow-x: auto;
+        }
+
+        .markdown-body code {
+            font-family: 'JetBrains Mono', monospace !important;
+            color: #ffffff !important;
+        }
+
+        .markdown-body p {
+            margin-bottom: 1rem !important;
+            line-height: 1.6 !important;
+        }
+
+        .markdown-body p:last-child {
+            margin-bottom: 0 !important;
+        }
 
         [contenteditable=true]:empty:before {
             content: attr(placeholder);
@@ -60,12 +107,30 @@
             background-color: #161616;
         }
 
-        .cmd-item { border-bottom: 1px solid rgba(72, 72, 71, 0.05); }
-        .cmd-item:last-child { border-bottom: none; }
-        .cmd-item.active { background-color: rgba(63, 255, 139, 0.05); }
-        .cmd-item.active .icon-box { background-color: #3fff8b; color: #000; }
-        .cmd-item.active .text-highlight { color: #3fff8b; }
-        .cmd-item:hover:not(.active) { background-color: rgba(255, 255, 255, 0.05); }
+        .cmd-item {
+            border-bottom: 1px solid rgba(72, 72, 71, 0.05);
+        }
+
+        .cmd-item:last-child {
+            border-bottom: none;
+        }
+
+        .cmd-item.active {
+            background-color: rgba(63, 255, 139, 0.05);
+        }
+
+        .cmd-item.active .icon-box {
+            background-color: #3fff8b;
+            color: #000;
+        }
+
+        .cmd-item.active .text-highlight {
+            color: #3fff8b;
+        }
+
+        .cmd-item:hover:not(.active) {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
 
         /* Disable state styles */
         button:disabled {
@@ -73,19 +138,41 @@
             pointer-events: none !important;
             opacity: 0.2 !important;
         }
-        
+
         @keyframes pulse-custom {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.9); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(0.9);
+            }
         }
+
         .animate-pulse-custom {
             animation: pulse-custom 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
 
         @keyframes focus-highlight {
-            0% { filter: brightness(1.6); box-shadow: 0 0 30px rgba(63, 255, 139, 0.3); outline: 2px solid rgba(63, 255, 139, 0.5); background-color: rgba(63, 255, 139, 0.1); }
-            100% { filter: brightness(1); box-shadow: none; outline: 2px solid transparent; background-color: transparent; }
+            0% {
+                filter: brightness(1.6);
+                box-shadow: 0 0 30px rgba(63, 255, 139, 0.3);
+                outline: 2px solid rgba(63, 255, 139, 0.5);
+                background-color: rgba(63, 255, 139, 0.1);
+            }
+
+            100% {
+                filter: brightness(1);
+                box-shadow: none;
+                outline: 2px solid transparent;
+                background-color: transparent;
+            }
         }
+
         .focus-highlight {
             animation: focus-highlight 2.5s cubic-bezier(0.4, 0.2, 0, 1) forwards;
             border-radius: 0.75rem;
@@ -93,19 +180,19 @@
     </style>
 
     <script>
-        window.sendAcp = function(url) {
+        window.sendAcp = function (url) {
             const finalUrl = url.includes('://') ? url : 'acp-action://' + url;
             let iframe = document.getElementById('acp-comm-frame');
             if (!iframe) {
-                iframe = document.createElement('iframe'); 
+                iframe = document.createElement('iframe');
                 iframe.id = 'acp-comm-frame';
-                iframe.style.display = 'none'; 
+                iframe.style.display = 'none';
                 document.body.appendChild(iframe);
             }
             iframe.src = finalUrl + (finalUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
         };
 
-        window.sendUi = function(url) {
+        window.sendUi = function (url) {
             const finalUrl = url.includes('://') ? url : 'ui-action://' + url;
             window.sendAcp(finalUrl);
         };
@@ -128,11 +215,48 @@
             isProcessingActive: false,
             lastRenderedDate: null,
             allSessions: [],
-            
+
+            decodeBase64Utf8: (base64) => {
+                try {
+                    const binary = window.atob(base64);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    return new TextDecoder('utf-8').decode(bytes);
+                } catch (e) {
+                    console.error('Base64 decode error:', e);
+                    return null;
+                }
+            },
+
+            getLocalTimeString: () => {
+                const d = new Date();
+                const pad = (n) => n.toString().padStart(2, '0');
+                return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+            },
+
+            renderDateBadge: (timestamp) => {
+                if (!timestamp) return;
+                const container = document.getElementById('mainChatCanvasInner');
+                const datePart = timestamp.split(' ')[0];
+                if (window.ACP.lastRenderedDate !== datePart) {
+                    window.ACP.lastRenderedDate = datePart;
+                    const todayStr = window.ACP.getLocalTimeString().split(' ')[0];
+                    const displayDate = (datePart === todayStr) ? "Today" : datePart;
+
+                    container.insertAdjacentHTML('beforeend', `
+                        <div class="flex justify-center my-8 px-4">
+                            <span class="px-3 py-1 text-[11px] font-medium tracking-wider text-on-surface-variant uppercase bg-surface-container rounded-full border border-outline-variant/10">
+                                ${displayDate}
+                            </span>
+                        </div>
+                    `);
+                }
+            },
+
             toggleSearch: (force) => {
                 const sidebar = document.getElementById('searchSidebar');
                 const isOpen = force !== undefined ? force : sidebar.classList.contains('hidden');
-                
+
                 if (isOpen) {
                     sidebar.classList.remove('hidden');
                     window.ACP.selectedSearchSessionId = window.ACP.activeSessionId;
@@ -147,7 +271,7 @@
                 const content = document.getElementById('searchOptionsAccordionContent');
                 const chevron = document.getElementById('searchOptionsAccordionChevron');
                 const isHidden = content.classList.contains('hidden');
-                
+
                 if (isHidden) {
                     content.classList.remove('hidden');
                     chevron.style.transform = 'rotate(180deg)';
@@ -166,7 +290,7 @@
             toggleSearchSessionMenu: (force) => {
                 const menu = document.getElementById('searchSessionMenu');
                 const isShow = (force !== undefined) ? force : menu.classList.contains('hidden');
-                if (isShow) window.ACP.renderSearchSessionMenu(); 
+                if (isShow) window.ACP.renderSearchSessionMenu();
                 menu.classList.toggle('hidden', !isShow);
             },
 
@@ -219,7 +343,7 @@
                 let url = `search-conversations?query=${encodeURIComponent(query)}&case=${opts.case}&regex=${opts.regex}&active=${opts.active}&inactive=${opts.inactive}&thought=${opts.thought}&user=${opts.user}&agent=${opts.agent}`;
                 if (opts.thisSession && opts.targetSessionId) url += `&targetSessionId=${opts.targetSessionId}`;
 
-                window.sendAcp(url);
+                window.sendUi(url);
             },
 
             updateSearchResults: (base64) => {
@@ -229,13 +353,13 @@
                     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
                     const json = new TextDecoder().decode(bytes);
                     const results = JSON.parse(json);
-                    
+
                     const list = document.getElementById('searchResultsList');
                     const loading = document.getElementById('searchLoadingState');
-                    
+
                     loading.classList.add('hidden');
                     list.classList.remove('hidden');
-                    
+
                     if (results.length === 0) {
                         list.innerHTML = '<div class="text-center py-12 opacity-40"><p class="text-sm">No matches found</p></div>';
                         return;
@@ -276,14 +400,14 @@
                             </div>
                         </div>
                     `).join('');
-                } catch(e) { console.error('Search update error:', e); }
+                } catch (e) { console.error('Search update error:', e); }
             },
 
             goToMatch: (sessionId, timestamp) => {
                 if (window.ACP.activeSessionId !== sessionId) {
                     window.sendAcp(`select-session?id=${sessionId}`);
                 }
-                
+
                 const tryScroll = (count) => {
                     const searchTs = timestamp.trim();
                     const elements = Array.from(document.querySelectorAll('[data-timestamp]'));
@@ -295,24 +419,24 @@
                     if (target) {
                         const container = document.getElementById('mainChatCanvas');
                         let highlightTarget = null;
-                        
+
                         const thoughtHeader = target.querySelector('[id^="thought-hdr-"]');
                         if (thoughtHeader) {
                             highlightTarget = thoughtHeader;
                         } else {
                             highlightTarget = target.querySelector('.bg-secondary-container, .bg-surface-container-highest');
                         }
-                        
+
                         const containerRect = container.getBoundingClientRect();
                         const targetRect = target.getBoundingClientRect();
                         const relativeTop = targetRect.top - containerRect.top + container.scrollTop;
                         const targetScrollTop = relativeTop - (container.clientHeight / 2);
-                        
+
                         container.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
-                        
+
                         if (highlightTarget) {
                             highlightTarget.classList.remove('focus-highlight');
-                            void highlightTarget.offsetWidth; 
+                            void highlightTarget.offsetWidth;
                             highlightTarget.classList.add('focus-highlight');
                         }
                     } else if (count < 60) {
@@ -321,7 +445,7 @@
                 };
                 tryScroll(0);
             },
-            
+
             toggleDropdown: (e, force) => {
                 if (e) e.stopPropagation();
                 const d = document.getElementById('newChatDropdown');
@@ -347,7 +471,7 @@
             showProcessing: (show) => {
                 let indicator = document.getElementById('processingIndicator');
                 window.ACP.isProcessingActive = show;
-                
+
                 if (show) {
                     const container = document.getElementById('mainChatCanvasInner');
                     if (!indicator) {
@@ -375,10 +499,10 @@
                 const text = input.innerText.trim();
                 if (text) {
                     input.innerHTML = '';
-                    window.ACP.breakGrouping(); 
-                    
-                    window.ACP.streamMessage({content: text, role: 'user', stopReason: '', timestamp: new Date().toISOString()});
-                    
+                    window.ACP.breakGrouping();
+
+                    window.ACP.streamMessage({ content: text, role: 'user', stopReason: '', timestamp: window.ACP.getLocalTimeString() });
+
                     window.ACP.showProcessing(true);
                     window.sendAcp('send-message?text=' + encodeURIComponent(text));
                 }
@@ -390,33 +514,20 @@
 
             addMessageToUI: (role, text, timestamp) => {
                 const container = document.getElementById('mainChatCanvasInner');
-                
-                if (timestamp) {
-                    const datePart = timestamp.split(' ')[0]; 
-                    if (window.ACP.lastRenderedDate !== datePart) {
-                        window.ACP.lastRenderedDate = datePart;
-                        const todayStr = new Date().toISOString().split('T')[0];
-                        const displayDate = (datePart === todayStr) ? "Today" : datePart;
-                        
-                        container.insertAdjacentHTML('beforeend', `
-                            <div class="flex justify-center my-8 px-4">
-                                <span class="px-3 py-1 text-[11px] font-medium tracking-wider text-on-surface-variant uppercase bg-surface-container rounded-full border border-outline-variant/10">
-                                    ${displayDate}
-                                </span>
-                            </div>
-                        `);
-                    }
-                }
+
+                window.ACP.renderDateBadge(timestamp);
 
                 let time = '';
                 if (timestamp) {
                     const parts = timestamp.split(' ');
                     if (parts.length > 1) time = parts[1].substring(0, 5);
+                    else if (timestamp.includes('T')) time = timestamp.split('T')[1].substring(0, 5);
                     else time = timestamp.substring(0, 5);
                 } else {
-                    time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                    const d = new Date();
+                    time = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
                 }
-                
+
                 const id = 'msg-' + Date.now() + Math.random().toString(36).substr(2, 5);
 
                 let html = role === 'me' ? `
@@ -450,9 +561,11 @@
                 const container = document.getElementById('mainChatCanvasInner');
                 const id = 'thought-' + Date.now();
                 const hdrId = 'thought-hdr-' + Date.now();
-                const actualTimestamp = timestamp || new Date().toISOString().replace('T', ' ').split('.')[0];
+                const actualTimestamp = timestamp || window.ACP.getLocalTimeString();
                 window.ACP.thoughtStartTime = Date.now();
-                
+
+                window.ACP.renderDateBadge(actualTimestamp);
+
                 const html = `
                     <div class="flex flex-col justify-start mb-4 px-4" data-timestamp="${actualTimestamp}">
                         <div class="w-full max-w-3xl flex flex-col space-y-2">
@@ -482,7 +595,7 @@
                 }
                 for (let i = 1; i < parts.length; i += 2) {
                     const subject = parts[i].trim();
-                    const content = parts[i+1] ? parts[i+1].trim() : '';
+                    const content = parts[i + 1] ? parts[i + 1].trim() : '';
                     html += `
                         <div class="flex flex-col space-y-1 mb-2.5 last:mb-0">
                             <div class="flex items-center space-x-2 text-xs text-gray-500 dark:text-text-muted">
@@ -522,95 +635,135 @@
                 if (e) { e.stopPropagation(); e.preventDefault(); }
                 const menus = document.querySelectorAll('[id^="session-menu-"]');
                 menus.forEach(m => { if (m.id !== `session-menu-${sessionId}`) m.classList.add('hidden'); });
-                
+
                 const menu = document.getElementById(`session-menu-${sessionId}`);
                 if (menu) menu.classList.toggle('hidden');
             },
 
-            updateSessionList: (data) => {
-                const sessions = typeof data === 'string' ? JSON.parse(data) : data;
-                window.ACP.allSessions = sessions;
-                const container = document.getElementById('sessionListContainer');
+            updateActiveSessionUI: (activeSession) => {
+                if (!activeSession) {
+                    window.ACP.activeSessionId = '';
+                    const header = document.getElementById('activeAgentHeader');
+                    if (header) header.innerText = 'No Session';
+                    const inputArea = document.getElementById('mainInputArea');
+                    if (inputArea) inputArea.classList.add('hidden');
+                    const chatCanvas = document.getElementById('mainChatCanvas');
+                    if (chatCanvas) chatCanvas.classList.add('hidden');
+                    const emptyArea = document.getElementById('mainEmptyArea');
+                    if (emptyArea) emptyArea.classList.remove('hidden');
+                    const canvas = document.getElementById('mainChatCanvasInner');
+                    if (canvas) canvas.innerHTML = '';
+                    return;
+                }
+
+                if (window.ACP.activeSessionId !== activeSession.id) {
+                    window.ACP.activeSessionId = activeSession.id;
+                    const canvas = document.getElementById('mainChatCanvasInner');
+                    if (canvas) canvas.innerHTML = '';
+                }
+
+                const header = document.getElementById('activeAgentHeader');
+                if (header) header.innerText = activeSession.name;
+
+                const inputArea = document.getElementById('mainInputArea');
+                if (inputArea) inputArea.classList.remove('hidden');
+
+                const chatCanvas = document.getElementById('mainChatCanvas');
+                if (chatCanvas) chatCanvas.classList.remove('hidden');
+
+                const emptyArea = document.getElementById('mainEmptyArea');
+                if (emptyArea) emptyArea.classList.add('hidden');
+
+                if (activeSession.commands) window.ACP.availableCommands = activeSession.commands;
+
+                const isActive = activeSession.isActive;
+                const isWaitForResponse = activeSession.isWaitForResponse;
+                const isLoading = activeSession.loading;
+                
+                const setDisabled = (val) => {
+                    const modelSelectBtn = document.getElementById('modelSelectBtn');
+                    const attachBtn = document.getElementById('attachBtn');
+                    const toolsBtn = document.getElementById('toolsBtn');
+                    if (modelSelectBtn) modelSelectBtn.disabled = val;
+                    if (attachBtn) attachBtn.disabled = val;
+                    if (toolsBtn) toolsBtn.disabled = val;
+                };
+
                 const sendBtn = document.getElementById('send-button');
                 const userInput = document.getElementById('userInput');
-                const modelSelectBtn = document.getElementById('modelSelectBtn');
-                const attachBtn = document.getElementById('attachBtn');
-                const toolsBtn = document.getElementById('toolsBtn');
-                
-                let activeSession = sessions.find(s => s.active);
-                if (activeSession) {
-                    if (window.ACP.activeSessionId !== activeSession.id) {
-                        window.ACP.activeSessionId = activeSession.id;
-                        document.getElementById('mainChatCanvasInner').innerHTML = '';
-                    }
-                    document.getElementById('activeAgentHeader').innerText = activeSession.name;
-                    document.getElementById('mainInputArea').classList.remove('hidden');
-                    document.getElementById('mainChatCanvas').classList.remove('hidden');
-                    document.getElementById('mainEmptyArea').classList.add('hidden');
-                    if (activeSession.commands) window.ACP.availableCommands = activeSession.commands;
 
-                    const isOffline = !activeSession.online && !activeSession.loading;
-                    const isLoading = activeSession.loading;
-                    const setDisabled = (val) => {
-                        if (modelSelectBtn) modelSelectBtn.disabled = val;
-                        if (attachBtn) attachBtn.disabled = val;
-                        if (toolsBtn) toolsBtn.disabled = val;
-                    };
-
-                    if (isLoading) {
-                        sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">refresh</span>`;
-                        sendBtn.onclick = null;
+                if (sendBtn && userInput) {
+                    if (isLoading || !isActive) {
+                        sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px] ${isLoading ? 'animate-spin' : ''}">${isLoading ? 'refresh' : 'autorenew'}</span>`;
+                        sendBtn.onclick = isLoading ? null : () => window.ACP.resumeSession();
                         userInput.setAttribute('contenteditable', 'false');
                         setDisabled(true);
-                    } else if (isOffline) {
-                        sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">autorenew</span>`;
-                        sendBtn.onclick = () => window.ACP.resumeSession();
-                        userInput.setAttribute('contenteditable', 'false');
-                        setDisabled(true);
+                        sendBtn.disabled = false;
                     } else {
                         sendBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">send</span>`;
                         sendBtn.onclick = () => window.ACP.sendMessage();
                         userInput.setAttribute('contenteditable', 'true');
                         setDisabled(false);
+                        sendBtn.disabled = isWaitForResponse;
                     }
-
-                    if (activeSession.models && modelSelectBtn) {
-                        const currentModelId = activeSession.models.currentModelId || '';
-                        let currentModelLabel = currentModelId;
-                        const dropdown = document.getElementById('modelDropdown');
-                        if (dropdown && activeSession.models.availableModels) {
-                            dropdown.innerHTML = '<div class="dropdown-header">AVAILABLE MODELS</div>';
-                            activeSession.models.availableModels.forEach(m => {
-                                const mId = typeof m === 'string' ? m : m.modelId;
-                                const mName = typeof m === 'string' ? m : (m.name || m.modelId);
-                                const mDesc = typeof m === 'object' ? m.description : '';
-                                const isActive = mId === currentModelId;
-                                if (isActive) currentModelLabel = mName;
-                                dropdown.innerHTML += `
-                                    <button onclick="window.sendAcp('change-model?modelId=${mId}'); document.getElementById('modelDropdown').classList.add('hidden');"
-                                        class="cmd-item w-full text-left px-5 py-3 transition-colors flex items-center justify-between">
-                                        <div class="flex flex-col min-w-0">
-                                            <span class="text-sm font-bold ${isActive ? 'text-primary' : 'text-on-surface'}">${mName}</span>
-                                            ${mDesc ? `<span class="text-[10px] text-on-surface-variant/60 truncate mt-0.5">${mDesc}</span>` : ''}
-                                        </div>
-                                        ${isActive ? '<span class="material-icons text-primary text-sm">check</span>' : ''}
-                                    </button>`;
-                            });
-                        }
-                        modelSelectBtn.querySelector('span:nth-child(2)').innerText = currentModelLabel || 'Select Model';
-                        modelSelectBtn.querySelector('span:nth-child(2)').className = 'text-on-surface font-medium';
-                    }
-                } else {
-                    window.ACP.activeSessionId = '';
-                    document.getElementById('activeAgentHeader').innerText = 'No Session';
-                    document.getElementById('mainInputArea').classList.add('hidden');
-                    document.getElementById('mainChatCanvas').classList.add('hidden');
-                    document.getElementById('mainEmptyArea').classList.remove('hidden');
-                    document.getElementById('mainChatCanvasInner').innerHTML = '';
                 }
 
-                container.innerHTML = sessions.map(s => `
-                    <div onclick="window.sendAcp('select-session?id=${s.id}')" 
+                if (activeSession.models && document.getElementById('modelSelectBtn')) {
+                    const currentModelId = activeSession.models.currentModelId || '';
+                    let currentModelLabel = currentModelId;
+                    const dropdown = document.getElementById('modelDropdown');
+                    if (dropdown && Array.isArray(activeSession.models.availableModels)) {
+                        dropdown.innerHTML = '<div class="dropdown-header">AVAILABLE MODELS</div>';
+                        activeSession.models.availableModels.forEach(m => {
+                            const mId = typeof m === 'string' ? m : m.modelId;
+                            const mName = typeof m === 'string' ? m : (m.name || m.modelId);
+                            const mDesc = typeof m === 'object' ? m.description : '';
+                            const isActiveModel = mId === currentModelId;
+                            if (isActiveModel) currentModelLabel = mName;
+                            dropdown.innerHTML += `
+                                <button onclick="window.sendAcp('change-model?modelId=${mId}'); document.getElementById('modelDropdown').classList.add('hidden');"
+                                    class="cmd-item w-full text-left px-5 py-3 transition-colors flex items-center justify-between">
+                                    <div class="flex flex-col min-w-0">
+                                        <span class="text-sm font-bold ${isActiveModel ? 'text-primary' : 'text-on-surface'}">${mName}</span>
+                                        ${mDesc ? `<span class="text-[10px] text-on-surface-variant/60 truncate mt-0.5">${mDesc}</span>` : ''}
+                                    </div>
+                                    ${isActiveModel ? '<span class="material-icons text-primary text-sm">check</span>' : ''}
+                                </button>`;
+                        });
+                    }
+                    const labelSpan = document.getElementById('modelSelectBtn').querySelector('span:nth-child(2)');
+                    if (labelSpan) {
+                        labelSpan.innerText = currentModelLabel || 'Select Model';
+                        labelSpan.className = 'text-on-surface font-medium';
+                    }
+                }
+            },
+
+            updateSessionList: (data) => {
+                let sessions = null;
+                if (Array.isArray(data)) {
+                    sessions = data;
+                } else if (typeof data === 'string') {
+                    const json = window.ACP.decodeBase64Utf8(data);
+                    if (json) {
+                        try { sessions = JSON.parse(json); } catch (e) { console.error('updateSessionList JSON parse error:', e); }
+                    }
+                }
+
+                if (!sessions) return;
+                window.ACP.allSessions = sessions;
+
+                const container = document.getElementById('sessionListContainer');
+                if (!container) return;
+
+                window.ACP.updateActiveSessionUI(sessions.find(s => s.active));
+                container.innerHTML = sessions.map(s => window.ACP.renderSessionItemHtml(s)).join('') + '<div class="h-32"></div>';
+            },
+
+            renderSessionItemHtml: (s) => {
+                if (!s) return '';
+                return `
+                    <div id="session-item-${s.id}" onclick="window.sendAcp('select-session?id=${s.id}')" 
                         class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer group relative overflow-visible ${s.active ? 'bg-surface-container-high border-l-[3px] border-primary' : 'hover:bg-surface-container-high/50 text-on-surface-variant hover:text-on-surface border-l-[3px] border-transparent'}">
                         <div class="relative z-10 shrink-0">
                             <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/20">
@@ -620,10 +773,10 @@
                         </div>
                         <div class="flex-1 min-w-0 z-10 pr-2">
                             <div class="text-sm font-headline ${s.active ? 'font-semibold text-primary' : 'font-medium'} truncate flex items-center gap-1.5">
-                                <span class="truncate">${s.name}</span>
+                                <span class="truncate name-label">${s.name || 'Untitled'}</span>
                                 ${s.pinned ? '<span class="material-symbols-outlined text-[12px] text-primary shrink-0">push_pin</span>' : ''}
                             </div>
-                            <div class="text-xs ${s.active ? 'text-on-surface-variant' : 'opacity-60'} truncate">${s.workspace || ''}</div>
+                            <div class="text-xs workspace-label ${s.active ? 'text-on-surface-variant' : 'opacity-60'} truncate">${s.workspace || ''}</div>
                         </div>
                         
                         <div class="relative z-20 shrink-0">
@@ -636,7 +789,7 @@
                                     <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">push_pin</span></div>
                                     <span class="flex-1">${s.pinned ? 'Unpin Session' : 'Pin Session'}</span>
                                 </button>
-                                <button onclick="event.stopPropagation(); window.sendUi('open-explorer?path=' + encodeURIComponent('${s.workspace || ''}'));" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
+                                <button onclick="event.stopPropagation(); window.sendUi('open-explorer?path=' + encodeURIComponent('${(s.workspace || '').replace(/\\/g, '\\\\')}'));" class="w-full flex items-center px-4 py-2.5 text-xs text-on-surface hover:bg-surface-container-high transition-colors text-left">
                                     <div class="w-8 shrink-0 flex items-center justify-start"><span class="material-symbols-outlined text-[18px]">folder</span></div>
                                     <span class="flex-1">Open Explorer</span>
                                 </button>
@@ -651,7 +804,64 @@
                                 </button>
                             </div>
                         </div>
-                    </div>`).join('') + '<div class="h-32"></div>';
+                    </div>`;
+            },
+
+            AddSession: (data) => {
+                let s = (typeof data === 'string') ? JSON.parse(window.ACP.decodeBase64Utf8(data)) : data;
+                if (!s) return;
+                
+                const idx = window.ACP.allSessions.findIndex(item => item.id === s.id);
+                if (idx === -1) {
+                    window.ACP.allSessions.push(s);
+                } else {
+                    window.ACP.allSessions[idx] = s;
+                }
+                window.ACP.updateSessionList(window.ACP.allSessions);
+            },
+
+            DeleteSession: (sessionId) => {
+                window.ACP.allSessions = window.ACP.allSessions.filter(s => s.id !== sessionId);
+                window.ACP.updateSessionList(window.ACP.allSessions);
+            },
+
+            updateSession: (data) => {
+                let s = (typeof data === 'string') ? JSON.parse(window.ACP.decodeBase64Utf8(data)) : data;
+                if (!s) return;
+
+                const idx = window.ACP.allSessions.findIndex(item => item.id === s.id);
+                if (idx === -1) {
+                    console.error('updateSession: Session ID not found. Use AddSession for new items.', s.id);
+                    return;
+                }
+
+                window.ACP.allSessions[idx] = s;
+                const oldActiveId = window.ACP.activeSessionId;
+
+                // Handle active state transition
+                if (s.active && oldActiveId && oldActiveId !== s.id) {
+                    const prevIdx = window.ACP.allSessions.findIndex(item => item.id === oldActiveId);
+                    if (prevIdx !== -1) {
+                        window.ACP.allSessions[prevIdx].active = false;
+                        const prevItem = document.getElementById(`session-item-${oldActiveId}`);
+                        if (prevItem) {
+                            const temp = document.createElement('div');
+                            temp.innerHTML = window.ACP.renderSessionItemHtml(window.ACP.allSessions[prevIdx]);
+                            if (temp.firstElementChild) prevItem.replaceWith(temp.firstElementChild);
+                        }
+                    }
+                }
+
+                const oldItem = document.getElementById(`session-item-${s.id}`);
+                if (oldItem) {
+                    const temp = document.createElement('div');
+                    temp.innerHTML = window.ACP.renderSessionItemHtml(s);
+                    if (temp.firstElementChild) oldItem.replaceWith(temp.firstElementChild);
+                }
+
+                if (s.active) {
+                    window.ACP.updateActiveSessionUI(s);
+                }
             },
 
             streamThought: (data) => {
@@ -666,7 +876,7 @@
                 window.ACP.accumulatedThought = data.content;
                 window.ACP.parseAndRenderThought(window.ACP.accumulatedThought, window.ACP.lastAiThoughtId.contentId);
                 const div = document.getElementById(window.ACP.lastAiThoughtId.contentId);
-                if (div) div.classList.remove('hidden'); 
+                if (div) div.classList.remove('hidden');
                 const outer = document.getElementById('mainChatCanvas');
                 outer.scrollTop = outer.scrollHeight;
             },
@@ -691,12 +901,12 @@
             streamMessage: (data) => {
                 const { content, role, stopReason, timestamp } = data;
                 const targetRole = role === 'user' ? 'me' : 'ai';
-                
+
                 if (window.ACP.lastBlockType === 'thought') {
                     window.ACP.finalizeThought();
                     window.ACP.lastAiThoughtId = null;
                 }
-                
+
                 if (!window.ACP.lastAiMsgId || window.ACP.lastBlockType !== 'message' || window.ACP.lastMessageRole !== targetRole) {
                     window.ACP.lastAiMsgId = window.ACP.addMessageToUI(targetRole, '', timestamp);
                     window.ACP.lastBlockType = 'message';
@@ -802,14 +1012,14 @@
                     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
                     const json = new TextDecoder().decode(bytes);
                     const data = JSON.parse(json);
-                    
+
                     const outer = document.getElementById('mainChatCanvas');
                     const wasSmooth = outer.classList.contains('scroll-smooth');
                     if (wasSmooth) outer.classList.remove('scroll-smooth');
 
                     document.getElementById('mainChatCanvasInner').innerHTML = '';
-                    window.ACP.breakGrouping(); 
-                    
+                    window.ACP.breakGrouping();
+
                     data.forEach(msg => {
                         const r = msg.role;
                         const targetRole = r === 'user' ? 'me' : 'ai';
@@ -824,7 +1034,7 @@
                             const div = document.getElementById(id);
                             if (div) div.innerHTML = window.ACP.renderContent(msg.content);
                         }
-                        window.ACP.breakGrouping(); 
+                        window.ACP.breakGrouping();
                     });
 
                     setTimeout(() => {
@@ -850,41 +1060,69 @@
                 window.ACP.lastMessageRole = '';
             },
 
-            getTriggerInfo: (text, trigger) => {
-                const selection = window.getSelection();
-                if (!selection.rangeCount) return null;
-                const range = selection.getRangeAt(0);
+            getTriggerInfo: (triggerChar) => {
+                const sel = window.getSelection();
+                if (!sel.rangeCount) return null;
+                const range = sel.getRangeAt(0);
                 const node = range.startContainer;
-                const content = node.textContent || "";
-                const beforeCursor = content.substring(0, range.startOffset);
-                const words = beforeCursor.split(/[\s\xa0\n]/);
-                const lastWord = words[words.length - 1];
-                if (lastWord.startsWith(trigger)) return lastWord.slice(1).toLowerCase();
-                return null;
+                if (node.nodeType !== Node.TEXT_NODE) return null;
+
+                const text = node.textContent.substring(0, range.startOffset);
+                const lastTriggerIndex = text.lastIndexOf(triggerChar);
+                if (lastTriggerIndex === -1) return null;
+
+                const lastWord = text.substring(lastTriggerIndex);
+                if (/[\s\xa0\n]/.test(lastWord)) return null;
+                if (lastTriggerIndex > 0 && !/[\s\xa0\n]/.test(text[lastTriggerIndex - 1])) return null;
+
+                window.ACP.lastTriggerInfo = {
+                    node: node,
+                    triggerChar: triggerChar,
+                    startIndex: lastTriggerIndex,
+                    endIndex: range.startOffset
+                };
+
+                return lastWord.substring(1).toLowerCase();
             },
 
-            replaceTriggerRange: (trigger, replacementNodeOrText) => {
-                const selection = window.getSelection();
-                if (!selection.rangeCount) return;
-                const range = selection.getRangeAt(0);
-                const node = range.startContainer;
-                const text = node.textContent || "";
-                const beforeCursor = text.substring(0, range.startOffset);
-                const words = beforeCursor.split(/[\s\xa0\n]/);
-                const lastWord = words[words.length - 1];
-                if (lastWord.startsWith(trigger)) {
-                    range.setStart(node, range.startOffset - lastWord.length);
-                    range.setEnd(node, range.startOffset);
-                    range.deleteContents();
-                    const inserted = (typeof replacementNodeOrText === 'string') ? document.createTextNode(replacementNodeOrText) : replacementNodeOrText;
-                    range.insertNode(inserted);
-                    range.setStartAfter(inserted);
-                    const space = document.createTextNode('\u00A0');
-                    range.insertNode(space);
-                    range.setStartAfter(space);
-                    range.collapse(true);
-                    selection.removeAllRanges(); selection.addRange(range);
-                }
+            replaceTriggerRange: (triggerChar, replacement) => {
+                const info = window.ACP.lastTriggerInfo;
+                if (!info || info.triggerChar !== triggerChar) return;
+
+                try {
+                    const node = info.node;
+                    // Ensure we are still dealing with the same node and content
+                    if (node.parentNode) {
+                        const range = document.createRange();
+                        range.setStart(node, info.startIndex);
+                        range.setEnd(node, info.endIndex);
+
+                        // Use more aggressive deletion: direct data manipulation if deleteContents fails
+                        range.deleteContents();
+
+                        // If browser didn't delete (sometimes happens in hybrid apps), force it
+                        if (node.textContent.substring(info.startIndex, info.startIndex + (info.endIndex - info.startIndex)) === info.triggerChar + window.ACP.getTriggerInfo(triggerChar)) {
+                            node.deleteData(info.startIndex, info.endIndex - info.startIndex);
+                        }
+
+                        const inserted = (typeof replacement === 'string') ? document.createTextNode(replacement) : replacement;
+                        range.insertNode(inserted);
+                        range.setStartAfter(inserted);
+
+                        const space = document.createTextNode('\u00A0');
+                        range.insertNode(space);
+                        range.setStartAfter(space);
+                        range.collapse(true);
+
+                        const sel = window.getSelection();
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    }
+
+                    document.getElementById('userInput').focus();
+                } catch (e) { console.error('Replace error:', e); }
+
+                window.ACP.lastTriggerInfo = null;
             },
 
             scrollToActive: (containerId) => {
@@ -894,8 +1132,8 @@
                 if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             },
 
-            handleSlashCommand: (text) => {
-                const query = window.ACP.getTriggerInfo(text, '/');
+            handleSlashCommand: () => {
+                const query = window.ACP.getTriggerInfo('/');
                 if (query !== null) {
                     const filtered = (window.ACP.availableCommands || []).filter(c => query === "" || c.name.toLowerCase().includes(query));
                     if (filtered.length > 0) {
@@ -907,8 +1145,8 @@
                 window.ACP.showCommands(false);
             },
 
-            handleAtCommand: (text) => {
-                const query = window.ACP.getTriggerInfo(text, '@');
+            handleAtCommand: () => {
+                const query = window.ACP.getTriggerInfo('@');
                 if (query !== null) {
                     const filtered = (window.ACP.workspaceFiles || []).filter(f => query === "" || f.toLowerCase().includes(query)).slice(0, 20);
                     if (filtered.length > 0) {
@@ -947,53 +1185,104 @@
 
             showCommands: (show) => { document.getElementById('commandDropdown').classList.toggle('hidden', !show); },
             showFiles: (show) => { document.getElementById('fileDropdown').classList.toggle('hidden', !show); },
-            applyCommand: (name) => { window.ACP.replaceTriggerRange('/', '/' + name); window.ACP.showCommands(false); },
-            applyFile: (path) => { 
+            showToolbox: () => {
+                const filtered = window.ACP.availableCommands || [];
+                window.ACP.filteredCommands = filtered;
+                window.ACP.selectedCommandIndex = 0;
+                window.ACP.renderCommands(filtered);
+                window.ACP.showCommands(true);
+                document.getElementById('userInput').focus();
+            },
+            applyCommand: (name) => {
+                const hasTrigger = window.ACP.getTriggerInfo('/') !== null;
+                if (hasTrigger) {
+                    window.ACP.replaceTriggerRange('/', '/' + name);
+                } else {
+                    const selection = window.getSelection();
+                    if (selection.rangeCount) {
+                        const range = selection.getRangeAt(0);
+                        const textNode = document.createTextNode('/' + name);
+                        range.insertNode(textNode);
+                        range.setStartAfter(textNode);
+                        const space = document.createTextNode('\u00A0');
+                        range.insertNode(space);
+                        range.setStartAfter(space);
+                        range.collapse(true);
+                        selection.removeAllRanges(); selection.addRange(range);
+                    } else {
+                        document.getElementById('userInput').innerText += '/' + name + ' ';
+                    }
+                }
+                window.ACP.showCommands(false);
+            },
+            applyFile: (path) => {
                 const pill = document.createElement('span');
                 let safeFullPath = encodeURIComponent(path);
                 pill.className = 'text-primary font-medium px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 cursor-pointer rounded mx-0.5 transition-colors';
                 pill.setAttribute('onclick', `if(window.pillTimer) clearTimeout(window.pillTimer); if(event.detail===1){window.pillTimer=setTimeout(()=>window.sendUi('open-file-viewer?path=' + '${safeFullPath}'), 250);}else if(event.detail===2){window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId + '&path=' + '${safeFullPath}')}`);
-                pill.contentEditable = 'false'; 
+                pill.contentEditable = 'false';
                 const label = path.includes(' ') ? `@"${path}"` : `@${path}`;
                 pill.innerText = label;
                 window.ACP.replaceTriggerRange('@', pill); window.ACP.showFiles(false);
-            },            setWorkspaceFiles: (files) => { window.ACP.workspaceFiles = files; },
+            }, setWorkspaceFiles: (files) => { window.ACP.workspaceFiles = files; },
             showTyping: (show) => { window.ACP.showProcessing(show); },
             parseStructuredPrompt: async (text) => { return text; }
         };
     </script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-dark.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
 </head>
 
-<body class="bg-surface text-on-surface font-body h-screen flex overflow-hidden antialiased selection:bg-primary/30 selection:text-primary">
-    <nav class="bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-72 flex-shrink-0 flex flex-col z-50 shadow-2xl shadow-black/60 relative">
+<body
+    class="bg-surface text-on-surface font-body h-screen flex overflow-hidden antialiased selection:bg-primary/30 selection:text-primary">
+    <nav
+        class="bg-surface-container-lowest/80 backdrop-blur-xl h-screen w-72 flex-shrink-0 flex flex-col z-50 shadow-2xl shadow-black/60 relative">
         <div class="p-6 pb-4">
             <div class="flex items-center gap-3 mb-6">
-                <button class="w-10 h-10 rounded-lg bg-surface-container-high hover:bg-surface-container-highest flex items-center justify-center border border-outline-variant/20 shadow-lg transition-colors cursor-pointer focus:outline-none" title="Toggle Sidebar">
+                <button
+                    class="w-10 h-10 rounded-lg bg-surface-container-high hover:bg-surface-container-highest flex items-center justify-center border border-outline-variant/20 shadow-lg transition-colors cursor-pointer focus:outline-none"
+                    title="Toggle Sidebar">
                     <span class="material-symbols-outlined text-primary text-xl">menu</span>
                 </button>
                 <div>
-                    <h1 class="font-headline font-bold text-lg tracking-tight text-on-surface leading-tight">ACP Manager</h1>
+                    <h1 class="font-headline font-bold text-lg tracking-tight text-on-surface leading-tight">ACP Manager
+                    </h1>
                     <p class="text-xs font-label text-on-surface-variant">Nocturnal Architect</p>
                 </div>
             </div>
             <div class="relative w-full group">
-                <button onclick="window.ACP.toggleDropdown(event)" class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all duration-200 group active:scale-95">
-                    <span class="material-symbols-outlined text-lg group-hover:text-primary transition-colors">add</span>
+                <button onclick="window.ACP.toggleDropdown(event)"
+                    class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all duration-200 group active:scale-95">
+                    <span
+                        class="material-symbols-outlined text-lg group-hover:text-primary transition-colors">add</span>
                     <span class="font-headline font-medium text-sm">New Chat</span>
                 </button>
-                <div id="newChatDropdown" class="hidden absolute left-0 top-full mt-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[100] opacity-0 invisible transition-all duration-200">
+                <div id="newChatDropdown"
+                    class="hidden absolute left-0 top-full mt-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[100] opacity-0 invisible transition-all duration-200">
                     <div class="py-1">
-                        <button onclick="window.sendAcp('new-chat?agent=gemini'); window.ACP.toggleDropdown()" class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left group/item">
-                            <div class="flex items-center gap-3"><img src="https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg" class="w-[18px] h-[18px] object-contain group-hover/item:scale-110 transition-transform" alt="Gemini">Gemini CLI</div>
-                            <span class="text-[10px] font-mono opacity-40 group-hover/item:opacity-60 transition-opacity">Alt+N+G</span>
+                        <button onclick="window.sendAcp('new-chat?agent=gemini'); window.ACP.toggleDropdown()"
+                            class="w-full flex items-center justify-between px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left group/item">
+                            <div class="flex items-center gap-3"><img
+                                    src="https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg"
+                                    class="w-[18px] h-[18px] object-contain group-hover/item:scale-110 transition-transform"
+                                    alt="Gemini">Gemini CLI</div>
+                            <span
+                                class="text-[10px] font-mono opacity-40 group-hover/item:opacity-60 transition-opacity">Alt+N+G</span>
                         </button>
-                        <button class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface transition-colors text-left group/item opacity-30 cursor-not-allowed" disabled>
-                            <div class="flex items-center gap-3"><img src="https://cdn.agentclientprotocol.com/registry/v1/latest/claude-acp.svg" class="w-[18px] h-[18px] object-contain" alt="Claude">Claude</div>
+                        <button
+                            class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface transition-colors text-left group/item opacity-30 cursor-not-allowed"
+                            disabled>
+                            <div class="flex items-center gap-3"><img
+                                    src="https://cdn.agentclientprotocol.com/registry/v1/latest/claude-acp.svg"
+                                    class="w-[18px] h-[18px] object-contain" alt="Claude">Claude</div>
                         </button>
-                        <button class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface transition-colors text-left group/item opacity-30 cursor-not-allowed" disabled>
-                            <div class="flex items-center gap-3"><img src="https://cdn.agentclientprotocol.com/registry/v1/latest/codex-acp.svg" class="w-[18px] h-[18px] object-contain" alt="Codex">Codex CLI</div>
+                        <button
+                            class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface transition-colors text-left group/item opacity-30 cursor-not-allowed"
+                            disabled>
+                            <div class="flex items-center gap-3"><img
+                                    src="https://cdn.agentclientprotocol.com/registry/v1/latest/codex-acp.svg"
+                                    class="w-[18px] h-[18px] object-contain" alt="Codex">Codex CLI</div>
                         </button>
                     </div>
                 </div>
@@ -1002,117 +1291,250 @@
         <div id="sessionListContainer" class="flex-1 overflow-y-auto px-3 space-y-1 pb-6"></div>
         <div class="p-4 mt-auto border-t border-white/5 flex items-center justify-between gap-1">
             <div class="flex items-center gap-1">
-                <button onclick="window.sendUi('open-explorer')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="File Explorer">
+                <button onclick="window.sendUi('open-explorer')"
+                    class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group"
+                    title="File Explorer">
                     <span class="material-symbols-outlined text-lg">folder</span>
                 </button>
-                <button onclick="window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId)" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="Diff Viewer">
+                <button onclick="window.sendUi('open-diff-viewer?sessionId=' + window.ACP.activeSessionId)"
+                    class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group"
+                    title="Diff Viewer">
                     <span class="material-symbols-outlined text-lg">text_compare</span>
                 </button>
             </div>
-            <button class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group" title="Settings">
-                <span class="material-symbols-outlined text-lg group-hover:rotate-45 transition-transform duration-300">settings</span>
+            <button
+                class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container-high rounded-lg transition-colors duration-200 cursor-pointer group"
+                title="Settings">
+                <span
+                    class="material-symbols-outlined text-lg group-hover:rotate-45 transition-transform duration-300">settings</span>
             </button>
         </div>
     </nav>
 
     <!-- Main Content Area -->
     <main class="flex-1 flex flex-col min-w-0 bg-surface relative z-0">
-        <header class="h-16 flex items-center justify-between px-8 w-full z-10 bg-surface/80 backdrop-blur-md border-b border-outline-variant/10 shrink-0">
-            <div class="flex items-center gap-4"><h2 class="font-headline font-semibold text-on-surface text-lg tracking-tight">ACP Agent Manager</h2><div class="h-4 w-[1px] bg-outline-variant/30 hidden md:block"></div><div class="hidden md:flex items-center gap-2 text-sm text-on-surface-variant"><span class="material-icons text-[16px]">chat</span><span id="activeAgentHeader">No Session</span></div></div>
+        <header
+            class="h-16 flex items-center justify-between px-8 w-full z-10 bg-surface/80 backdrop-blur-md border-b border-outline-variant/10 shrink-0">
+            <div class="flex items-center gap-4">
+                <h2 class="font-headline font-semibold text-on-surface text-lg tracking-tight">ACP Agent Manager</h2>
+                <div class="h-4 w-[1px] bg-outline-variant/30 hidden md:block"></div>
+                <div class="hidden md:flex items-center gap-2 text-sm text-on-surface-variant"><span
+                        class="material-icons text-[16px]">chat</span><span id="activeAgentHeader">No Session</span>
+                </div>
+            </div>
             <div class="flex items-center gap-4">
                 <div class="relative hidden md:block" onclick="window.ACP.toggleSearch(true)">
-                    <span class="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
-                    <input class="bg-surface-container-lowest border border-outline-variant/20 rounded-full py-1.5 pl-9 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary w-48 transition-all hover:border-outline-variant/40 cursor-pointer" placeholder="Search Conversations..." type="text" readonly>
+                    <span
+                        class="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+                    <input
+                        class="bg-surface-container-lowest border border-outline-variant/20 rounded-full py-1.5 pl-9 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary w-48 transition-all hover:border-outline-variant/40 cursor-pointer"
+                        placeholder="Search Conversations..." type="text" readonly>
                 </div>
-                <button onclick="window.ACP.toggleHistory()" class="w-10 h-10 rounded-lg bg-surface-container-high hover:bg-surface-container-highest flex items-center justify-center border border-outline-variant/20 shadow-lg transition-colors group" title="Toggle File History">
-                    <span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary text-xl">side_navigation</span>
+                <button onclick="window.ACP.toggleHistory()"
+                    class="w-10 h-10 rounded-lg bg-surface-container-high hover:bg-surface-container-highest flex items-center justify-center border border-outline-variant/20 shadow-lg transition-colors group"
+                    title="Toggle File History">
+                    <span
+                        class="material-symbols-outlined text-on-surface-variant group-hover:text-primary text-xl">side_navigation</span>
                 </button>
             </div>
         </header>
 
         <div class="flex-1 flex flex-row overflow-hidden relative">
             <div class="flex-1 flex flex-col min-w-0 relative">
-                <div id="mainChatCanvas" class="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-2 scroll-smooth hidden"><div id="mainChatCanvasInner" class="max-w-4xl mx-auto flex flex-col"></div></div>
-                <div id="mainEmptyArea" class="flex-1 flex items-center justify-center"><div class="text-center space-y-4"><div class="w-16 h-16 bg-surface-container-high rounded-full flex items-center justify-center mx-auto border border-outline-variant/20 shadow-xl"><span class="material-symbols-outlined text-3xl text-primary">chat_bubble</span></div><h3 class="text-lg font-medium">Ready to start?</h3><p class="text-sm text-on-surface-variant">Select a conversation from the sidebar.</p></div></div>
-                <div id="mainInputArea" class="shrink-0 p-4 md:p-8 bg-gradient-to-t from-surface via-surface to-transparent pt-12 z-30 hidden">
+                <div id="mainChatCanvas"
+                    class="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-2 scroll-smooth hidden">
+                    <div id="mainChatCanvasInner" class="max-w-4xl mx-auto flex flex-col"></div>
+                </div>
+                <div id="mainEmptyArea" class="flex-1 flex items-center justify-center">
+                    <div class="text-center space-y-4">
+                        <div
+                            class="w-16 h-16 bg-surface-container-high rounded-full flex items-center justify-center mx-auto border border-outline-variant/20 shadow-xl">
+                            <span class="material-symbols-outlined text-3xl text-primary">chat_bubble</span>
+                        </div>
+                        <h3 class="text-lg font-medium">Ready to start?</h3>
+                        <p class="text-sm text-on-surface-variant">Select a conversation from the sidebar.</p>
+                    </div>
+                </div>
+                <div id="mainInputArea"
+                    class="shrink-0 p-4 md:p-8 bg-gradient-to-t from-surface via-surface to-transparent pt-12 z-30 hidden">
                     <div class="max-w-4xl mx-auto">
-                        <div class="flex items-center mb-2 px-1 gap-2"><div class="relative"><button id="modelSelectBtn" onclick="document.getElementById('modelDropdown').classList.toggle('hidden')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-lowest border border-outline-variant/30 text-xs font-medium text-on-surface hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-[16px] text-primary">smart_toy</span><span>Select Model</span><span class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_arrow_down</span></button><div id="modelDropdown" class="hidden absolute left-0 bottom-full mb-2 w-72 bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[90] max-h-96 overflow-y-auto"></div></div></div>
-                        <div class="relative bg-surface-container-lowest border border-outline-variant/30 rounded-2xl shadow-2xl shadow-black/50 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-all duration-300">
-                            <div id="commandDropdown" class="hidden absolute left-0 bottom-full mb-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-[80]"><div id="commandListContainer" class="max-h-96 overflow-y-auto"></div></div>
-                            <div id="fileDropdown" class="hidden absolute left-0 bottom-full mb-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-[80]"><div id="fileListContainer" class="max-h-96 overflow-y-auto"></div></div>
-                            <div id="userInput" contenteditable="true" class="w-full bg-transparent text-on-surface placeholder:text-on-surface-variant/50 border-none outline-none py-4 px-4 min-h-[60px] max-h-[200px] text-sm font-body leading-relaxed" placeholder="Message Gemini-CLI or type '/' for commands..."></div>
+                        <div class="flex items-center mb-2 px-1 gap-2">
+                            <div class="relative"><button id="modelSelectBtn"
+                                    onclick="document.getElementById('modelDropdown').classList.toggle('hidden')"
+                                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-lowest border border-outline-variant/30 text-xs font-medium text-on-surface hover:bg-surface-container-high transition-colors"><span
+                                        class="material-symbols-outlined text-[16px] text-primary">smart_toy</span><span>Select
+                                        Model</span><span
+                                        class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_arrow_down</span></button>
+                                <div id="modelDropdown"
+                                    class="hidden absolute left-0 bottom-full mb-2 w-72 bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[90] max-h-96 overflow-y-auto">
+                                </div>
+                            </div>
+                        </div>
+                        <div
+                            class="relative bg-surface-container-lowest border border-outline-variant/30 rounded-2xl shadow-2xl shadow-black/50 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-all duration-300">
+                            <div id="commandDropdown"
+                                class="hidden absolute left-0 bottom-full mb-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-[80]">
+                                <div id="commandListContainer" class="max-h-96 overflow-y-auto"></div>
+                            </div>
+                            <div id="fileDropdown"
+                                class="hidden absolute left-0 bottom-full mb-2 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-[80]">
+                                <div id="fileListContainer" class="max-h-96 overflow-y-auto"></div>
+                            </div>
+                            <div id="userInput" contenteditable="true"
+                                class="w-full bg-transparent text-on-surface placeholder:text-on-surface-variant/50 border-none outline-none py-4 px-4 min-h-[60px] max-h-[200px] text-sm font-body leading-relaxed"
+                                placeholder="Message Gemini-CLI or type '/' for commands..."></div>
                             <div class="flex items-center justify-between px-3 pb-3 pt-1">
-                                <div class="flex items-center gap-1"><button id="attachBtn" onclick="window.sendUi('open-file-dialog')" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Attach file"><span class="material-icons text-[20px]">attach_file</span></button><button id="toolsBtn" onclick="document.getElementById('userInput').innerText='/'; window.ACP.handleSlashCommand('/'); document.getElementById('userInput').focus();" class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors" title="Use Tool"><span class="material-icons text-[20px]">construction</span></button><div class="h-4 w-[1px] bg-outline-variant/30 mx-1"></div><span class="px-2 py-1 rounded bg-surface-container text-[10px] font-mono text-on-surface-variant border border-outline-variant/20 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-primary inline-block"></span> Local Context</span></div>
-                                <button id="send-button" class="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-on-primary hover:bg-primary-container shadow-lg shadow-primary/20 transition-all duration-200 active:scale-95 group"><span class="material-symbols-outlined text-[20px]">send</span></button>
+                                <div class="flex items-center gap-1"><button id="attachBtn"
+                                        onclick="window.sendUi('open-file-dialog')"
+                                        class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors"
+                                        title="Attach file"><span
+                                            class="material-icons text-[20px]">attach_file</span></button><button
+                                        id="toolsBtn" onclick="window.ACP.showToolbox();"
+                                        class="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-colors"
+                                        title="Use Tool"><span
+                                            class="material-icons text-[20px]">construction</span></button>
+                                    <div class="h-4 w-[1px] bg-outline-variant/30 mx-1"></div><span
+                                        class="px-2 py-1 rounded bg-surface-container text-[10px] font-mono text-on-surface-variant border border-outline-variant/20 flex items-center gap-1"><span
+                                            class="w-1.5 h-1.5 rounded-full bg-primary inline-block"></span> Local
+                                        Context</span>
+                                </div>
+                                <button id="send-button"
+                                    class="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-on-primary hover:bg-primary-container shadow-lg shadow-primary/20 transition-all duration-200 active:scale-95 group"><span
+                                        class="material-symbols-outlined text-[20px]">send</span></button>
                             </div>
                         </div>
                         <div class="text-center mt-3"></div>
                     </div>
                 </div>
             </div>
-            
-            <aside id="searchSidebar" class="hidden w-80 bg-surface border-l border-outline-variant/10 flex flex-col h-full shadow-2xl z-20 overflow-hidden">
+
+            <aside id="searchSidebar"
+                class="hidden w-80 bg-surface border-l border-outline-variant/10 flex flex-col h-full shadow-2xl z-20 overflow-hidden">
                 <div class="shrink-0 p-5 border-b border-outline-variant/10 bg-surface-container/30 relative z-[100]">
                     <div class="flex items-center justify-between mb-5">
-                        <h2 class="text-sm font-headline font-bold text-on-surface flex items-center gap-2 uppercase tracking-wider">
+                        <h2
+                            class="text-sm font-headline font-bold text-on-surface flex items-center gap-2 uppercase tracking-wider">
                             <span class="material-icons text-primary text-[20px]">search</span> Search
                         </h2>
-                        <button onclick="window.ACP.toggleSearch(false)" class="text-on-surface-variant hover:text-white"><span class="material-icons text-[18px]">close</span></button>
+                        <button onclick="window.ACP.toggleSearch(false)"
+                            class="text-on-surface-variant hover:text-white"><span
+                                class="material-icons text-[18px]">close</span></button>
                     </div>
                     <div class="relative mb-5">
-                        <input type="text" id="searchQuery" class="w-full bg-surface-container-highest text-on-surface border-none rounded-xl py-2.5 pl-10 pr-4 text-xs focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-on-surface-variant/40" placeholder="Search..." onkeyup="if(event.key==='Enter') window.ACP.executeSearch()">
-                        <span class="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40 text-[16px]">search</span>
+                        <input type="text" id="searchQuery"
+                            class="w-full bg-surface-container-highest text-on-surface border-none rounded-xl py-2.5 pl-10 pr-4 text-xs focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-on-surface-variant/40"
+                            placeholder="Search..." onkeyup="if(event.key==='Enter') window.ACP.executeSearch()">
+                        <span
+                            class="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40 text-[16px]">search</span>
                     </div>
 
-                    <div class="bg-surface-container-low/50 rounded-xl border border-outline-variant/10 overflow-visible">
-                        <button onclick="window.ACP.toggleSearchOptionsAccordion()" class="w-full flex items-center justify-between p-3 text-left hover:bg-surface-container-high transition-colors rounded-t-xl">
-                            <span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">Search Options</span>
-                            <span id="searchOptionsAccordionChevron" class="material-icons text-on-surface-variant/40 text-[18px] transition-transform" style="transform: rotate(180deg)">expand_more</span>
+                    <div
+                        class="bg-surface-container-low/50 rounded-xl border border-outline-variant/10 overflow-visible">
+                        <button onclick="window.ACP.toggleSearchOptionsAccordion()"
+                            class="w-full flex items-center justify-between p-3 text-left hover:bg-surface-container-high transition-colors rounded-t-xl">
+                            <span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">Search
+                                Options</span>
+                            <span id="searchOptionsAccordionChevron"
+                                class="material-icons text-on-surface-variant/40 text-[18px] transition-transform"
+                                style="transform: rotate(180deg)">expand_more</span>
                         </button>
                         <div id="searchOptionsAccordionContent" class="px-3 pb-4 pt-1 space-y-4">
                             <div class="flex flex-col gap-3 mt-1">
                                 <label class="flex items-center gap-2 cursor-pointer group">
-                                    <input type="checkbox" id="searchThisSessionOnly" onchange="window.ACP.toggleSearchSessionOptions()" class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest">
-                                    <span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Search In Specific Session</span>
+                                    <input type="checkbox" id="searchThisSessionOnly"
+                                        onchange="window.ACP.toggleSearchSessionOptions()"
+                                        class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest">
+                                    <span
+                                        class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Search
+                                        In Specific Session</span>
                                 </label>
                                 <div id="searchSessionDropdownContainer" class="hidden relative">
-                                    <button id="searchSessionTrigger" onclick="window.ACP.toggleSearchSessionMenu()" 
+                                    <button id="searchSessionTrigger" onclick="window.ACP.toggleSearchSessionMenu()"
                                         class="w-full flex items-center justify-between gap-2 py-2 px-3 rounded-lg border border-outline-variant/20 bg-surface-container-highest text-[10px] text-on-surface hover:bg-surface-container-high transition-all">
                                         <span class="truncate">Select Session</span>
-                                        <span class="material-icons text-on-surface-variant text-[14px]">expand_more</span>
+                                        <span
+                                            class="material-icons text-on-surface-variant text-[14px]">expand_more</span>
                                     </button>
-                                    <div id="searchSessionMenu" class="hidden absolute left-0 top-full mt-1 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[110] max-h-40 overflow-y-auto"></div>
+                                    <div id="searchSessionMenu"
+                                        class="hidden absolute left-0 top-full mt-1 w-full bg-surface-container-highest border border-outline-variant/20 rounded-xl shadow-2xl z-[110] max-h-40 overflow-y-auto">
+                                    </div>
                                 </div>
                             </div>
                             <div class="h-px bg-outline-variant/10"></div>
                             <div class="flex items-center gap-4">
-                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchCase" class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Case Sensitive</span></label>
-                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchRegex" class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Regex</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox"
+                                        id="searchCase"
+                                        class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span
+                                        class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Case
+                                        Sensitive</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox"
+                                        id="searchRegex"
+                                        class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span
+                                        class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Regex</span></label>
                             </div>
                             <div class="h-px bg-outline-variant/10"></div>
                             <div class="flex flex-col gap-2">
-                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchUser" checked class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include My Messages</span></label>
-                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchAgent" checked class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include Agent Responses</span></label>
-                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchThought" class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include Thoughts</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox"
+                                        id="searchUser" checked
+                                        class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span
+                                        class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include
+                                        My Messages</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox"
+                                        id="searchAgent" checked
+                                        class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span
+                                        class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include
+                                        Agent Responses</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox"
+                                        id="searchThought"
+                                        class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span
+                                        class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include
+                                        Thoughts</span></label>
                             </div>
                             <div class="h-px bg-outline-variant/10"></div>
                             <div class="flex flex-col gap-2">
-                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchActive" checked class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include Active Sessions</span></label>
-                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox" id="searchInactive" checked class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include Inactive Sessions</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox"
+                                        id="searchActive" checked
+                                        class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span
+                                        class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include
+                                        Active Sessions</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer group"><input type="checkbox"
+                                        id="searchInactive" checked
+                                        class="w-3.5 h-3.5 rounded border-outline-variant/30 text-primary bg-surface-container-highest"><span
+                                        class="text-[10px] font-medium text-on-surface-variant group-hover:text-on-surface">Include
+                                        Inactive Sessions</span></label>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div id="searchResults" class="flex-1 overflow-y-auto p-3 space-y-3 bg-surface/50 relative z-0">
-                    <div id="searchEmptyState" class="h-full flex flex-col items-center justify-center text-center p-8 opacity-40"><span class="material-icons text-4xl mb-4">manage_search</span><p class="text-xs font-medium">Ready to search</p></div>
-                    <div id="searchLoadingState" class="hidden h-full flex flex-col items-center justify-center text-center p-8"><div class="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin mb-4"></div><p class="text-xs font-medium">Searching...</p></div>
+                    <div id="searchEmptyState"
+                        class="h-full flex flex-col items-center justify-center text-center p-8 opacity-40"><span
+                            class="material-icons text-4xl mb-4">manage_search</span>
+                        <p class="text-xs font-medium">Ready to search</p>
+                    </div>
+                    <div id="searchLoadingState"
+                        class="hidden h-full flex flex-col items-center justify-center text-center p-8">
+                        <div class="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin mb-4">
+                        </div>
+                        <p class="text-xs font-medium">Searching...</p>
+                    </div>
                     <div id="searchResultsList" class="hidden space-y-3"></div>
                 </div>
             </aside>
 
-            <aside id="historySidebar" class="hidden w-80 bg-surface-container-lowest border-l border-outline-variant/10 flex flex-col h-full overflow-hidden shadow-xl z-20">
-                <div class="p-4 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low/50 backdrop-blur-md sticky top-0"><h3 class="font-headline font-semibold text-on-surface text-sm tracking-wide uppercase">File History</h3><button onclick="window.ACP.toggleHistory()" class="text-on-surface-variant hover:text-white"><span class="material-icons text-[18px]">close</span></button></div>
-                <div id="fileHistoryContainer" class="flex-1 overflow-y-auto p-3 space-y-2"><div class="p-8 text-center text-xs text-on-surface-variant italic opacity-30">No history available</div></div>
+            <aside id="historySidebar"
+                class="hidden w-80 bg-surface-container-lowest border-l border-outline-variant/10 flex flex-col h-full overflow-hidden shadow-xl z-20">
+                <div
+                    class="p-4 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low/50 backdrop-blur-md sticky top-0">
+                    <h3 class="font-headline font-semibold text-on-surface text-sm tracking-wide uppercase">File History
+                    </h3><button onclick="window.ACP.toggleHistory()"
+                        class="text-on-surface-variant hover:text-white"><span
+                            class="material-icons text-[18px]">close</span></button>
+                </div>
+                <div id="fileHistoryContainer" class="flex-1 overflow-y-auto p-3 space-y-2">
+                    <div class="p-8 text-center text-xs text-on-surface-variant italic opacity-30">No history available
+                    </div>
+                </div>
             </aside>
         </div>
     </main>
@@ -1188,7 +1610,7 @@
         window.addEventListener('DOMContentLoaded', () => {
             const input = document.getElementById('userInput');
             if (input) {
-                input.addEventListener('input', function() {
+                input.addEventListener('input', function () {
                     window.ACP.handleSlashCommand(this.innerText);
                     window.ACP.handleAtCommand(this.innerText);
                 });
@@ -1221,7 +1643,10 @@
                     e.preventDefault(); e.stopPropagation(); window.location.href = link.href;
                 }
             }, true);
+
+            window.sendUi('ready');
         });
     </script>
 </body>
+
 </html>
