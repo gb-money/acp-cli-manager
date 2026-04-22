@@ -85,9 +85,9 @@ begin
       LNow := TThread.GetTickCount;
       Lock;
       try
-        for I := 0 to FSessions.Count - 1 do
+        for I := 0 to Sessions.Count - 1 do
         begin
-          LSession := FSessions[I];
+          LSession := Sessions[I];
           if LSession.IsActive and (LSession.LastHistoryTick > 0) then
           begin
             if (LNow - LSession.LastHistoryTick) > 300000 then // 5 minutes
@@ -108,7 +108,7 @@ function TSessionManager.AddSession(AAgent: TACPAgent; AType: TAgentType; const 
 var
   LSessionDir: string;
 begin
-  Result := TSessionInfo.Create(AAgent, AType, ASessionId, AName, ACwd);
+  Result := TSessionInfo.Create(AAgent, AAgent.AgentName, AType, ASessionId, AName, ACwd);
 
   if not ASessionId.StartsWith('pending-') then begin
     LSessionDir := TPath.Combine(BaseConfigPath, 'sessions');
@@ -140,7 +140,7 @@ begin
   if not Assigned(ASession) or not ASession.SessionId.StartsWith('pending-') then Exit;
 
   LParent := TPath.Combine(BaseConfigPath, 'sessions');
-  LParent := TPath.Combine(LParent, ASession.Agent.AgentName.ToLower + '-cli');
+  LParent := TPath.Combine(LParent, ASession.AgentName.ToLower + '-cli');
   
   LOldDir := TPath.Combine(LParent, ASession.SessionId);
   LNewDir := TPath.Combine(LParent, ANewId);
@@ -171,7 +171,7 @@ begin
   if not Assigned(ASession) then Exit;
 
   LDir := TPath.Combine(BaseConfigPath, 'sessions');
-  LDir := TPath.Combine(LDir, ASession.Agent.AgentName.ToLower + '-cli');
+  LDir := TPath.Combine(LDir, ASession.AgentName.ToLower + '-cli');
   LDir := TPath.Combine(LDir, ASession.SessionId);
 
   if TDirectory.Exists(LDir) then

@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.Types, FMX.WebBrowser, System.IOUtils, System.NetEncoding,
-  JsonDataObjects, uACPAgent, uSessionManager, uWebACPCommandHandler, System.Generics.Collections, System.Generics.Defaults;
+  JsonDataObjects, uACPAgent, uSessionManager, uWebACPCommandHandler, System.Generics.Collections, System.Generics.Defaults, uAgentTypes;
 
 type
   TDiffViewerControl = class

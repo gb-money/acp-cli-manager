@@ -212,4 +212,45 @@ TGeminiAgent.ResumeSession(ASessionId: string)
   - Callback : TSessionInfo.IsRestoring = False 처리 후 UI 갱신 (UI 갱신을 옵저버 패턴으로 할 수 있는가?)
 
 
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"authMethods":[{"id":"oauth-personal","name":"Log in with Google","description":"Log in with your Google account"},{"id":"gemini-api-key","name":"Gemini API key","description":"Use an API key with Gemini Developer API","_meta":{"api-key":{"provider":"google"}}},{"id":"vertex-ai","name":"Vertex AI","description":"Use an API key with Vertex AI GenAI API"},{"id":"gateway","name":"AI API Gateway","description":"Use a custom AI API Gateway","_meta":{"gateway":{"protocol":"google","restartRequired":"false"}}}],"agentInfo":{"name":"gemini-cli","title":"Gemini CLI","version":"0.38.2"},"agentCapabilities":{"loadSession":true,"promptCapabilities":{"image":true,"audio":true,"embeddedContext":true},"mcpCapabilities":{"http":true,"sse":true}}}}
+session/prompt 의 콜백을 구성 완료했음. 콜백 컨디션 조건에 맞는 json을 받으면 UI까지 활성화가 잘 됨.
+이제 그 중간에 들어오는 응답을 잘 처리해야함.
+먼저, 에이전트의 응답은 다음 구조를 가지고 있음
+
+1. method: "fs/~~~~~" 로 들어오는 경우
+  - fs/read_text_file : 파일 읽기를 요청함. 같은 id, method를 사용하여 params.content 에 파일의 풀 텍스트를 응답해야함.
+  - fs/write_text_file : 파일 쓰기를 요청함. params.path에 파일의 전체경로, params.content 에 업데이트해야할 내용이 넘어옴
+    - 이 경우 프로그램이 직접 파일 쓰기를 하고, 쓰기가 완료되면 같은 id, method를 사용하고, 비어있는 params 오브젝트와 함께 응답해야함.   
+
+2. method: "session/update" 로 들어오는 경우
+  이 타입은 다시 타입에 따라 나눠서 처리해야함.
+   - agent_message_chunk : 대답이 생성되는 중 (실시간으로 텍스트를 쌓음)
+   - agent_thought_chunk : 생각과정이 생성되는 중 (실시간으로 텍스트를 쌓음)
+  
+3. method: "session/tool_call" 로 들어오는 경우
+   - 
+
+4. method: "session/request_permission" 로 들어오는 경우
+  - params.toolCall.kind : 'edit' or 'other'
+    - 'edit' : 윈도우에서 파일 쓰기 전 권한을 요청함. 사용자가 승인하면 fs/write_text_file 이 넘어올 것임
+      - 이때 params.toolCall.content 배열이 있는데, type: diff, path: 파일경로, oldText: 변경전 텍스트, newText: 변경후 텍스트 가 넘어옴
+    - 'other' : MCP 사용 등 기타 권한을 요청함.
+  - params.toolCall.options : 사용자가 할 수 있는 행동 목록이 들어옴
+    - ShowRequestPermission 에 options를 담아서 UI를 업데이트 해야함.
+  - 동일한 id, method로 응답하며, params.outcome.outcome, params.outcome.optionId (toolCalls.options 에 있는 optionId와 일치하게)
+    - 이때 특이 사항은 아래 내용을 참고.
+        If the current prompt turn gets cancelled, the Client MUST respond with the "cancelled" outcome:
+        {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "result": {
+            "outcome": {
+            "outcome": "cancelled"
+            }
+        }
+        }
+        ​
+        outcome : The user’s decision, either: 
+          - cancelled - The prompt turn was cancelled
+
+
+[10:57:59] IN: {"jsonrpc":"2.0","id":0,"method":"session/request_permission","params":{"sessionId":"009253a7-9f08-43f4-a7bd-fe3747176136","options":[{"optionId":"proceed_always_server","name":"Allow all server tools for this session","kind":"allow_always"},{"optionId":"proceed_always_tool","name":"Allow tool for this session","kind":"allow_always"},{"optionId":"proceed_once","name":"Allow","kind":"allow_once"},{"optionId":"cancel","name":"Reject","kind":"reject_once"}],"toolCall":{"toolCallId":"mcp_sequential-thinking_sequentialthinking-1776823079855-1","status":"pending","title":"sequentialthinking (sequential-thinking MCP Server)","content":[],"locations":[],"kind":"other"}}}

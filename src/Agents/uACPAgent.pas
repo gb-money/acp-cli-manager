@@ -10,39 +10,12 @@ type
   TACPAgent = class;
 
   TMethodHandler = procedure(const ID: string; Params: TJsonObject) of object;
-
-  TSessionInfo = class
-  public
-    Agent: TACPAgent;
-    AgentType: TAgentType;
-    SessionId: string;
-    Name: string;
-    IsLoading: Boolean;
-    IsRestoring: Boolean;
-    IsActive: Boolean;
-    IsWaitForResponse: Boolean;
-    IsPinned: Boolean;
-    IsThoughtStreaming: Boolean;
-    IsMessageStreaming: Boolean;
-    LogPath: string;
-    DiffsPath: string; // Directory for diff blocks
-    Cwd: string; // Workspace directory
-    CreatedAt: TDateTime;
-    LastConversationDate: TDateTime;
-    LastHistoryTick: Cardinal; // Last time a history chunk was received
-    constructor Create(AAgent: TACPAgent; AType: TAgentType; const ASessionId, AName: string; const ACwd: string = '');
-    procedure SaveMetadata;
-    procedure LoadMetadata;
-    procedure MarkActivity;
-    procedure UpdateConversationDate;
-  end;
+  TSessionUpdateHandler = procedure(const SessionId: string; UpdateObj: TJsonObject) of object;
 
   TSessionData = record
     FullThought: string;
     FullMessage: string;
     CommandsJson: string;
-    ModelsJson: string;
-    ModesJson: string;
     CurrentBlockText: string;
     LastChunkType: string;
     IsRestoring: Boolean;
@@ -59,6 +32,12 @@ type
     FSessionMgr: TObject; // Injected Manager (Type erased to break circular reference)
     FSessions: TDictionary<string, TSessionData>;
     FMethodHandlers: TDictionary<string, TMethodHandler>;
+    FSessionUpdateHandlers: TDictionary<string, TSessionUpdateHandler>;
+
+    FAvailableModels: TArray<TAgentModelInfo>;
+    FCurrentModelId: string;
+    FAvailableModes: TArray<TAgentModeInfo>;
+    FCurrentModeId: string;
 
     FOnEndTurn: TAgentEndTurnEvent;
     FOnMessageChunk: TAgentChunkEvent;
@@ -74,7 +53,7 @@ type
 
     procedure SetState(const Value: TAgentState);
     procedure HandleInternalReceive(Sender: TObject; const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject);
-    procedure HandleInternalRawData(Sender: TObject; Direction: TRPCDirection; const RawText: string);
+    procedure HandleInternalRawData(Sender: TObject; Direction: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const RawText: string);
     procedure HandleInternalTerminated(Sender: TObject; ExitCode: Cardinal);
 
     procedure HandleFSRead(const ID: string; Params: TJsonObject);
@@ -84,8 +63,8 @@ type
     procedure HandleToolCall(const ID: string; Params: TJsonObject);
     
     // session/update helper methods
-    procedure ProcessAvailableCommandsUpdate(const SessionId: string; UpdateObj: TJsonObject; LSession: TSessionInfo);
-    procedure ProcessChunkUpdate(const SessionId: string; UpdateType: string; UpdateObj: TJsonObject; LSession: TSessionInfo);
+    procedure ProcessAvailableCommandsUpdate(const SessionId: string; UpdateObj: TJsonObject);
+    procedure ProcessChunkUpdate(const SessionId: string; UpdateObj: TJsonObject);
     procedure ProcessToolCallUpdate(const SessionId: string; UpdateObj: TJsonObject);
     procedure ProcessModelsUpdate(const SessionId: string; UpdateObj: TJsonObject);
     procedure ProcessModesUpdate(const SessionId: string; UpdateObj: TJsonObject);
@@ -94,6 +73,7 @@ type
     function GetIsConnected: Boolean;
   protected
     procedure RegisterHandlers; virtual;
+    procedure RegisterSessionUpdateHandlers; virtual;
     function FindSessionById(const ASessionId: string): TSessionInfo;
     function GetSessionList: TArray<string>; virtual;
     procedure DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject); virtual;
@@ -113,21 +93,20 @@ type
     procedure Stop; virtual;
     procedure SendPrompt(const SessionId, AText: string); virtual; abstract;
     procedure Initialize(AParams: TJsonObject = nil); virtual; abstract;
-    procedure NewSession(AParams: TJsonObject; OnResponse: TACPResponseAnonCallback = nil; OnCondition: TACPResponseCondition = nil); virtual;
+    procedure NewSession(AParams: TJsonObject; OnResponse: TACPResponseAnonCallback = nil); virtual;
     procedure ResumeSession(const SessionId: string); virtual;
     procedure EndTurn(const SessionId, StopReason: string); virtual;
     procedure UpdateSession(ASession: TSessionInfo); virtual;
 
+    procedure Send(const Method: string; Params: TJsonObject = nil; OnResponse: TACPResponseAnonCallback = nil; OnConditions: TArray<TACPResponseCondition> = nil; const SessionId: string = '');
     procedure ReplyPermission(const ID, SessionId, OptionId: string);
     procedure SetSessionLogPath(const SessionId, APath: string);
     procedure StartRestoration(const SessionId: string);
     procedure FinalizeRestoration(const SessionId: string);
     function IsRestoringSession(const SessionId: string): Boolean;
 
-    procedure HandleModes(const ASessionId: string; AModes: TJsonObject);
-    procedure HandleModels(const ASessionId: string; AModels: TJsonObject);
-
-    procedure LoadSession(const SessionId: string; ACallback: TProc<string>); virtual; abstract;
+    procedure HandleModes(AModes: TJsonObject);
+    procedure HandleModels(AModels: TJsonObject);
 
     property AgentName: string read FAgentName write FAgentName;
     property AgentType: TAgentType read FAgentType write FAgentType;
@@ -138,6 +117,11 @@ type
     property SessionManager: TObject read FSessionMgr write FSessionMgr;
     property Sessions: TDictionary<string, TSessionData> read FSessions;
     property IsConnected: Boolean read GetIsConnected;
+
+    property Models: TArray<TAgentModelInfo> read FAvailableModels write FAvailableModels;
+    property ModelId: string read FCurrentModelId write FCurrentModelId;
+    property Modes: TArray<TAgentModeInfo> read FAvailableModes write FAvailableModes;
+    property ModeId: string read FCurrentModeId write FCurrentModeId;
 
     property OnEndTurn: TAgentEndTurnEvent read FOnEndTurn write FOnEndTurn;
     property OnMessageChunk: TAgentChunkEvent read FOnMessageChunk write FOnMessageChunk;
@@ -157,105 +141,6 @@ implementation
 uses
   uACPProtocol, uSessionManager;
 
-{ TSessionInfo }
-
-constructor TSessionInfo.Create(AAgent: TACPAgent; AType: TAgentType; const ASessionId, AName: string; const ACwd: string);
-begin
-  Agent := AAgent;
-  AgentType := AType;
-  SessionId := ASessionId;
-  Name := AName;
-  Cwd := ACwd;
-  IsLoading := False;
-  IsActive := False;
-  IsPinned := False;
-  CreatedAt := Now;
-  LastConversationDate := 0; 
-  LastHistoryTick := 0;
-end;
-
-procedure TSessionInfo.MarkActivity;
-begin
-  LastHistoryTick := TThread.GetTickCount;
-end;
-
-procedure TSessionInfo.UpdateConversationDate;
-begin
-  LastConversationDate := Now;
-  SaveMetadata;
-end;
-
-procedure TSessionInfo.SaveMetadata;
-var
-  LDir, LFile, LHome: string;
-  LObj: TJsonObject;
-begin
-  if SessionId.StartsWith('pending-') then
-    Exit;
-
-  LHome := GetEnvironmentVariable('USERPROFILE');
-  if LHome = '' then
-    LHome := TPath.GetHomePath;
-  LDir := TPath.Combine(TPath.Combine(LHome, '.acp-cli-manager'), 'sessions');
-  LDir := TPath.Combine(LDir, Agent.AgentName.ToLower + '-cli');
-  LDir := TPath.Combine(LDir, SessionId);
-
-  if not TDirectory.Exists(LDir) then
-    TDirectory.CreateDirectory(LDir);
-
-  LFile := TPath.Combine(LDir, 'metadata.json');
-  LObj := TJsonObject.Create;
-  try
-    LObj.S['sessionId'] := SessionId;
-    LObj.S['name'] := Name;
-    LObj.S['cwd'] := Cwd;
-    LObj.I['agentType'] := Ord(AgentType);
-    LObj.B['pinned'] := IsPinned;
-    LObj.D['createdAt'] := CreatedAt;
-    if LastConversationDate > 0 then
-      LObj.D['lastConversationDate'] := LastConversationDate;
-    LObj.SaveToFile(LFile);
-  finally
-    LObj.Free;
-  end;
-end;
-
-procedure TSessionInfo.LoadMetadata;
-var
-  LDir, LFile, LHome: string;
-  LObj: TJsonObject;
-begin
-  if SessionId.StartsWith('pending-') then
-    Exit;
-
-  LHome := GetEnvironmentVariable('USERPROFILE');
-  if LHome = '' then
-    LHome := TPath.GetHomePath;
-  LDir := TPath.Combine(TPath.Combine(LHome, '.acp-cli-manager'), 'sessions');
-  LDir := TPath.Combine(LDir, Agent.AgentName.ToLower + '-cli');
-  LDir := TPath.Combine(LDir, SessionId);
-
-  LFile := TPath.Combine(LDir, 'metadata.json');
-  if not TFile.Exists(LFile) then
-    Exit;
-
-  LObj := TJsonObject.Create;
-  try
-    LObj.LoadFromFile(LFile);
-    Name := LObj.S['name'];
-    Cwd := LObj.S['cwd'];
-    if LObj.Contains('agentType') then
-      AgentType := TAgentType(LObj.I['agentType']);
-    IsPinned := LObj.B['pinned'];
-    if LObj.Contains('createdAt') then
-      CreatedAt := LObj.D['createdAt'];
-    if LObj.Contains('lastConversationDate') then
-      LastConversationDate := LObj.D['lastConversationDate'];
-  finally
-    LObj.Free;
-  end;
-end;
-
 { TACPAgent }
 
 constructor TACPAgent.Create(AOwner: TComponent);
@@ -274,6 +159,7 @@ end;
 
 destructor TACPAgent.Destroy;
 begin
+  FSessionUpdateHandlers.Free;
   FMethodHandlers.Free;
   FSessions.Free;
   inherited;
@@ -286,6 +172,21 @@ begin
   FMethodHandlers.Add('session/update', HandleSessionUpdate);
   FMethodHandlers.Add('session/request_permission', HandleRequestPermission);
   FMethodHandlers.Add('session/tool_call', HandleToolCall);
+
+  RegisterSessionUpdateHandlers;
+end;
+
+procedure TACPAgent.RegisterSessionUpdateHandlers;
+begin
+  FSessionUpdateHandlers := TDictionary<string, TSessionUpdateHandler>.Create;
+  FSessionUpdateHandlers.Add('available_commands_update', ProcessAvailableCommandsUpdate);
+  FSessionUpdateHandlers.Add('agent_thought_chunk', ProcessChunkUpdate);
+  FSessionUpdateHandlers.Add('agent_message_chunk', ProcessChunkUpdate);
+  FSessionUpdateHandlers.Add('user_message_chunk', ProcessChunkUpdate);
+  FSessionUpdateHandlers.Add('tool_call_update', ProcessToolCallUpdate);
+  FSessionUpdateHandlers.Add('tool_call', ProcessToolCallUpdate);
+  FSessionUpdateHandlers.Add('models_update', ProcessModelsUpdate);
+  FSessionUpdateHandlers.Add('modes_update', ProcessModesUpdate);
 end;
 
 procedure TACPAgent.Connect;
@@ -296,30 +197,65 @@ end;
 function TACPAgent.Start(const ACommandLine: string = ''): Boolean;
 begin
   if ACommandLine <> '' then
-    FACPClient.CommandLine := ACommandLine;
-  Result := FACPClient.Start;
+    ACPClient.CommandLine := ACommandLine;
+  Result := ACPClient.Start;
   if Result then
     State := asConnecting;
 end;
 
 procedure TACPAgent.Stop;
 begin
-  FACPClient.Stop;
+  ACPClient.Stop;
   State := asDisconnected;
 end;
 
-procedure TACPAgent.NewSession(AParams: TJsonObject; OnResponse: TACPResponseAnonCallback; OnCondition: TACPResponseCondition);
+procedure TACPAgent.NewSession(AParams: TJsonObject; OnResponse: TACPResponseAnonCallback);
+var
+  LCapturedSid: string;
+  LFirstResponse: TJsonObject;
 begin
-  FACPClient.Send('session/new', AParams,
-    procedure(AResponse: TJsonObject)
+  LCapturedSid := '';
+  LFirstResponse := nil;
+  
+  // [1단계] session/new 요청 전송
+  ACPClient.Send('session/new', AParams,
+    procedure(AFinalUpdate: TJsonObject)
     begin
-      DoNewSession(AResponse);
-      if Assigned(OnResponse) then
-        OnResponse(AResponse);
-      if Assigned(FOnNewSession) then
-        FOnNewSession(Self, AResponse);
+      try
+        // [최종 단계] 1단계에서 캡처했던 '진짜 응답'을 사용하여 완료 통지
+        if Assigned(LFirstResponse) then
+        begin
+          DoNewSession(LFirstResponse);
+          if Assigned(OnResponse) then OnResponse(LFirstResponse);
+          if Assigned(FOnNewSession) then FOnNewSession(Self, LFirstResponse);
+        end;
+      finally
+        if Assigned(LFirstResponse) then LFirstResponse.Free;
+      end;
     end,
-    OnCondition);
+    [
+      // 조건 1: ID 매칭 및 sessionId 캡처
+      function(AObj: TJsonObject): Boolean
+      begin
+        Result := Assigned(AObj) and AObj.Contains('result') and AObj.O['result'].Contains('sessionId');
+        if Result then
+        begin
+          LCapturedSid := AObj.O['result'].S['sessionId'];
+          // 나중에 사용하기 위해 응답 객체 복제 (TACPClient에서 원본은 해제되므로 Clone 필요)
+          LFirstResponse := AObj.Clone as TJsonObject;
+        end;
+      end,
+      
+      // 조건 2: 초기화 알림 대기
+      function(AObj: TJsonObject): Boolean
+      begin
+        Result := Assigned(AObj) and 
+                  (AObj.S['id'] = '') and 
+                  (AObj.S['method'] = 'session/update') and 
+                  (AObj.O['params'].S['sessionId'] = LCapturedSid);
+      end
+    ]
+  );
 end;
 
 procedure TACPAgent.DoNewSession(AResponse: TJsonObject);
@@ -329,10 +265,50 @@ end;
 procedure TACPAgent.ResumeSession(const SessionId: string);
 var
   LSession: TSessionInfo;
+  LParams: TJsonObject;
 begin
   LSession := FindSessionById(SessionId);
   if Assigned(LSession) then
     LSession.IsRestoring := True;
+  
+  StartRestoration(SessionId);
+
+  // [핸드셰이크] session/load 요청 및 조건부 대기
+  LParams := TJsonObject.Create;
+  try
+    LParams.S['sessionId'] := SessionId;
+    LParams.S['cwd'] := Workspace;
+    LParams.A['mcpServers']; // 빈 배열 생성
+
+    ACPClient.Send('session/load', LParams,
+      procedure(AResponse: TJsonObject)
+      begin
+        // 최종 완료 시점 (조건을 모두 통과한 후 호출됨)
+        // 상세 상태 업데이트는 ProcessAvailableCommandsUpdate에서 공통으로 처리함
+      end,
+      [
+        // 조건 1: session/load 응답(Result) 확인
+        function(AObj: TJsonObject): Boolean
+        begin
+          Result := Assigned(AObj) and AObj.Contains('result') and AObj.O['result'].Contains('sessionId') and
+                    SameText(AObj.O['result'].S['sessionId'], SessionId);
+        end,
+
+        // 조건 2: available_commands_update 알림 대기
+        function(AObj: TJsonObject): Boolean
+        begin
+          Result := Assigned(AObj) and 
+                    (AObj.S['id'] = '') and 
+                    (AObj.S['method'] = 'session/update') and 
+                    (AObj.O['params'].S['sessionId'] = SessionId) and
+                    (AObj.O['params'].O['update'].S['sessionUpdate'] = 'available_commands_update');
+        end
+      ],
+      SessionId
+    );
+  finally
+    LParams.Free;
+  end;
 end;
 
 procedure TACPAgent.DoSessionResumed(const SessionId: string);
@@ -355,8 +331,18 @@ begin
   DoEndTurn(SessionId, StopReason);
 end;
 
+procedure TACPAgent.DoEndTurn(const SessionId, StopReason: string);
+begin
+  if Assigned(FOnEndTurn) then FOnEndTurn(Self, SessionId, StopReason);
+end;
+
 procedure TACPAgent.UpdateSession(ASession: TSessionInfo);
 begin
+end;
+
+procedure TACPAgent.Send(const Method: string; Params: TJsonObject; OnResponse: TACPResponseAnonCallback; OnConditions: TArray<TACPResponseCondition>; const SessionId: string);
+begin
+  FACPClient.Send(Method, Params, OnResponse, OnConditions, SessionId);
 end;
 
 procedure TACPAgent.SetSessionLogPath(const SessionId, APath: string);
@@ -399,36 +385,64 @@ begin
     Result := False;
 end;
 
-procedure TACPAgent.HandleModes(const ASessionId: string; AModes: TJsonObject);
+procedure TACPAgent.HandleModes(AModes: TJsonObject);
 var
-  LData: TSessionData;
+  LArr: TJsonArray;
+  LI: Integer;
+  LK: string;
+  LNewModes: TArray<TAgentModeInfo>;
 begin
-  if not Assigned(AModes) or (ASessionId = '') then Exit;
+  if not Assigned(AModes) then Exit;
   
-  if not FSessions.TryGetValue(ASessionId, LData) then
-    LData := Default(TSessionData);
+  if AModes.Contains('currentModeId') then
+    ModeId := AModes.S['currentModeId'];
     
-  LData.ModesJson := AModes.ToJSON(False);
-  FSessions.AddOrSetValue(ASessionId, LData);
+  LArr := AModes.A['availableModes'];
+  SetLength(LNewModes, LArr.Count);
+  for LI := 0 to LArr.Count - 1 do
+  begin
+    LNewModes[LI].ModeId := LArr.O[LI].S['id'];
+    LNewModes[LI].Name := LArr.O[LI].S['name'];
+    if LArr.O[LI].Contains('description') then
+      LNewModes[LI].Description := LArr.O[LI].S['description']
+    else
+      LNewModes[LI].Description := '';
+  end;
+  Modes := LNewModes;
   
-  if Assigned(FOnSessionMetadataUpdate) then
-    FOnSessionMetadataUpdate(Self, ASessionId);
+  for LK in FSessions.Keys do
+    if Assigned(FOnSessionMetadataUpdate) then
+      FOnSessionMetadataUpdate(Self, LK);
 end;
 
-procedure TACPAgent.HandleModels(const ASessionId: string; AModels: TJsonObject);
+procedure TACPAgent.HandleModels(AModels: TJsonObject);
 var
-  LData: TSessionData;
+  LArr: TJsonArray;
+  LI: Integer;
+  LK: string;
+  LNewModels: TArray<TAgentModelInfo>;
 begin
-  if not Assigned(AModels) or (ASessionId = '') then Exit;
+  if not Assigned(AModels) then Exit;
   
-  if not FSessions.TryGetValue(ASessionId, LData) then
-    LData := Default(TSessionData);
+  if AModels.Contains('currentModelId') then
+    ModelId := AModels.S['currentModelId'];
     
-  LData.ModelsJson := AModels.ToJSON(False);
-  FSessions.AddOrSetValue(ASessionId, LData);
+  LArr := AModels.A['availableModels'];
+  SetLength(LNewModels, LArr.Count);
+  for LI := 0 to LArr.Count - 1 do
+  begin
+    LNewModels[LI].ModelId := LArr.O[LI].S['modelId'];
+    LNewModels[LI].Name := LArr.O[LI].S['name'];
+    if LArr.O[LI].Contains('description') then
+      LNewModels[LI].Description := LArr.O[LI].S['description']
+    else
+      LNewModels[LI].Description := '';
+  end;
+  Models := LNewModels;
   
-  if Assigned(FOnSessionMetadataUpdate) then
-    FOnSessionMetadataUpdate(Self, ASessionId);
+  for LK in FSessions.Keys do
+    if Assigned(FOnSessionMetadataUpdate) then
+      FOnSessionMetadataUpdate(Self, LK);
 end;
 
 procedure TACPAgent.ReplyPermission(const ID, SessionId, OptionId: string);
@@ -525,15 +539,10 @@ begin
   if (ID <> '') and Assigned(ResultObj) and 
      ((Method = 'session/new') or (Method = 'session/load')) then
   begin
-    LSessionId := ResultObj.S['sessionId'];
-    
-    if LSessionId <> '' then
-    begin
-      if ResultObj.Contains('modes') then
-        HandleModes(LSessionId, ResultObj.O['modes']);
-      if ResultObj.Contains('models') then
-        HandleModels(LSessionId, ResultObj.O['models']);
-    end;
+    if ResultObj.Contains('modes') then
+      HandleModes(ResultObj.O['modes']);
+    if ResultObj.Contains('models') then
+      HandleModels(ResultObj.O['models']);
   end;
 
   if (Method <> '') then
@@ -543,34 +552,10 @@ begin
   end;
 end;
 
-procedure TACPAgent.HandleInternalRawData(Sender: TObject; Direction: TRPCDirection; const RawText: string);
+procedure TACPAgent.HandleInternalRawData(Sender: TObject; Direction: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const RawText: string);
 begin
   if Assigned(FOnRawData) then
-  begin
-    var LObj: TJsonObject := nil;
-    if RawText.Trim.StartsWith('{') then
-    begin
-      try
-        LObj := TJsonObject.Parse(RawText) as TJsonObject;
-      except
-        LObj := nil;
-      end;
-    end;
-    
-    try
-      var LSid := '';
-      if Assigned(LObj) then
-      begin
-         LSid := LObj.S['sessionId'];
-         if LSid = '' then LSid := LObj.O['params'].S['sessionId'];
-         if LSid = '' then LSid := LObj.O['result'].S['sessionId'];
-      end;
-      
-      FOnRawData(Self, Direction, LSid, LObj, RawText);
-    finally
-      if Assigned(LObj) then LObj.Free;
-    end;
-  end;
+    FOnRawData(Self, Direction, ASessionId, AObj, RawText);
 end;
 
 function TACPAgent.FindSessionById(const ASessionId: string): TSessionInfo;
@@ -688,7 +673,7 @@ procedure TACPAgent.HandleSessionUpdate(const ID: string; Params: TJsonObject);
 var
   UpdateObj: TJsonObject;
   UpdateType, SessionId: string;
-  LSession: TSessionInfo;
+  LHandler: TSessionUpdateHandler;
 begin
   if not Assigned(Params) then Exit;
   
@@ -700,28 +685,15 @@ begin
   UpdateObj := Params.O['update'];
   UpdateType := UpdateObj.S['sessionUpdate'];
   
-  LSession := FindSessionById(SessionId);
-
-  if UpdateType = 'available_commands_update' then
-  begin
-    ResetGrouping(SessionId);
-    ProcessAvailableCommandsUpdate(SessionId, UpdateObj, LSession);
-  end
-  else if (UpdateType = 'agent_thought_chunk') or (UpdateType = 'agent_message_chunk') or (UpdateType = 'user_message_chunk') then
-    ProcessChunkUpdate(SessionId, UpdateType, UpdateObj, LSession)
-  else if (UpdateType = 'tool_call_update') or (UpdateType = 'tool_call') then
-  begin
-    ResetGrouping(SessionId);
-    ProcessToolCallUpdate(SessionId, UpdateObj);
-  end
-  else if UpdateType = 'models_update' then
-    ProcessModelsUpdate(SessionId, UpdateObj)
-  else if UpdateType = 'modes_update' then
-    ProcessModesUpdate(SessionId, UpdateObj);
+  if FSessionUpdateHandlers.TryGetValue(UpdateType, LHandler) then
+    LHandler(SessionId, UpdateObj);
 end;
 
-procedure TACPAgent.ProcessAvailableCommandsUpdate(const SessionId: string; UpdateObj: TJsonObject; LSession: TSessionInfo);
-var Data: TSessionData; LIdx: Integer;
+procedure TACPAgent.ProcessAvailableCommandsUpdate(const SessionId: string; UpdateObj: TJsonObject);
+var
+  Data: TSessionData;
+  LIdx: Integer;
+  LSession: TSessionInfo;
 begin
   if not FSessions.TryGetValue(SessionId, Data) then Data := Default(TSessionData);
   LIdx := UpdateObj.IndexOf('availableCommands');
@@ -730,6 +702,7 @@ begin
     FSessions.AddOrSetValue(SessionId, Data);
   end;
 
+  LSession := FindSessionById(SessionId);
   if Assigned(LSession) and LSession.IsRestoring then begin
     LSession.IsRestoring := False;
     LSession.IsWaitForResponse := False;
@@ -741,14 +714,19 @@ begin
     FOnSessionMetadataUpdate(Self, SessionId);
 end;
 
-procedure TACPAgent.ProcessChunkUpdate(const SessionId: string; UpdateType: string; UpdateObj: TJsonObject; LSession: TSessionInfo);
+procedure TACPAgent.ProcessChunkUpdate(const SessionId: string; UpdateObj: TJsonObject);
 var
   Data: TSessionData;
   ChunkText, CleanType, LFullText: string;
   I, LIdx: Integer;
+  LSession: TSessionInfo;
   LIsRestoring: Boolean;
+  UpdateType: string;
 begin
+  UpdateType := UpdateObj.S['sessionUpdate'];
+  LSession := FindSessionById(SessionId);
   LIsRestoring := Assigned(LSession) and LSession.IsRestoring;
+  
   if not FSessions.TryGetValue(SessionId, Data) then Data := Default(TSessionData);
 
   ChunkText := '';
@@ -780,13 +758,8 @@ begin
     Data.CurrentBlockText := Data.CurrentBlockText + ChunkText;
     LFullText := Data.CurrentBlockText;
     
-    if CleanType = 'user' then begin
-      if LFullText.StartsWith('USER:') then LFullText := LFullText.Substring(5);
-    end;
-    
-    LIdx := LFullText.ToLower.IndexOf('--- content from');
-    if LIdx < 0 then LIdx := LFullText.ToLower.IndexOf('--- context from');
-    if LIdx >= 0 then LFullText := LFullText.Substring(0, LIdx).Trim;
+    // UI logic removed: No filtering of 'USER:' or '--- content from' markers.
+    // The Agent layer should only handle protocol/data flow.
 
     if CleanType = 'thought' then begin
       Data.FullThought := Data.FullThought + ChunkText;
@@ -824,27 +797,15 @@ begin
 end;
 
 procedure TACPAgent.ProcessModelsUpdate(const SessionId: string; UpdateObj: TJsonObject);
-var Data: TSessionData; LIdx: Integer;
 begin
-  if not FSessions.TryGetValue(SessionId, Data) then Data := Default(TSessionData);
-  LIdx := UpdateObj.IndexOf('models');
-  if LIdx >= 0 then begin
-    Data.ModelsJson := UpdateObj.O['models'].ToJSON(False);
-    FSessions.AddOrSetValue(SessionId, Data);
-  end;
-  if Assigned(FOnSessionMetadataUpdate) then FOnSessionMetadataUpdate(Self, SessionId);
+  if UpdateObj.Contains('models') then
+    HandleModels(UpdateObj.O['models']);
 end;
 
 procedure TACPAgent.ProcessModesUpdate(const SessionId: string; UpdateObj: TJsonObject);
-var Data: TSessionData; LIdx: Integer;
 begin
-  if not FSessions.TryGetValue(SessionId, Data) then Data := Default(TSessionData);
-  LIdx := UpdateObj.IndexOf('modes');
-  if LIdx >= 0 then begin
-    Data.ModesJson := UpdateObj.O['modes'].ToJSON(False);
-    FSessions.AddOrSetValue(SessionId, Data);
-  end;
-  if Assigned(FOnSessionMetadataUpdate) then FOnSessionMetadataUpdate(Self, SessionId);
+  if UpdateObj.Contains('modes') then
+    HandleModes(UpdateObj.O['modes']);
 end;
 
 procedure TACPAgent.HandleToolCall(const ID: string; Params: TJsonObject);
@@ -861,11 +822,6 @@ end;
 procedure TACPAgent.DoMessageChunk(const SessionId, Chunk, FullText: string);
 begin
   if Assigned(FOnMessageChunk) then FOnMessageChunk(Self, SessionId, Chunk, FullText);
-end;
-
-procedure TACPAgent.DoEndTurn(const SessionId, StopReason: string);
-begin
-  if Assigned(FOnEndTurn) then FOnEndTurn(Self, SessionId, StopReason);
 end;
 
 procedure TACPAgent.DoThoughtChunk(const SessionId, Chunk, FullText: string);

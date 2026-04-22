@@ -13,7 +13,9 @@ type
   TACPRequestRecord = record
     MessageId: string;
     MethodName: string;
-    Condition: TACPResponseCondition;
+    SessionId: string;
+    Conditions: TArray<TACPResponseCondition>;
+    CurrentStep: Integer;
     Callback: TACPResponseAnonCallback;
   end;
 
@@ -21,7 +23,7 @@ type
     const ID, Method: string;
     Params, ResultObj, ErrorObj: TJsonObject) of object;
 
-  TACPRawDataEvent = procedure(Sender: TObject; Direction: TRPCDirection; const RawText: string) of object;
+  TACPRawDataEvent = procedure(Sender: TObject; Direction: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const RawText: string) of object;
   TACPErrorEvent = procedure(Sender: TObject; const ErrorMsg: string) of object;
   TACPProcessTerminatedEvent = procedure(Sender: TObject; ExitCode: Cardinal) of object;
 
@@ -46,7 +48,7 @@ type
     destructor Destroy; override;
     function Start: Boolean;
     procedure Stop;
-    procedure Send(const Method: string; Params: TJsonObject = nil; OnResponse: TACPResponseAnonCallback = nil; OnCondition: TACPResponseCondition = nil);
+    procedure Send(const Method: string; Params: TJsonObject = nil; OnResponse: TACPResponseAnonCallback = nil; OnConditions: TArray<TACPResponseCondition> = nil; const SessionId: string = '');
     procedure SendResponse(const ID: string; ResultObj: TJsonObject = nil);
     procedure SendRaw(const JsonStr: string);
     function IsRunning: Boolean;
@@ -122,8 +124,8 @@ begin
   FinalStr := StringReplace(FinalStr, #10, '', [rfReplaceAll]);
 
   if Assigned(FOnRawData) then
-    FOnRawData(Self, rdOutgoing, FinalStr);
-    
+    FOnRawData(Self, rdOutgoing, '', nil, FinalStr);
+
   FBufferLock.Enter;
   try
     FAgentProcess.WriteLine(FinalStr);
@@ -132,16 +134,16 @@ begin
   end;
 end;
 
-procedure TACPClient.Send(const Method: string; Params: TJsonObject; OnResponse: TACPResponseAnonCallback; OnCondition: TACPResponseCondition);
+procedure TACPClient.Send(const Method: string; Params: TJsonObject; OnResponse: TACPResponseAnonCallback; OnConditions: TArray<TACPResponseCondition>; const SessionId: string);
 var
   ReqObj: TJsonObject;
-  MessageId: string;
   LRecord: TACPRequestRecord;
+  LMessageId: string;
 begin
   FBufferLock.Enter;
   try
     Inc(FLastMessageId);
-    MessageId := IntToStr(FLastMessageId);
+    LMessageId := IntToStr(FLastMessageId);
 
     ReqObj := TJsonObject.Create;
     try
@@ -152,11 +154,13 @@ begin
       if Assigned(Params) then
         ReqObj.O['params'].Assign(Params);
 
-      if Assigned(OnResponse) then
+      if Assigned(OnResponse) or (Length(OnConditions) > 0) then
       begin
-        LRecord.MessageId := MessageId;
+        LRecord.MessageId := LMessageId;
         LRecord.MethodName := Method;
-        LRecord.Condition := OnCondition;
+        LRecord.SessionId := SessionId;
+        LRecord.Conditions := OnConditions;
+        LRecord.CurrentStep := 0;
         LRecord.Callback := OnResponse;
         FCallbacks.Add(LRecord);
       end;
@@ -211,39 +215,39 @@ end;
 
 procedure TACPClient.ProcessBuffer;
 var
-  NewlinePos: Integer;
-  LineStr: string;
-  ParsedObj: TJsonObject;
-  pParams, pResult, pError: TJsonObject;
-  vID, vMethod: string;
-  Callback: TACPResponseAnonCallback;
-  ProcessingBuffer: string;
+  LNewlinePos: Integer;
+  LLineStr: string;
+  LParsedObj: TJsonObject;
+  LParams, LResult, LError: TJsonObject;
+  LId, LMethod: string;
+  LFinalCallback: TACPResponseAnonCallback;
+  LProcessingBuffer: string;
   LBaseObj: TJsonBaseObject;
   i: Integer;
 begin
   // 1. 버퍼 전체를 로컬로 가져오고 메인 버퍼 비움 (락 보호)
   FBufferLock.Enter;
   try
-    ProcessingBuffer := FLineBuffer;
+    LProcessingBuffer := FLineBuffer;
     FLineBuffer := '';
   finally
     FBufferLock.Leave;
   end;
 
-  if ProcessingBuffer = '' then Exit;
+  if LProcessingBuffer = '' then Exit;
 
   // 2. 로컬 버퍼를 분해하여 처리
   while True do 
   begin
-    NewlinePos := Pos(#10, ProcessingBuffer);
-    if NewlinePos <= 0 then 
+    LNewlinePos := Pos(#10, LProcessingBuffer);
+    if LNewlinePos <= 0 then 
     begin
       // 줄바꿈이 없는 남은 조각은 다시 메인 버퍼 앞으로 돌려줌 (락 보호)
-      if ProcessingBuffer <> '' then
+      if LProcessingBuffer <> '' then
       begin
         FBufferLock.Enter;
         try
-          FLineBuffer := ProcessingBuffer + FLineBuffer;
+          FLineBuffer := LProcessingBuffer + FLineBuffer;
         finally
           FBufferLock.Leave;
         end;
@@ -251,24 +255,21 @@ begin
       Break;
     end;
 
-    LineStr := Copy(ProcessingBuffer, 1, NewlinePos - 1);
-    Delete(ProcessingBuffer, 1, NewlinePos);
+    LLineStr := Copy(LProcessingBuffer, 1, LNewlinePos - 1);
+    Delete(LProcessingBuffer, 1, LNewlinePos);
 
-    LineStr := Trim(StringReplace(LineStr, #13, '', [rfReplaceAll]));
-    if LineStr = '' then Continue;
-
-    if Assigned(FOnRawData) then
-      FOnRawData(Self, rdIncoming, LineStr);
+    LLineStr := Trim(StringReplace(LLineStr, #13, '', [rfReplaceAll]));
+    if LLineStr = '' then Continue;
 
     LBaseObj := nil;
     try
       try
-        LBaseObj := TJsonBaseObject.Parse(LineStr);
+        LBaseObj := TJsonBaseObject.Parse(LLineStr);
       except
         on E: Exception do
         begin
           if Assigned(FOnRawData) then
-            FOnRawData(Self, rdInternal, 'JSON Parse Error: ' + E.Message + ' Source: ' + LineStr);
+            FOnRawData(Self, rdInternal, '', nil, 'JSON Parse Error: ' + E.Message + ' Source: ' + LLineStr);
           Continue;
         end;
       end;
@@ -276,67 +277,89 @@ begin
       if (LBaseObj = nil) or not (LBaseObj is TJsonObject) then
         Continue;
 
-      ParsedObj := TJsonObject(LBaseObj);
+      LParsedObj := TJsonObject(LBaseObj);
 
-      // JSON 필드 추출 (id, method, params, result, error)
-      vID := '';
-      if ParsedObj.Contains('id') then 
+      if Assigned(FOnRawData) then
       begin
-        if ParsedObj.Types['id'] = jdtString then vID := ParsedObj.S['id']
-        else vID := IntToStr(ParsedObj.I['id']);
+        var LSid := '';
+        if Assigned(LParsedObj) then
+        begin
+          LSid := LParsedObj.S['sessionId'];
+          if LSid = '' then LSid := LParsedObj.O['params'].S['sessionId'];
+          if LSid = '' then LSid := LParsedObj.O['result'].S['sessionId'];
+        end;
+        FOnRawData(Self, rdIncoming, LSid, LParsedObj, LLineStr);
       end;
 
-      vMethod := ParsedObj.S['method'];
-      pParams := nil; pResult := nil; pError := nil;
-      if ParsedObj.Contains('params') and (ParsedObj.Types['params'] = jdtObject) then pParams := ParsedObj.O['params'];
-      if ParsedObj.Contains('result') and (ParsedObj.Types['result'] = jdtObject) then pResult := ParsedObj.O['result'];
-      if ParsedObj.Contains('error') and (ParsedObj.Types['error'] = jdtObject) then pError := ParsedObj.O['error'];
+      // JSON 필드 추출 (id, method, params, result, error)
+      LId := '';
+      if LParsedObj.Contains('id') then 
+      begin
+        if LParsedObj.Types['id'] = jdtString then LId := LParsedObj.S['id']
+        else LId := IntToStr(LParsedObj.I['id']);
+      end;
+
+      LMethod := LParsedObj.S['method'];
+      LParams := nil; LResult := nil; LError := nil;
+      if LParsedObj.Contains('params') and (LParsedObj.Types['params'] = jdtObject) then LParams := LParsedObj.O['params'];
+      if LParsedObj.Contains('result') and (LParsedObj.Types['result'] = jdtObject) then LResult := LParsedObj.O['result'];
+      if LParsedObj.Contains('error') and (LParsedObj.Types['error'] = jdtObject) then LError := LParsedObj.O['error'];
 
       // Fallback: Result가 Params 필드에 실려오는 경우 처리
-      if (vID <> '') and (pResult = nil) and (pParams <> nil) then
-        pResult := pParams;
+      if (LId <> '') and (LResult = nil) and (LParams <> nil) then
+        LResult := LParams;
 
-      // 3. 콜백 매칭 (ID 매칭 우선, 그 후 Condition 매칭)
-      Callback := nil;
+      // 3. 콜백 매칭 (Sequential Condition Chain)
+      LFinalCallback := nil;
       FBufferLock.Enter;
       try
-        for i := 0 to FCallbacks.Count - 1 do
+        for i := FCallbacks.Count - 1 downto 0 do
         begin
           var LReq := FCallbacks[i];
-          var LIdMatch := (vID <> '') and (LReq.MessageId = vID);
-          var LNoIdMatch := (vID = '') and (vMethod <> '') and Assigned(LReq.Condition);
-
-          if LIdMatch or LNoIdMatch then
+          var LStep := LReq.CurrentStep;
+          
+          // 3-1. 매칭 판단 로직
+          var LMatch := False;
+          var LIsStep0 := (LStep = 0);
+          
+          if LIsStep0 and (LReq.MessageId <> '') and (LId = LReq.MessageId) then
           begin
-            var LIsValid := True;
-            if (pError = nil) and Assigned(LReq.Condition) then
-            begin
-              try
-                LIsValid := LReq.Condition(ParsedObj);
-              except
-                LIsValid := False;
-              end;
-            end;
+            // Step 0이고 ID가 일치함. 
+            LMethod := LReq.MethodName; // 🎯 메서드명 복원
+            
+            // 조건이 있다면 조건까지 통과해야 함.
+            if (LStep < Length(LReq.Conditions)) and Assigned(LReq.Conditions[LStep]) then
+              LMatch := LReq.Conditions[LStep](LParsedObj)
+            else
+              LMatch := True; // 조건이 없으면 ID 일치만으로 통과
+          end
+          else if (LStep < Length(LReq.Conditions)) and Assigned(LReq.Conditions[LStep]) then
+          begin
+            // ID가 없거나 Step 0이 아님. 조건 체크 수행.
+            LMatch := LReq.Conditions[LStep](LParsedObj);
+          end;
 
-            if LIsValid then
+          // 3-2. 단계 진행 또는 완료
+          if LMatch then
+          begin
+            LReq.CurrentStep := LReq.CurrentStep + 1;
+            
+            if LReq.CurrentStep >= Length(LReq.Conditions) then
             begin
-              Callback := LReq.Callback;
-              vMethod := LReq.MethodName; // 원래 요청 메서드명으로 복원 (로그 및 이벤트용)
+              // 모든 단계 완료 (Handshake Finished)
+              LFinalCallback := LReq.Callback;
               FCallbacks.Delete(i);
               if Assigned(FOnRawData) then
-              begin
-                if LIdMatch then
-                  FOnRawData(Self, rdInternal, 'Callback FOUND and matching for ID: ' + vID + ' Method: ' + vMethod)
-                else
-                  FOnRawData(Self, rdInternal, 'Callback FOUND via CONDITION (No ID) for Method: ' + vMethod);
-              end;
+                FOnRawData(Self, rdInternal, '', nil, 'Handshake COMPLETED for Method: ' + LReq.MethodName);
               Break;
             end
-            else if LIdMatch then
+            else
             begin
+              // 다음 단계를 위해 상태 업데이트 (Wait for next message)
+              FCallbacks[i] := LReq;
               if Assigned(FOnRawData) then
-                FOnRawData(Self, rdInternal, 'Callback ID matched but CONDITION FAILED for ID: ' + vID + ' Method: ' + LReq.MethodName);
-              Break; // ID가 일치하면 더 이상 이 메시지에 대한 콜백을 찾지 않음
+                FOnRawData(Self, rdInternal, '', nil, 'Handshake STEP ' + IntToStr(LReq.CurrentStep) + ' matched for Method: ' + LReq.MethodName);
+              Break; 
             end;
           end;
         end;
@@ -345,20 +368,20 @@ begin
       end;
 
       // 4. 콜백 실행
-      if Assigned(Callback) then
+      if Assigned(LFinalCallback) then
       begin
         try
-          Callback(ParsedObj);
+          LFinalCallback(LParsedObj);
         except
           on E: Exception do
             if Assigned(FOnRawData) then
-              FOnRawData(Self, rdInternal, 'Exception in RPC Callback: ' + E.Message);
+              FOnRawData(Self, rdInternal, '', nil, 'Exception in RPC Callback: ' + E.Message);
         end;
       end;
 
       // 5. 일반 수신 이벤트 발생
       if Assigned(FOnReceive) and not FAgentProcess.IsStopping then
-        FOnReceive(Self, vID, vMethod, pParams, pResult, pError);
+        FOnReceive(Self, LId, LMethod, LParams, LResult, LError);
     finally
       LBaseObj.Free;
     end;

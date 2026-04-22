@@ -3,7 +3,7 @@ unit uConversationService;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, System.Hash, JsonDataObjects, uSessionManager, uACPAgent;
+  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, System.Hash, JsonDataObjects, uSessionManager, uACPAgent, uAgentTypes;
 
 type
   TConversationService = class
@@ -23,16 +23,10 @@ implementation
 { TConversationService }
 
 class function TConversationService.CleanContent(const AContent: string): string;
-var
-  LIdx: Integer;
 begin
   Result := AContent;
-  
-  // 1. Remove context blocks added by agent
-  LIdx := Result.ToLower.IndexOf('--- content from');
-  if LIdx < 0 then LIdx := Result.ToLower.IndexOf('--- context from');
-  if LIdx >= 0 then
-    Result := Result.Substring(0, LIdx).Trim;
+  // UI logic removed: No filtering of context markers here.
+  // This keeps the data flow clean and follows SoC principles.
 end;
 
 class function TConversationService.GetConversationsBySessionId(ASession: TSessionInfo): TJsonArray;

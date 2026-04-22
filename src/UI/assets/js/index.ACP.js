@@ -496,6 +496,24 @@ window.ACP = {
         }
     },
 
+    updateSessionId: (oldId, newId) => {
+        const idx = window.ACP.allSessions.findIndex(s => s.id === oldId);
+        if (idx === -1) return;
+
+        window.ACP.allSessions[idx].id = newId;
+        const oldItem = document.getElementById(`session-item-${oldId}`);
+        if (oldItem) {
+            // Replace the old item with a new one that has the updated ID
+            const temp = document.createElement('div');
+            temp.innerHTML = window.ACP.renderSessionItemHtml(window.ACP.allSessions[idx]);
+            if (temp.firstElementChild) oldItem.replaceWith(temp.firstElementChild);
+        }
+        
+        if (window.ACP.activeSessionId === oldId) {
+            window.ACP.activeSessionId = newId;
+        }
+    },
+
     updateSession: (data) => {
         let s = (typeof data === 'string') ? JSON.parse(window.ACP.decodeBase64Utf8(data)) : data;
         if (!s) return;

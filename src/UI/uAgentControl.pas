@@ -235,7 +235,7 @@ begin
   LSid := AResponse.O['result'].S['sessionId'];
   if LSid = '' then Exit;
 
-  // Find the pending session for this agent
+  // [SOC v8] 에이전트 인스턴스를 통해 즉시 세션을 식별 (1:1 매칭 활용)
   LSession := FSessionMgr.GetPendingSessionByAgent(TACPAgent(Sender));
   if Assigned(LSession) then
   begin
@@ -243,15 +243,19 @@ begin
     LSession.IsLoading := False;
     LSession.IsActive := True;
     
+    // 로컬 데이터 확정 (ID 교체 및 파일 시스템 정리)
     FSessionMgr.FinalizeSessionId(LSession, LSid);
     TACPAgent(Sender).SetSessionLogPath(LSid, LSession.LogPath);
 
     TThread.Queue(nil, procedure
     begin
-      DeleteSessionUI(LOldId);
-      AddSession(LSession);
-      UpdateFileList(LSession.Cwd);
+      // UI 상의 ID를 원자적으로 교체 (깜빡임 방지)
+      ExecuteJS(Format('window.ACP.updateSessionId("%s", "%s")', [LOldId, LSid]));
+      
+      // 나머지 상태 동기화 및 활성화
+      UpdateSession(LSession);
       HandleSelectSession(LSession);
+      UpdateFileList(LSession.Cwd);
     end);
   end;
 end;
@@ -432,14 +436,12 @@ begin
     else if SameText(LAgentName, 'codex') then LType := atCodex
     else Exit;
     
-    if not FAgentList.TryGetValue(LType, LAgent) then Exit;
-
-    if LAgent.State in [asConnecting, asInitializing] then
-    begin
-      ExecuteJS(Format('window.ACP.showModal("warning", "%s Initializing", ' +
-        '"The agent is currently starting up. Please wait until the initialization is complete before creating a new chat.")', [LAgentName]));
-      Exit;
+    // [SOC v8] 세션별 독립 에이전트 생성
+    case LType of
+      atGemini: LAgent := TGeminiAgent.Create(nil);
+      else Exit;
     end;
+    RegisterAgent(LType, LAgent);
 
     if not SelectDirectory('Select Project Workspace for ' + LAgentName, '', LSelectedDir) then Exit;
 
@@ -476,14 +478,14 @@ var LSid: string; LTarget: TSessionInfo;
 begin
   if Params.TryGetValue('id', LSid) then begin
     LTarget := FSessionMgr.GetSessionById(LSid);
-    if Assigned(LTarget) and Assigned(LTarget.Agent) then begin
+    if Assigned(LTarget) and Assigned(LTarget.Agent) and (LTarget.Agent is TACPAgent) then begin
        LTarget.IsLoading := True;
        UpdateSession(LTarget);
        
        HandleSelectSession(LTarget);
        
-       LTarget.Agent.Workspace := LTarget.Cwd;
-       LTarget.Agent.ResumeSession(LSid);
+       TACPAgent(LTarget.Agent).Workspace := LTarget.Cwd;
+       TACPAgent(LTarget.Agent).ResumeSession(LSid);
     end;
   end;
 end;
@@ -493,9 +495,8 @@ var LText, LBase64: string; LActive: TSessionInfo;
 begin
   if Params.TryGetValue('text', LText) and (LText <> '') then begin
     LActive := FSessionMgr.ActiveSession;
-    if Assigned(LActive) and Assigned(LActive.Agent) then begin
-      LActive.Agent.SendPrompt(LActive.SessionId, LText);
-
+    if Assigned(LActive) and Assigned(LActive.Agent) and (LActive.Agent is TACPAgent) then begin
+     TACPAgent(LActive.Agent).SendPrompt(LActive.SessionId, LText);
       LBase64 := TNetEncoding.Base64.EncodeBytesToString(TEncoding.UTF8.GetBytes(LText)).Replace(#13, '').Replace(#10, '');
       ExecuteJS(Format('window.ACP.addUserMessage("%s")', [LBase64]));
       
@@ -649,15 +650,44 @@ end;
 procedure TAgentControl.HandleInternalLog(Sender: TObject; const LogMsg: string); begin if Assigned(frmDebugRPC) then frmDebugRPC.AddACPLog(LogMsg); end;
 
 procedure TAgentControl.LoadAllSessions;
-var LAgent: TACPAgent; LSessionIds: TArray<string>; LSid: string; LSession: TSessionInfo;
+var 
+  LAgent, LNewAgent: TACPAgent; 
+  LSessionIds: TArray<string>; 
+  LSid: string; 
+  LSession: TSessionInfo;
 begin
   if not Assigned(FSessionMgr) then Exit;
   for LAgent in FAgentList.Values do begin
     LSessionIds := LAgent.SessionList;
     for LSid in LSessionIds do begin
-      LSession := FSessionMgr.AddSession(LAgent, LAgent.AgentType, LSid, 'Loading...');
+      // [SOC v8] 세션별 독립 에이전트 생성
+      if LAgent.AgentType = atGemini then
+        LNewAgent := TGeminiAgent.Create(nil)
+      else
+        LNewAgent := nil;
+
+      if Assigned(LNewAgent) then
+      begin
+        LNewAgent.AgentType := LAgent.AgentType;
+        LNewAgent.OnMessageChunk := DoAgentMessageChunk;
+        LNewAgent.OnThoughtChunk := DoAgentThoughtChunk;
+        LNewAgent.OnStreamingEnd := DoAgentStreamingEnd;
+        LNewAgent.OnEndTurn := DoAgentEndTurn;
+        LNewAgent.SessionManager := FSessionMgr;
+        LNewAgent.OnRawData := DoAgentRawData;
+        LNewAgent.OnPermissionRequest := DoAgentPermissionRequest;
+        LNewAgent.OnSessionMetadataUpdate := DoAgentSessionMetadataUpdate;
+        LNewAgent.OnPropertyUpdate := DoAgentPropertyUpdate;
+        LNewAgent.OnNewSession := DoAgentNewSession;
+        LNewAgent.OnSessionResumed := DoAgentSessionResumed;
+      end
+      else
+        LNewAgent := LAgent; // Fallback to singleton if type is unknown
+
+      LSession := FSessionMgr.AddSession(LNewAgent, LAgent.AgentType, LSid, 'Loading...');
       if Assigned(LSession) then begin
-        LSession.LoadMetadata; if LAgent is TACPAgent then TACPAgent(LAgent).SetSessionLogPath(LSid, LSession.LogPath);
+        LSession.LoadMetadata; 
+        if Assigned(LNewAgent) then LNewAgent.SetSessionLogPath(LSid, LSession.LogPath);
       end;
     end;
   end;
@@ -820,40 +850,46 @@ begin
   Result.S['id'] := ASessionInfo.SessionId; Result.S['name'] := ASessionInfo.Name; Result.S['workspace'] := GetWorkspaceDisplayText(ASessionInfo.Cwd);
   Result.B['active'] := FSessionMgr.ActiveSession = ASessionInfo; Result.B['pinned'] := ASessionInfo.IsPinned; Result.B['isActive'] := ASessionInfo.IsActive;
   Result.B['isWaitForResponse'] := ASessionInfo.IsWaitForResponse; Result.B['online'] := ASessionInfo.IsActive; 
-  Result.B['loading'] := ASessionInfo.IsLoading or (Assigned(ASessionInfo.Agent) and (ASessionInfo.Agent.State in [asConnecting, asInitializing]));
+  Result.B['loading'] := ASessionInfo.IsLoading or (Assigned(ASessionInfo.Agent) and (ASessionInfo.Agent is TACPAgent) and (TACPAgent(ASessionInfo.Agent).State in [asConnecting, asInitializing]));
   Result.D['createdAt'] := ASessionInfo.CreatedAt;
   if ASessionInfo.LastConversationDate > 0 then
     Result.D['lastConversationDate'] := ASessionInfo.LastConversationDate;
 
   Result.S['icon'] := 'forum';  Result.S['lastMsg'] := 'Ready to chat...'; if ASessionInfo.IsLoading then Result.S['lastMsg'] := 'Starting process...';
-  if Assigned(ASessionInfo.Agent) then begin
-    if ASessionInfo.Agent.Sessions.TryGetValue(ASessionInfo.SessionId, LData) then begin
-      if LData.ModelsJson <> '' then begin
-        try
-          LModels := TJsonObject.Parse(LData.ModelsJson) as TJsonObject;
-          try 
-            if Assigned(LModels) then begin
-              Result.O['models'].Assign(LModels); 
-              Result.S['currentModelId'] := LModels.S['currentModelId'];
-            end;
-          finally LModels.Free; end;
-        except
+  if Assigned(ASessionInfo.Agent) and (ASessionInfo.Agent is TACPAgent) then begin
+    var LAgent := TACPAgent(ASessionInfo.Agent);
+    if LAgent.Sessions.TryGetValue(ASessionInfo.SessionId, LData) then begin
+      // Models
+      if Length(LAgent.Models) > 0 then begin
+        var LModelsObj := Result.O['models'];
+        LModelsObj.S['currentModelId'] := LAgent.ModelId;
+        var LArr := LModelsObj.A['availableModels'];
+        for var i := 0 to High(LAgent.Models) do begin
+          var LItem := LArr.AddObject;
+          LItem.S['modelId'] := LAgent.Models[i].ModelId;
+          LItem.S['name'] := LAgent.Models[i].Name;
+          if LAgent.Models[i].Description <> '' then
+            LItem.S['description'] := LAgent.Models[i].Description;
         end;
+        Result.S['currentModelId'] := LAgent.ModelId;
       end;
-      if LData.ModesJson <> '' then begin
-        try
-          LModels := TJsonObject.Parse(LData.ModesJson) as TJsonObject;
-          try 
-            if Assigned(LModels) then begin
-              Result.O['modes'].Assign(LModels); 
-              Result.S['currentModeId'] := LModels.S['currentModeId'];
-            end;
-          finally LModels.Free; end;
-        except
+
+      // Modes
+      if Length(LAgent.Modes) > 0 then begin
+        var LModesObj := Result.O['modes'];
+        LModesObj.S['currentModeId'] := LAgent.ModeId;
+        var LArr := LModesObj.A['availableModes'];
+        for var i := 0 to High(LAgent.Modes) do begin
+          var LItem := LArr.AddObject;
+          LItem.S['id'] := LAgent.Modes[i].ModeId;
+          LItem.S['name'] := LAgent.Modes[i].Name;
+          if LAgent.Modes[i].Description <> '' then
+            LItem.S['description'] := LAgent.Modes[i].Description;
         end;
+        Result.S['currentModeId'] := LAgent.ModeId;
       end;
-      if LData.CommandsJson <> '' then begin
-        try
+
+      if LData.CommandsJson <> '' then begin        try
           Result.A['commands'].FromJSON(LData.CommandsJson);
         except
         end;
