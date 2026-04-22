@@ -3,7 +3,7 @@ unit uConversationService;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, System.Hash, JsonDataObjects, uAgent, uSessionManager, uACPAgent;
+  System.SysUtils, System.Classes, System.IOUtils, System.RegularExpressions, System.Hash, JsonDataObjects, uSessionManager, uACPAgent;
 
 type
   TConversationService = class

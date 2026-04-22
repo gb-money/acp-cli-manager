@@ -9,7 +9,6 @@ uses
   uAgentTypes in 'src\Core\uAgentTypes.pas',
   uThemeManager in 'src\UI\uThemeManager.pas',
   uAgentControl in 'src\UI\uAgentControl.pas',
-  uAgent in 'src\Agents\uAgent.pas',
   uAgentHandler in 'src\Agents\uAgentHandler.pas',
   uACPAgent in 'src\Agents\uACPAgent.pas',
   uConversationService in 'src\Core\uConversationService.pas',

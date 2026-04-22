@@ -4,27 +4,25 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.RegularExpressions, System.IOUtils, 
-  JsonDataObjects, uAgent, uACPAgent, uACPClient, uACPProtocol, System.SyncObjs;
+  JsonDataObjects, uACPAgent, uACPClient, uAgentTypes, uACPProtocol, System.SyncObjs;
 
 type
-  TModelsAvailableEvent = procedure(Sender: TObject; AModels: TStrings) of object;
-  TSessionCreatedCallback = reference to procedure(const SessionId: string);
-
   TGeminiAgent = class(TACPAgent)
   private
+    procedure EnsureReady(AOnReady: TProc);
   protected
     procedure DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject); override;
+    procedure DoNewSession(AResponse: TJsonObject); override;
   public
     constructor Create(AOwner: TComponent); override;
-    destructor Destroy; override;
     
     procedure Connect; override;
-    function Start: Boolean; override; // Synchronous start for this agent
-    procedure Initialize; override;
-    procedure Stop; override;
+    function Start(const ACommandLine: string = ''): Boolean; override;
+    procedure Initialize(AParams: TJsonObject = nil); override;
     
-    procedure CreateNewSession(const Cwd: string; const Mode: string; ACallback: TProc<string>); override;
+    procedure NewSession(AParams: TJsonObject; OnResponse: TACPResponseAnonCallback = nil; OnCondition: TACPResponseCondition = nil); override;
     procedure LoadSession(const SessionId: string; ACallback: TProc<string>); override;
+    procedure ResumeSession(const SessionId: string); override;
     procedure SendPrompt(const SessionId, AText: string); override;
     procedure ChangeModel(const SessionId, AModelId: string);
     procedure CancelPrompt(const SessionId: string);
@@ -40,94 +38,89 @@ constructor TGeminiAgent.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   AgentName := 'gemini';
+  AgentType := atGemini;
 end;
 
-destructor TGeminiAgent.Destroy;
+function TGeminiAgent.Start(const ACommandLine: string = ''): Boolean;
 begin
-  inherited;
-end;
-
-function TGeminiAgent.Start: Boolean;
-begin
-  // Set CommandLine before starting the process engine
-  ACPClient.CommandLine := 'cmd /c gemini --acp';
-  Result := inherited Start;
+  if ACommandLine = '' then
+    Result := inherited Start('cmd /c gemini --acp')
+  else
+    Result := inherited Start(ACommandLine);
 end;
 
 procedure TGeminiAgent.Connect;
 begin
-  inherited Connect;
-  DoStatusChange('Starting Gemini process...');
   State := asConnecting;
   
   TThread.CreateAnonymousThread(procedure
   begin
     try
-      // In background thread, we can call synchronous Start and Initialize
       if Start then
       begin
         Initialize;
       end
       else
       begin
-        TThread.Queue(nil, TThreadProcedure(procedure
+        TThread.Queue(nil, procedure
         begin
-          DoStatusChange('ERR: Failed to start gemini process. (Check if gemini-cli is installed)');
           State := asError;
-        end));
+        end);
       end;
     except
       on E: Exception do
       begin
         var LErrorMsg := E.Message;
-        TThread.Queue(nil, TThreadProcedure(procedure
+        TThread.Queue(nil, procedure
         begin
-          DoStatusChange('ERR: ' + LErrorMsg);
           State := asError;
-        end));
+        end);
       end;
     end;
   end).Start;
 end;
 
-procedure TGeminiAgent.Initialize;
+procedure TGeminiAgent.Initialize(AParams: TJsonObject);
 var
-  Params: TJsonObject;
+  LParams: TJsonObject;
   WaitEvent: TEvent;
 begin
-  // Initialize MUST be called from a background thread as it blocks
   WaitEvent := TEvent.Create(nil, False, False, '');
   try
-    DoStatusChange('Sending initialize request...');
     State := asInitializing;
-    Params := TACPProtocol.CreateInitializeParams('acp-manager', '0.0.1');
+    
+    if Assigned(AParams) then
+      LParams := AParams.Clone as TJsonObject
+    else
+      LParams := TACPProtocol.CreateInitializeParams('acp-manager', '0.0.1');
+      
     try
-      ACPClient.Send('initialize', Params,
+      ACPClient.Send('initialize', LParams,
         procedure(AResponse: TJsonObject)
         begin
           try
             if Assigned(AResponse) and not AResponse.Contains('error') then
             begin
-              DoStatusChange('Initialized successfully.');
               State := asReady;
             end
             else
             begin
-              DoStatusChange('ERR: Initialization failed.');
               State := asError;
             end;
           finally
             WaitEvent.SetEvent;
           end;
+        end,
+        function(AResponse: TJsonObject): Boolean
+        begin
+          Result := AResponse.O['result'].Contains('authMethods');
         end);
     finally
-      Params.Free;
+      if not Assigned(AParams) then LParams.Free;
     end;
 
-    // Block current thread until callback signals or 10s timeout
     if WaitEvent.WaitFor(10000) <> wrSignaled then
     begin
-      DoStatusChange('ERR: Initialization timed out.');
       State := asError;
     end;
   finally
@@ -135,96 +128,167 @@ begin
   end;
 end;
 
-procedure TGeminiAgent.CreateNewSession(const Cwd: string; const Mode: string; ACallback: TProc<string>);
-var
-  Params: TJsonObject;
+procedure TGeminiAgent.EnsureReady(AOnReady: TProc);
 begin
-  DoStatusChange('Creating Session...');
-  Params := TACPProtocol.CreateSessionNewParams(Cwd, Mode);
-  try
-    ACPClient.Send('session/new', Params,
-      procedure(AResponse: TJsonObject)
-      var
-        NewSessionId: string;
-        LResult: TJsonObject;
+  if (State = asReady) and IsConnected then
+  begin
+    if Assigned(AOnReady) then AOnReady();
+    Exit;
+  end;
+
+  TThread.CreateAnonymousThread(procedure
+  begin
+    try
+      if not IsConnected then
       begin
-        if Assigned(AResponse) and not AResponse.Contains('error') then
+        if not Start then
         begin
-          LResult := AResponse.O['result'];
-          NewSessionId := LResult.S['sessionId'];
-          if NewSessionId = '' then NewSessionId := LResult.S['session_id'];
-
-          if NewSessionId <> '' then
-          begin
-            if LResult.Contains('modes') then
-              HandleModes(NewSessionId, LResult.O['modes']);
-            if LResult.Contains('models') then
-              HandleModels(NewSessionId, LResult.O['models']);
-
-            DoStatusChange('Session Created: ' + NewSessionId);
-            if Assigned(ACallback) then ACallback(NewSessionId);
-          end
-          else
-            DoStatusChange('ERR: Session ID missing in response.');
-        end
-        else
-        begin
-          if Assigned(AResponse) and AResponse.Contains('error') then 
-            DoStatusChange('Session Failed: ' + AResponse.O['error'].ToJSON(False))
-          else 
-            DoStatusChange('Session Failed: Unknown error');
-          if Assigned(ACallback) then ACallback('');
+          TThread.Queue(nil, procedure begin State := asError; end);
+          Exit;
         end;
-      end);
-  finally
-    Params.Free;
+      end;
+
+      if State <> asReady then
+      begin
+        Initialize;
+      end;
+
+      if State = asReady then
+      begin
+        if Assigned(AOnReady) then
+          TThread.Queue(nil, procedure begin AOnReady(); end);
+      end
+      else
+      begin
+        TThread.Queue(nil, procedure begin State := asError; end);
+      end;
+    except
+      on E: Exception do
+      begin
+        var LMsg := E.Message;
+        TThread.Queue(nil, procedure begin State := asError; end);
+      end;
+    end;
+  end).Start;
+end;
+
+procedure TGeminiAgent.NewSession(AParams: TJsonObject; OnResponse: TACPResponseAnonCallback; OnCondition: TACPResponseCondition);
+var
+  LClonedParams: TJsonObject;
+begin
+  if Assigned(AParams) then
+    LClonedParams := AParams.Clone as TJsonObject
+  else
+    LClonedParams := nil;
+
+  EnsureReady(procedure
+  begin
+    try
+      inherited NewSession(LClonedParams, OnResponse, OnCondition);
+    finally
+      if Assigned(LClonedParams) then
+        LClonedParams.Free;
+    end;
+  end);
+end;
+
+procedure TGeminiAgent.DoNewSession(AResponse: TJsonObject);
+begin
+  inherited; // 기본 구현 호출 (이벤트 발생 등)
+
+  if Assigned(AResponse) and not AResponse.Contains('error') then
+  begin
+    var NewSessionId := AResponse.O['result'].S['sessionId'];
   end;
 end;
 
 procedure TGeminiAgent.LoadSession(const SessionId: string; ACallback: TProc<string>);
-var
-  Params: TJsonObject;
-  LSid: string;
 begin
-  LSid := SessionId;
-  DoStatusChange('Loading Session: ' + LSid);
-  Params := TJsonObject.Create;
-  try
-    Params.S['sessionId'] := LSid;
-    Params.S['cwd'] := Workspace;
-    Params.A['mcpServers']; 
-    
-    ACPClient.Send('session/load', Params,
-      procedure(AResponse: TJsonObject)
-      var
-        LErrMsg: string;
-        LError: TJsonObject;
-      begin
-        if Assigned(AResponse) and not AResponse.Contains('error') then
+  var LSid := SessionId;
+  EnsureReady(procedure
+  begin
+    var Params: TJsonObject := TJsonObject.Create;
+    try
+      Params.S['sessionId'] := LSid;
+      Params.S['cwd'] := Workspace;
+      Params.A['mcpServers']; 
+      
+      ACPClient.Send('session/load', Params,
+        procedure(AResponse: TJsonObject)
+        var
+          LErrMsg, LLoadedSid: string;
+          LError, LParams, LUpdate: TJsonObject;
+          LData: TSessionData;
+          LSession: TSessionInfo;
         begin
-          DoStatusChange('Session Loaded: ' + LSid);
-          State := asReady;
-          if Assigned(ACallback) then ACallback(LSid);
-        end
-        else
-        begin
-          LErrMsg := 'Session Load Failed';
-          if Assigned(AResponse) and AResponse.Contains('error') then
+          if Assigned(AResponse) and not AResponse.Contains('error') then
           begin
-            LError := AResponse.O['error'];
-            LErrMsg := LErrMsg + ' (Code: ' + IntToStr(LError.I['code']) + ')';
-            if LError.Contains('data') and LError.O['data'].Contains('details') then
-              LErrMsg := LErrMsg + ': ' + LError.O['data'].S['details'];
+            LParams := AResponse.O['params'];
+            LLoadedSid := LParams.S['sessionId'];
+            
+            // params가 비어있는 경우(result 응답인 경우 등)에 대한 방어 코드
+            if LLoadedSid = '' then
+              LLoadedSid := AResponse.O['result'].S['sessionId'];
+              
+            LUpdate := LParams.O['update'];
+
+            // 1. 세션 데이터(커맨드 목록 등) 업데이트
+            if (LLoadedSid <> '') and Sessions.TryGetValue(LLoadedSid, LData) then
+            begin
+              if LUpdate.Contains('availableCommands') then
+                LData.CommandsJson := LUpdate.A['availableCommands'].ToJSON(False);
+              LData.IsRestoring := False;
+              Sessions.AddOrSetValue(LLoadedSid, LData);
+            end;
+
+            // 2. 세션 정보 객체 상태 업데이트
+            LSession := FindSessionById(LLoadedSid);
+            if Assigned(LSession) then
+            begin
+              LSession.IsRestoring := False;
+              LSession.IsLoading := False;
+              LSession.IsWaitForResponse := False;
+            end;
+
+            // 3. 복구 완료 통지 (UI 업데이트 유도)
+            if LLoadedSid <> '' then
+              DoSessionResumed(LLoadedSid);
+
+            State := asReady;
+            if Assigned(ACallback) then ACallback(LLoadedSid);
+          end
+          else
+          begin
+            LErrMsg := 'Session Load Failed';
+            if Assigned(AResponse) and AResponse.Contains('error') then
+            begin
+              LError := AResponse.O['error'];
+              LErrMsg := LErrMsg + ' (Code: ' + IntToStr(LError.I['code']) + ')';
+              if LError.Contains('data') and LError.O['data'].Contains('details') then
+                LErrMsg := LErrMsg + ': ' + LError.O['data'].S['details'];
+            end;
+            
+            State := asReady; 
+            if Assigned(ACallback) then ACallback(''); 
           end;
-          
-          DoStatusChange(LErrMsg);
-          State := asReady; 
-          if Assigned(ACallback) then ACallback(''); 
-        end;
-      end);
-  finally
-    Params.Free;
-  end;
+        end,
+        function(AResponse: TJsonObject): Boolean
+        begin
+          // session/load 응답은 available_commands_update가 올 때까지 대기
+          // sessionId가 일치하는지도 확인하여 더 정확하게 매칭 (SameText로 대소문자 무시)
+          Result := SameText(AResponse.O['params'].S['sessionId'], LSid) and 
+                    SameText(AResponse.O['params'].O['update'].S['sessionUpdate'], 'available_commands_update');
+        end);
+    finally
+      Params.Free;
+    end;
+  end);
+end;
+
+procedure TGeminiAgent.ResumeSession(const SessionId: string);
+begin
+  inherited ResumeSession(SessionId);
+  LoadSession(SessionId, nil);
 end;
 
 procedure TGeminiAgent.SendPrompt(const SessionId, AText: string);
@@ -240,7 +304,16 @@ var
   LMatches: TMatchCollection;
   LMatch: TMatch;
   LWorkspaceName: string;
+  LSession: TSessionInfo;
 begin
+  LSession := FindSessionById(SessionId);
+  if Assigned(LSession) then
+  begin
+    LSession.IsWaitForResponse := True;
+    if Assigned(OnSessionMetadataUpdate) then
+      OnSessionMetadataUpdate(Self, SessionId);
+  end;
+
   if not Sessions.TryGetValue(SessionId, LD) then
     LD := Default(TSessionData);
 
@@ -287,8 +360,6 @@ begin
 
       if not TPath.IsPathRooted(LFilePath) then
         LFilePath := TPath.GetFullPath(TPath.Combine(Workspace, LFilePath));
-
-      DoStatusChange('Loading attachment: ' + LFilePath);
 
       LFileContent := '';
       if TFile.Exists(LFilePath) then
@@ -354,13 +425,28 @@ begin
           if Sessions.TryGetValue(SessionId, LD_Callback) then
             EndTurn(SessionId, LStopReason);
         end;
+      end,
+      function(AResponse: TJsonObject): Boolean
+      begin
+        // session/prompt 응답은 stopReason이 end_turn이어야 최종 응답으로 간주함
+        Result := AResponse.O['result'].S['stopReason'] = 'end_turn';
       end);
   finally Params.Free; end;
 end;
 
 procedure TGeminiAgent.CancelPrompt(const SessionId: string);
-var P: TJsonObject;
+var 
+  P: TJsonObject;
+  LSession: TSessionInfo;
 begin
+  LSession := FindSessionById(SessionId);
+  if Assigned(LSession) then
+  begin
+    LSession.IsWaitForResponse := False;
+    if Assigned(OnSessionMetadataUpdate) then
+      OnSessionMetadataUpdate(Self, SessionId);
+  end;
+
   P := TACPProtocol.CreateSessionCancelParams(SessionId);
   try ACPClient.SendRaw('{"jsonrpc":"2.0","method":"session/cancel","params":' + P.ToJSON(False) + '}'); finally P.Free; end;
 end;
@@ -371,14 +457,14 @@ begin
   P := TJsonObject.Create;
   try
     P.S['sessionId'] := SessionId; P.S['modelId'] := AModelId;
-    ACPClient.Send('session/set_model', P, procedure(AResponse: TJsonObject)
+    ACPClient.Send('session/set_model', P, 
+      procedure(AResponse: TJsonObject)
       var 
         LData: TSessionData;
         LModels: TJsonObject;
       begin 
         if Assigned(AResponse) and not AResponse.Contains('error') then 
         begin
-          // 내부 캐시(ModelsJson) 업데이트
           if Sessions.TryGetValue(SessionId, LData) and (LData.ModelsJson <> '') then
           begin
             LModels := TJsonObject.Parse(LData.ModelsJson) as TJsonObject;
@@ -391,24 +477,29 @@ begin
               end;
             finally LModels.Free; end;
           end;
-
-          DoStatusChange('Model changed to ' + AModelId + ' (Session: ' + SessionId + ')'); 
           
-          // Execute OnPropertyUpdate event instead of calling ExecuteJS directly
           if Assigned(OnPropertyUpdate) then
             OnPropertyUpdate(Self, SessionId, 'currentModelId', AModelId);
         end;
+      end,
+      function(AResponse: TJsonObject): Boolean
+      begin
+        // set_model은 별도 데이터가 없으므로 result 객체가 존재하기만 하면 됨
+        Result := AResponse.Contains('result');
       end);
   finally P.Free; end;
 end;
 
-function TGeminiAgent.IsReady: Boolean; begin Result := State = asReady; end;
-procedure TGeminiAgent.DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject);
-begin inherited; if Assigned(ErrorObj) and (ErrorObj.Count > 0) then DoStatusChange('ERR: ' + ErrorObj.ToJSON(True)); end;
+function TGeminiAgent.IsReady: Boolean; 
+begin 
+  Result := State = asReady;
+end;
 
-procedure TGeminiAgent.Stop;
-begin
+procedure TGeminiAgent.DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject);
+begin 
+  
   inherited;
+  
 end;
 
 end.

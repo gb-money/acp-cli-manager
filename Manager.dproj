@@ -136,7 +136,6 @@
         </DCCReference>
         <DCCReference Include="src\Core\uSessionManager.pas"/>
         <DCCReference Include="src\UI\uThemeManager.pas"/>
-        <DCCReference Include="src\Agents\uAgent.pas"/>
         <DCCReference Include="src\Agents\uACPAgent.pas"/>
         <DCCReference Include="src\Core\uAgentProcess.pas"/>
         <DCCReference Include="src\ACP\uACPClient.pas"/>

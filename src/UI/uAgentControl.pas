@@ -3,7 +3,7 @@ unit uAgentControl;
 interface
 
 uses
-  System.SysUtils, System.Classes, FMX.WebBrowser, uSessionManager, uAgent, uACPAgent,
+  System.SysUtils, System.Classes, FMX.WebBrowser, uSessionManager, uACPAgent,
   System.NetEncoding, FMX.Dialogs, System.Actions, FMX.ActnList, System.IOUtils,
   System.UITypes, System.Generics.Collections, System.Generics.Defaults, uWebACPCommandHandler,
   uAgentHandler, JsonDataObjects, uAgentTypes, uACPClient;
@@ -22,7 +22,7 @@ type
     FWorkspaceRoot: string;
     FOnNewChat: TNewChatEvent;
     FCommandHandler: TWebACPCommandHandler;
-    FAgentList: TDictionary<TAgentType, TAgent>;
+    FAgentList: TDictionary<TAgentType, TACPAgent>;
     FHandlers: TDictionary<TAgentType, TAgentHandler>;
     FOnRawData: TAgentRPCEvent;
     
@@ -35,6 +35,8 @@ type
     procedure DoAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
     procedure DoAgentPropertyUpdate(Sender: TObject; const SessionId, PropertyName, NewValue: string);
     procedure DoAgentRawData(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string);
+    procedure DoAgentNewSession(Sender: TObject; AResponse: TJsonObject);
+    procedure DoAgentSessionResumed(Sender: TObject; const SessionId: string);
     
     // Service Event Handlers
     procedure DoSessionRestored(Sender: TObject; ASession: TSessionInfo);
@@ -64,7 +66,7 @@ type
     constructor Create(AWebBrowser: TWebBrowser; ASessionMgr: TSessionManager);
     destructor Destroy; override;
     function HandleRequest(const AUrl: string): Boolean;
-    procedure RegisterAgent(AType: TAgentType; AAgent: TAgent);
+    procedure RegisterAgent(AType: TAgentType; AAgent: TACPAgent);
     procedure HandleOpenFileDialog(const Params: TDictionary<string, string>);
     procedure AddSession(ASession: TSessionInfo);
     procedure DeleteSession(ASession: TSessionInfo);
@@ -84,14 +86,14 @@ type
     procedure ExecuteJS(const AScript: string);
     property OnNewChat: TNewChatEvent read FOnNewChat write FOnNewChat;
     property OnRawData: TAgentRPCEvent read FOnRawData write FOnRawData;
-    property AgentList: TDictionary<TAgentType, TAgent> read FAgentList;
+    property AgentList: TDictionary<TAgentType, TACPAgent> read FAgentList;
   end;
 
 implementation
 
 uses
   FMX.Forms, uGeminiAgent, System.Types, uConversationService, uDebugRPC, uMain,
-  uGeminiAgentHandler;
+  uGeminiAgentHandler, uACPProtocol;
 
 { TAgentControl }
 
@@ -114,7 +116,7 @@ begin
   if Assigned(FSessionMgr) then
     FSessionMgr.OnSessionRestored := DoSessionRestored;
 
-  FAgentList := TDictionary<TAgentType, TAgent>.Create;
+  FAgentList := TDictionary<TAgentType, TACPAgent>.Create;
   FHandlers := TDictionary<TAgentType, TAgentHandler>.Create;
   
   FCommandHandler := TWebACPCommandHandler.Create;
@@ -142,7 +144,7 @@ begin
   inherited;
 end;
 
-procedure TAgentControl.RegisterAgent(AType: TAgentType; AAgent: TAgent);
+procedure TAgentControl.RegisterAgent(AType: TAgentType; AAgent: TACPAgent);
 begin
   if Assigned(AAgent) then
   begin
@@ -151,14 +153,13 @@ begin
     AAgent.OnThoughtChunk := DoAgentThoughtChunk;
     AAgent.OnStreamingEnd := DoAgentStreamingEnd;
     AAgent.OnEndTurn := DoAgentEndTurn;
-    if AAgent is TACPAgent then
-    begin
-      TACPAgent(AAgent).SessionManager := FSessionMgr;
-      TACPAgent(AAgent).OnRawData := DoAgentRawData;
-      TACPAgent(AAgent).OnPermissionRequest := DoAgentPermissionRequest;
-      TACPAgent(AAgent).OnSessionMetadataUpdate := DoAgentSessionMetadataUpdate;
-      TACPAgent(AAgent).OnPropertyUpdate := DoAgentPropertyUpdate;
-    end;
+    AAgent.SessionManager := FSessionMgr;
+    AAgent.OnRawData := DoAgentRawData;
+    AAgent.OnPermissionRequest := DoAgentPermissionRequest;
+    AAgent.OnSessionMetadataUpdate := DoAgentSessionMetadataUpdate;
+    AAgent.OnPropertyUpdate := DoAgentPropertyUpdate;
+    AAgent.OnNewSession := DoAgentNewSession;
+    AAgent.OnSessionResumed := DoAgentSessionResumed;
   end;
 end;
 
@@ -181,7 +182,7 @@ procedure TAgentControl.DeleteSession(ASession: TSessionInfo);
 begin
   if not Assigned(ASession) then Exit;
   FSessionMgr.DeleteSession(ASession);
-  UpdateSessionList; // Refresh the entire list to ensure UI is in sync
+  UpdateSessionList; 
 end;
 
 procedure TAgentControl.DeleteSessionUI(const ASessionId: string);
@@ -194,7 +195,6 @@ var
   LSession: TSessionInfo;
   LDirStr, LMethod: string;
 begin
-  // 1. Logging Persistence (only if we have a valid session)
   if (Direction <> rdInternal) and (SessionId <> '') then
   begin
     LSession := FSessionMgr.GetSessionById(SessionId);
@@ -207,7 +207,6 @@ begin
       end;
       TConversationService.AppendLog(LSession, LDirStr, RawText, False);
 
-      // --- Conditional Conversation Date Update ---
       if Assigned(AObj) then
       begin
         LMethod := AObj.S['method'];
@@ -222,9 +221,59 @@ begin
     end;
   end;
 
-  // 2. Relay to subscribers (uMain.DoRawDataForDebug)
   if Assigned(FOnRawData) then
     FOnRawData(Self, Direction, SessionId, AObj, RawText);
+end;
+
+procedure TAgentControl.DoAgentNewSession(Sender: TObject; AResponse: TJsonObject);
+var
+  LSid, LOldId: string;
+  LSession: TSessionInfo;
+begin
+  if not Assigned(AResponse) or AResponse.Contains('error') then Exit;
+
+  LSid := AResponse.O['result'].S['sessionId'];
+  if LSid = '' then Exit;
+
+  // Find the pending session for this agent
+  LSession := FSessionMgr.GetPendingSessionByAgent(TACPAgent(Sender));
+  if Assigned(LSession) then
+  begin
+    LOldId := LSession.SessionId;
+    LSession.IsLoading := False;
+    LSession.IsActive := True;
+    
+    FSessionMgr.FinalizeSessionId(LSession, LSid);
+    TACPAgent(Sender).SetSessionLogPath(LSid, LSession.LogPath);
+
+    TThread.Queue(nil, procedure
+    begin
+      DeleteSessionUI(LOldId);
+      AddSession(LSession);
+      UpdateFileList(LSession.Cwd);
+      HandleSelectSession(LSession);
+    end);
+  end;
+end;
+
+procedure TAgentControl.DoAgentSessionResumed(Sender: TObject; const SessionId: string);
+var
+  LSession: TSessionInfo;
+begin
+  LSession := FSessionMgr.GetSessionById(SessionId);
+  if Assigned(LSession) then
+  begin
+    LSession.IsLoading := False;
+    LSession.IsRestoring := False;
+    LSession.IsActive := True;
+    LSession.LastHistoryTick := 0;
+
+    TThread.Queue(nil, procedure
+    begin
+      UpdateSession(LSession);
+      UpdateFileList(LSession.Cwd);
+    end);
+  end;
 end;
 
 procedure TAgentControl.DoAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
@@ -286,7 +335,6 @@ begin
   LSession := FSessionMgr.GetSessionById(SessionId);
   if Assigned(LSession) then
   begin
-    // Interrupt streaming if active
     if LSession.IsThoughtStreaming then EndStreaming(SessionId, 'thought');
     if LSession.IsMessageStreaming then EndStreaming(SessionId, 'message');
 
@@ -329,7 +377,7 @@ end;
 
 function TAgentControl.GetHandler(AType: TAgentType): TAgentHandler;
 var
-  LAgent: TAgent;
+  LAgent: TACPAgent;
 begin
   if not FHandlers.TryGetValue(AType, Result) then
   begin
@@ -371,11 +419,11 @@ end;
 
 procedure TAgentControl.HandleNewChat(const Params: TDictionary<string, string>);
 var 
-  LAgentName, LSelectedDir: string; 
+  LAgentName, LSelectedDir, LPendingId: string; 
   LType: TAgentType; 
-  LHandler: TAgentHandler;
-  LPrevActive: TSessionInfo;
-  LAgent: TAgent;
+  LPrevActive, LPendingSession: TSessionInfo;
+  LAgent: TACPAgent;
+  LParams: TJsonObject;
 begin
   if Params.TryGetValue('agent', LAgentName) then begin
     if Assigned(FOnNewChat) then FOnNewChat(Self, LAgentName);
@@ -384,20 +432,17 @@ begin
     else if SameText(LAgentName, 'codex') then LType := atCodex
     else Exit;
     
-    // Guard: Prevent creating new chat while agent is initializing
-    if FAgentList.TryGetValue(LType, LAgent) then
+    if not FAgentList.TryGetValue(LType, LAgent) then Exit;
+
+    if LAgent.State in [asConnecting, asInitializing] then
     begin
-      if LAgent.State in [asConnecting, asInitializing] then
-      begin
-        ExecuteJS(Format('window.ACP.showModal("warning", "%s Initializing", ' +
-          '"The agent is currently starting up. Please wait until the initialization is complete before creating a new chat.")', [LAgentName]));
-        Exit;
-      end;
+      ExecuteJS(Format('window.ACP.showModal("warning", "%s Initializing", ' +
+        '"The agent is currently starting up. Please wait until the initialization is complete before creating a new chat.")', [LAgentName]));
+      Exit;
     end;
 
     if not SelectDirectory('Select Project Workspace for ' + LAgentName, '', LSelectedDir) then Exit;
 
-    // Deselect current active session to prevent dual-selection UI bug
     LPrevActive := FSessionMgr.ActiveSession;
     if Assigned(LPrevActive) then
     begin
@@ -405,39 +450,52 @@ begin
       UpdateSession(LPrevActive);
     end;
 
-    LHandler := GetHandler(LType);
-    if Assigned(LHandler) then LHandler.CreateNewSession(LSelectedDir);
+    // Create Pending Session
+    LPendingId := 'pending-' + TGuid.NewGuid.ToString;
+    LPendingSession := FSessionMgr.AddSession(LAgent, LType, LPendingId, FSessionMgr.GetUniqueSessionName('New Chat'), LSelectedDir);
+    LPendingSession.IsLoading := True;
+    FSessionMgr.SelectSession(LPendingSession);
+
+    ExecuteJS('window.ACP.clearChat()');
+    AddSession(LPendingSession);
+    UpdateFileList(LSelectedDir);
+
+    // Call Agent.NewSession
+    LAgent.Workspace := LSelectedDir;
+    LParams := TACPProtocol.CreateSessionNewParams(LSelectedDir, '');
+    try
+      LAgent.NewSession(LParams);
+    finally
+      LParams.Free;
+    end;
   end;
 end;
 
 procedure TAgentControl.HandleResumeSession(const Params: TDictionary<string, string>);
-var LSid: string; LTarget: TSessionInfo; LHandler: TAgentHandler;
+var LSid: string; LTarget: TSessionInfo;
 begin
   if Params.TryGetValue('id', LSid) then begin
     LTarget := FSessionMgr.GetSessionById(LSid);
-    if Assigned(LTarget) then begin
+    if Assigned(LTarget) and Assigned(LTarget.Agent) then begin
+       LTarget.IsLoading := True;
+       UpdateSession(LTarget);
+       
        HandleSelectSession(LTarget);
-       LHandler := GetHandler(LTarget.AgentType);
-       if Assigned(LHandler) then LHandler.ResumeSession(LTarget);
+       
+       LTarget.Agent.Workspace := LTarget.Cwd;
+       LTarget.Agent.ResumeSession(LSid);
     end;
   end;
 end;
 
 procedure TAgentControl.HandleSendMessage(const Params: TDictionary<string, string>);
-var LText, LBase64: string; LActive: TSessionInfo; LHandler: TAgentHandler;
+var LText, LBase64: string; LActive: TSessionInfo;
 begin
   if Params.TryGetValue('text', LText) and (LText <> '') then begin
     LActive := FSessionMgr.ActiveSession;
     if Assigned(LActive) and Assigned(LActive.Agent) then begin
-      LActive.IsWaitForResponse := True; UpdateSession(LActive);
-      
-      LHandler := GetHandler(LActive.AgentType);
-      if Assigned(LHandler) then
-        LHandler.Prompt(LActive, LText)
-      else
-        LActive.Agent.SendPrompt(LActive.SessionId, LText);
+      LActive.Agent.SendPrompt(LActive.SessionId, LText);
 
-      // Render user message in UI immediately via JS
       LBase64 := TNetEncoding.Base64.EncodeBytesToString(TEncoding.UTF8.GetBytes(LText)).Replace(#13, '').Replace(#10, '');
       ExecuteJS(Format('window.ACP.addUserMessage("%s")', [LBase64]));
       
@@ -458,7 +516,6 @@ begin
     LPrevActive := FSessionMgr.ActiveSession;
     FSessionMgr.SelectSession(ASession); 
     
-    // UI 부분 갱신: 이전 세션의 포커스 해제 및 새 세션의 포커스 설정
     if Assigned(LPrevActive) and (LPrevActive <> ASession) then
       UpdateSession(LPrevActive);
     UpdateSession(ASession);
@@ -520,7 +577,8 @@ var LID, LOptionId: string; LActive: TSessionInfo;
 begin
   if Params.TryGetValue('id', LID) and Params.TryGetValue('optionId', LOptionId) then begin
     LActive := FSessionMgr.ActiveSession;
-    if Assigned(LActive) and (LActive.Agent is TACPAgent) then TACPAgent(LActive.Agent).ReplyPermission(LID, LOptionId);
+    if Assigned(LActive) and (LActive.Agent is TACPAgent) then 
+      TACPAgent(LActive.Agent).ReplyPermission(LID, LActive.SessionId, LOptionId);
   end;
 end;
 
@@ -591,7 +649,7 @@ end;
 procedure TAgentControl.HandleInternalLog(Sender: TObject; const LogMsg: string); begin if Assigned(frmDebugRPC) then frmDebugRPC.AddACPLog(LogMsg); end;
 
 procedure TAgentControl.LoadAllSessions;
-var LAgent: TAgent; LSessionIds: TArray<string>; LSid: string; LSession: TSessionInfo;
+var LAgent: TACPAgent; LSessionIds: TArray<string>; LSid: string; LSession: TSessionInfo;
 begin
   if not Assigned(FSessionMgr) then Exit;
   for LAgent in FAgentList.Values do begin
@@ -700,21 +758,18 @@ var
     LRelPath: string;
   begin
     try
-      // Collect files in current dir
       for LFile in TDirectory.GetFiles(ADir) do
       begin
         LRelPath := ExtractRelativePath(LTargetRoot, LFile);
         LArray.Add(LRelPath.Replace('\', '/'));
       end;
 
-      // Recurse into subdirs
       for LSubDir in TDirectory.GetDirectories(ADir) do
       begin
         if not IsIgnoredDir(TPath.GetFileName(LSubDir)) then
           ScanDir(LSubDir);
       end;
     except
-      // Skip inaccessible directories
     end;
   end;
 
@@ -771,8 +826,8 @@ begin
     Result.D['lastConversationDate'] := ASessionInfo.LastConversationDate;
 
   Result.S['icon'] := 'forum';  Result.S['lastMsg'] := 'Ready to chat...'; if ASessionInfo.IsLoading then Result.S['lastMsg'] := 'Starting process...';
-  if Assigned(ASessionInfo.Agent) and (ASessionInfo.Agent is TACPAgent) then begin
-    if TACPAgent(ASessionInfo.Agent).Sessions.TryGetValue(ASessionInfo.SessionId, LData) then begin
+  if Assigned(ASessionInfo.Agent) then begin
+    if ASessionInfo.Agent.Sessions.TryGetValue(ASessionInfo.SessionId, LData) then begin
       if LData.ModelsJson <> '' then begin
         try
           LModels := TJsonObject.Parse(LData.ModelsJson) as TJsonObject;
@@ -801,7 +856,6 @@ begin
         try
           Result.A['commands'].FromJSON(LData.CommandsJson);
         except
-          // If not a valid array string, ignore to prevent UI crash
         end;
       end;
     end;

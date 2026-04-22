@@ -8,6 +8,14 @@ uses
 
 type
   TACPResponseAnonCallback = reference to procedure(AResponse: TJsonObject);
+  TACPResponseCondition = reference to function(AResponse: TJsonObject): Boolean;
+
+  TACPRequestRecord = record
+    MessageId: string;
+    MethodName: string;
+    Condition: TACPResponseCondition;
+    Callback: TACPResponseAnonCallback;
+  end;
 
   TACPReceiveEvent = procedure(Sender: TObject;
     const ID, Method: string;
@@ -23,8 +31,7 @@ type
     FLineBuffer: string;
     FBufferLock: TCriticalSection;
     FLastMessageId: Integer;
-    FCallbacks: TDictionary<string, TACPResponseAnonCallback>;
-    FPendingMethods: TDictionary<string, string>;
+    FCallbacks: TList<TACPRequestRecord>;
     FOnReceive: TACPReceiveEvent;
     FOnRawData: TACPRawDataEvent;
     FOnError: TACPErrorEvent;
@@ -39,7 +46,7 @@ type
     destructor Destroy; override;
     function Start: Boolean;
     procedure Stop;
-    procedure Send(const Method: string; Params: TJsonObject = nil; OnResponse: TACPResponseAnonCallback = nil);
+    procedure Send(const Method: string; Params: TJsonObject = nil; OnResponse: TACPResponseAnonCallback = nil; OnCondition: TACPResponseCondition = nil);
     procedure SendResponse(const ID: string; ResultObj: TJsonObject = nil);
     procedure SendRaw(const JsonStr: string);
     function IsRunning: Boolean;
@@ -60,8 +67,7 @@ begin
   FBufferLock := TCriticalSection.Create;
   FLineBuffer := '';
   FLastMessageId := 0;
-  FCallbacks := TDictionary<string, TACPResponseAnonCallback>.Create;
-  FPendingMethods := TDictionary<string, string>.Create;
+  FCallbacks := TList<TACPRequestRecord>.Create;
   FAgentProcess := TAgentProcess.Create(Self);
   FAgentProcess.OnOutput := HandleProcessOutput;
   FAgentProcess.OnTerminated := HandleProcessTerminated;
@@ -71,7 +77,6 @@ destructor TACPClient.Destroy;
 begin
   FAgentProcess.Free;
   FCallbacks.Free;
-  FPendingMethods.Free;
   FBufferLock.Free;
   inherited;
 end;
@@ -96,7 +101,6 @@ begin
   FLineBuffer := '';
   FLastMessageId := 0;
   FCallbacks.Clear;
-  FPendingMethods.Clear;
   Result := FAgentProcess.Start;
 end;
 
@@ -105,7 +109,6 @@ begin
   FAgentProcess.Stop;
   FLineBuffer := '';
   FCallbacks.Clear;
-  FPendingMethods.Clear;
 end;
 
 procedure TACPClient.SendRaw(const JsonStr: string);
@@ -129,10 +132,11 @@ begin
   end;
 end;
 
-procedure TACPClient.Send(const Method: string; Params: TJsonObject; OnResponse: TACPResponseAnonCallback);
+procedure TACPClient.Send(const Method: string; Params: TJsonObject; OnResponse: TACPResponseAnonCallback; OnCondition: TACPResponseCondition);
 var
   ReqObj: TJsonObject;
   MessageId: string;
+  LRecord: TACPRequestRecord;
 begin
   FBufferLock.Enter;
   try
@@ -149,8 +153,13 @@ begin
         ReqObj.O['params'].Assign(Params);
 
       if Assigned(OnResponse) then
-        FCallbacks.Add(MessageId, OnResponse);
-      FPendingMethods.AddOrSetValue(MessageId, Method);
+      begin
+        LRecord.MessageId := MessageId;
+        LRecord.MethodName := Method;
+        LRecord.Condition := OnCondition;
+        LRecord.Callback := OnResponse;
+        FCallbacks.Add(LRecord);
+      end;
 
       SendRaw(ReqObj.ToJSON(False));
     finally
@@ -210,6 +219,7 @@ var
   Callback: TACPResponseAnonCallback;
   ProcessingBuffer: string;
   LBaseObj: TJsonBaseObject;
+  i: Integer;
 begin
   // 1. 버퍼 전체를 로컬로 가져오고 메인 버퍼 비움 (락 보호)
   FBufferLock.Enter;
@@ -259,7 +269,7 @@ begin
         begin
           if Assigned(FOnRawData) then
             FOnRawData(Self, rdInternal, 'JSON Parse Error: ' + E.Message + ' Source: ' + LineStr);
-          Continue; // Skip invalid JSON and continue loop
+          Continue;
         end;
       end;
 
@@ -268,70 +278,73 @@ begin
 
       ParsedObj := TJsonObject(LBaseObj);
 
+      // JSON 필드 추출 (id, method, params, result, error)
       vID := '';
       if ParsedObj.Contains('id') then 
       begin
-        if ParsedObj.Types['id'] = jdtString then
-          vID := ParsedObj.S['id']
-        else
-          vID := IntToStr(ParsedObj.I['id']);
+        if ParsedObj.Types['id'] = jdtString then vID := ParsedObj.S['id']
+        else vID := IntToStr(ParsedObj.I['id']);
       end;
 
       vMethod := ParsedObj.S['method'];
-
-      if (vID <> '') and (vMethod = '') then
-        FPendingMethods.TryGetValue(vID, vMethod);
-
       pParams := nil; pResult := nil; pError := nil;
-      if ParsedObj.IndexOf('params') >= 0 then
-      begin
-        if ParsedObj.Items[ParsedObj.IndexOf('params')].Typ = jdtObject then
-          pParams := ParsedObj.O['params'];
-      end;
-      
-      if ParsedObj.IndexOf('result') >= 0 then
-      begin
-        if ParsedObj.Items[ParsedObj.IndexOf('result')].Typ = jdtObject then
-          pResult := ParsedObj.O['result'];
-      end;
+      if ParsedObj.Contains('params') and (ParsedObj.Types['params'] = jdtObject) then pParams := ParsedObj.O['params'];
+      if ParsedObj.Contains('result') and (ParsedObj.Types['result'] = jdtObject) then pResult := ParsedObj.O['result'];
+      if ParsedObj.Contains('error') and (ParsedObj.Types['error'] = jdtObject) then pError := ParsedObj.O['error'];
 
-      if ParsedObj.IndexOf('error') >= 0 then
-      begin
-        if ParsedObj.Items[ParsedObj.IndexOf('error')].Typ = jdtObject then
-          pError := ParsedObj.O['error'];
-      end;
-
-      if (vID <> '') and not Assigned(pResult) and Assigned(pParams) then
+      // Fallback: Result가 Params 필드에 실려오는 경우 처리
+      if (vID <> '') and (pResult = nil) and (pParams <> nil) then
         pResult := pParams;
 
-      // --- Improved Response Matching (Method 3: Session/Prompt special handling) ---
+      // 3. 콜백 매칭 (ID 매칭 우선, 그 후 Condition 매칭)
       Callback := nil;
-      if (vID <> '') and (vID <> '0') and (ParsedObj.S['method'] = '') and 
-         (Assigned(pResult) or Assigned(pError)) then 
-      begin
-        var LIsPrompt := SameText(vMethod, 'session/prompt');
-        var LShouldCallback := True;
-        
-        // If it's a prompt response, only trigger callback if stopReason is end_turn
-        if LIsPrompt and Assigned(pResult) then
+      FBufferLock.Enter;
+      try
+        for i := 0 to FCallbacks.Count - 1 do
         begin
-          var LStopReason := pResult.S['stopReason'];
-          if (LStopReason <> '') and not SameText(LStopReason, 'end_turn') then
-            LShouldCallback := False;
-        end;
+          var LReq := FCallbacks[i];
+          var LIdMatch := (vID <> '') and (LReq.MessageId = vID);
+          var LNoIdMatch := (vID = '') and (vMethod <> '') and Assigned(LReq.Condition);
 
-        if LShouldCallback then
-        begin
-          if FCallbacks.TryGetValue(vID, Callback) then
+          if LIdMatch or LNoIdMatch then
           begin
-            FCallbacks.Remove(vID);
-            if Assigned(FOnRawData) then
-              FOnRawData(Self, rdInternal, 'Callback FOUND and matching for ID: ' + vID);
+            var LIsValid := True;
+            if (pError = nil) and Assigned(LReq.Condition) then
+            begin
+              try
+                LIsValid := LReq.Condition(ParsedObj);
+              except
+                LIsValid := False;
+              end;
+            end;
+
+            if LIsValid then
+            begin
+              Callback := LReq.Callback;
+              vMethod := LReq.MethodName; // 원래 요청 메서드명으로 복원 (로그 및 이벤트용)
+              FCallbacks.Delete(i);
+              if Assigned(FOnRawData) then
+              begin
+                if LIdMatch then
+                  FOnRawData(Self, rdInternal, 'Callback FOUND and matching for ID: ' + vID + ' Method: ' + vMethod)
+                else
+                  FOnRawData(Self, rdInternal, 'Callback FOUND via CONDITION (No ID) for Method: ' + vMethod);
+              end;
+              Break;
+            end
+            else if LIdMatch then
+            begin
+              if Assigned(FOnRawData) then
+                FOnRawData(Self, rdInternal, 'Callback ID matched but CONDITION FAILED for ID: ' + vID + ' Method: ' + LReq.MethodName);
+              Break; // ID가 일치하면 더 이상 이 메시지에 대한 콜백을 찾지 않음
+            end;
           end;
-          FPendingMethods.Remove(vID);
         end;
+      finally
+        FBufferLock.Leave;
       end;
 
+      // 4. 콜백 실행
       if Assigned(Callback) then
       begin
         try
@@ -343,6 +356,7 @@ begin
         end;
       end;
 
+      // 5. 일반 수신 이벤트 발생
       if Assigned(FOnReceive) and not FAgentProcess.IsStopping then
         FOnReceive(Self, vID, vMethod, pParams, pResult, pError);
     finally

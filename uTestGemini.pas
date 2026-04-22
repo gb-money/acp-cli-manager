@@ -45,8 +45,6 @@ implementation
 procedure TfrmTestGemini.FormCreate(Sender: TObject);
 begin
   FAgent := TGeminiAgent.Create(Self);
-  FAgent.OnStatusChange := DoStatusChange;
-  FAgent.OnStateChange := DoStateChange;
   FAgent.OnEndTurn := DoEndTurn;
   FAgent.OnThoughtChunk := DoThoughtChunk;
   FAgent.OnMessageChunk := DoMessageChunk;

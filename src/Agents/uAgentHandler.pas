@@ -3,7 +3,7 @@ unit uAgentHandler;
 interface
 
 uses
-  System.Classes, System.SysUtils, uAgent, uSessionManager, JsonDataObjects;
+  System.Classes, System.SysUtils, uACPAgent, uSessionManager, JsonDataObjects, uAgentTypes;
 
 type
   IAgentControl = interface
@@ -21,19 +21,18 @@ type
   TAgentHandler = class
   protected
     FSessionMgr: TSessionManager;
-    FAgent: TAgent;
+    FAgent: TACPAgent;
     FAgentControl: IAgentControl;
   public
-    constructor Create(ASessionMgr: TSessionManager; AAgent: TAgent; AAgentControl: IAgentControl); virtual;
+    constructor Create(ASessionMgr: TSessionManager; AAgent: TACPAgent; AAgentControl: IAgentControl); virtual;
     procedure CreateNewSession(const AWorkspaceDir: string); virtual; abstract;
-    procedure ResumeSession(ASession: TSessionInfo); virtual; abstract;
     procedure Prompt(ASession: TSessionInfo; const AText: string); virtual; abstract;
     procedure ProcessRequestPermission(const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray); virtual; abstract;
   end;
 
 implementation
 
-constructor TAgentHandler.Create(ASessionMgr: TSessionManager; AAgent: TAgent; AAgentControl: IAgentControl);
+constructor TAgentHandler.Create(ASessionMgr: TSessionManager; AAgent: TACPAgent; AAgentControl: IAgentControl);
 begin
   FSessionMgr := ASessionMgr;
   FAgent := AAgent;
