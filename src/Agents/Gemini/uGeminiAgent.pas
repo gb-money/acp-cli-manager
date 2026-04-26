@@ -225,7 +225,8 @@ begin
           if LStopReason = '' then LStopReason := 'end_turn'; if Sessions.TryGetValue(SessionId, LD_Callback) then EndTurn(SessionId, LStopReason);
         end;
       end,
-      [function(AObj: TJsonObject): Boolean begin Result := False; if AObj.Contains('result') then Result := AObj.O['result'].S['stopReason'] = 'end_turn'; if not Result and AObj.Contains('params') then Result := AObj.O['params'].O['update'].S['stopReason'] = 'end_turn'; end]);
+      [function(AObj: TJsonObject): Boolean begin Result := False; if AObj.Contains('result') then Result := AObj.O['result'].S['stopReason'] = 'end_turn'; if not Result and AObj.Contains('params') then Result := AObj.O['params'].O['update'].S['stopReason'] = 'end_turn'; end],
+      SessionId);
   finally Params.Free; end;
 end;
 
