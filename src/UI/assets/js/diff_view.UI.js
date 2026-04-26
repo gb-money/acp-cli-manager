@@ -15,9 +15,7 @@ window.ACP = Object.assign(window.ACP || {}, {
                     <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/20">
                         <span class="material-icons text-lg ${s.id === window.ACP.activeSessionId ? 'text-primary' : ''}">${s.id === window.ACP.activeSessionId ? 'forum' : 'chat_bubble_outline'}</span>
                     </div>
-                    <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 ${s.online ? 'bg-primary' : 'bg-gray-400'} rounded-full border-2 border-surface-container-lowest"></div>
-                </div>
-                <div class="flex-1 min-w-0 z-10">
+                    </div>                <div class="flex-1 min-w-0 z-10">
                     <div class="text-sm font-headline ${s.id === window.ACP.activeSessionId ? 'font-semibold text-primary' : 'font-medium'} truncate">${s.name}</div>
                     <div class="text-xs ${s.id === window.ACP.activeSessionId ? 'text-on-surface-variant' : 'opacity-60'} truncate">${s.workspace || ''}</div>
                 </div>
