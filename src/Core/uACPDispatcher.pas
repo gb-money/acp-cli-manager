@@ -207,14 +207,6 @@ begin
       begin
         Result := Assigned(AObj) and AObj.Contains('result') and AObj.O['result'].Contains('sessionId') and
                   SameText(AObj.O['result'].S['sessionId'], SessionId);
-      end,
-      function(AObj: TJsonObject): Boolean
-      begin
-        Result := Assigned(AObj) and 
-                  (AObj.S['id'] = '') and 
-                  (AObj.S['method'] = 'session/update') and 
-                  (AObj.O['params'].S['sessionId'] = SessionId) and
-                  (AObj.O['params'].O['update'].S['sessionUpdate'] = 'available_commands_update');
       end
     ],
     SessionId

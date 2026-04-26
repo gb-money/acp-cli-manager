@@ -133,6 +133,7 @@ type
     function GetModeId: string;
     function GetSessionsJson(const ASessionId: string): string;
     function GetIsConnected: Boolean;
+    function IsRestoringSession(const SessionId: string): Boolean;
 
     property AgentName: string read GetAgentName;
     property AgentType: TAgentType read GetAgentType;

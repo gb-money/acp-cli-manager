@@ -205,7 +205,9 @@ var
 begin
   if (ASession = nil) or (ASession.LogPath = '') then Exit;
   
-  LIsRestoring := ASession.IsLoading or ((ASession.Agent is TACPAgent) and TACPAgent(ASession.Agent).IsRestoringSession(ASession.SessionId));
+  LIsRestoring := ASession.IsLoading;
+  if not LIsRestoring and Supports(ASession.Agent, IACPAgent, LAgent) then
+    LIsRestoring := LAgent.IsRestoringSession(ASession.SessionId);
 
   // If we are restoring, DO NOT write to log file or update metadata
   if LIsRestoring then Exit;
