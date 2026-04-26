@@ -3,7 +3,7 @@ unit uSessionManager;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Collections, uACPAgent, System.IOUtils,
+  System.SysUtils, System.Classes, System.Generics.Collections, System.IOUtils,
   JsonDataObjects, System.SyncObjs, uAgentTypes, System.Generics.Defaults, System.DateUtils;
 
 type
@@ -22,7 +22,7 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    function AddSession(AAgent: TACPAgent; AType: TAgentType; const ASessionId, AName: string; const ACwd: string = ''): TSessionInfo;
+    function AddSession(AAgent: IACPAgent; AType: TAgentType; const ASessionId, AName: string; const ACwd: string = ''): TSessionInfo;
     procedure FinalizeSessionId(ASession: TSessionInfo; const ANewId: string);
     procedure DeleteSession(ASession: TSessionInfo);
     procedure SelectSession(ASession: TSessionInfo);
@@ -31,7 +31,7 @@ type
     procedure SortSessions;
     procedure RecordActivity(const ASessionId: string);
     function GetSessionById(const ASessionId: string): TSessionInfo;
-    function GetPendingSessionByAgent(AAgent: TACPAgent): TSessionInfo;
+    function GetPendingSessionByAgent(AAgent: TObject): TSessionInfo;
 
     procedure Lock;
     procedure Unlock;
@@ -85,15 +85,14 @@ begin
       LNow := TThread.GetTickCount;
       Lock;
       try
-        for I := 0 to Sessions.Count - 1 do
+        for I := 0 to FSessions.Count - 1 do
         begin
-          LSession := Sessions[I];
+          LSession := FSessions[I];
           if LSession.IsActive and (LSession.LastHistoryTick > 0) then
           begin
             if (LNow - LSession.LastHistoryTick) > 300000 then // 5 minutes
             begin
               LSession.IsActive := False;
-              // Event could be fired here if needed
             end;
           end;
         end;
@@ -104,15 +103,15 @@ begin
   end).Start;
 end;
 
-function TSessionManager.AddSession(AAgent: TACPAgent; AType: TAgentType; const ASessionId, AName, ACwd: string): TSessionInfo;
+function TSessionManager.AddSession(AAgent: IACPAgent; AType: TAgentType; const ASessionId, AName, ACwd: string): TSessionInfo;
 var
   LSessionDir: string;
 begin
-  Result := TSessionInfo.Create(AAgent, AAgent.AgentName, AType, ASessionId, AName, ACwd);
+  Result := TSessionInfo.Create(TObject(AAgent), 'unknown', AType, ASessionId, AName, ACwd);
 
   if not ASessionId.StartsWith('pending-') then begin
     LSessionDir := TPath.Combine(BaseConfigPath, 'sessions');
-    LSessionDir := TPath.Combine(LSessionDir, AAgent.AgentName.ToLower + '-cli');
+    LSessionDir := TPath.Combine(LSessionDir, 'gemini' + '-cli'); // Default name fallback
     LSessionDir := TPath.Combine(LSessionDir, ASessionId);
 
     if not TDirectory.Exists(LSessionDir) then
@@ -291,7 +290,7 @@ begin
   end;
 end;
 
-function TSessionManager.GetPendingSessionByAgent(AAgent: TACPAgent): TSessionInfo;
+function TSessionManager.GetPendingSessionByAgent(AAgent: TObject): TSessionInfo;
 var
   LSession: TSessionInfo;
 begin

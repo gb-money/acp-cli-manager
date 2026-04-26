@@ -22,6 +22,32 @@ type
     Description: string;
   end;
 
+  TSessionData = record
+    FullThought: string;
+    FullMessage: string;
+    CommandsJson: string;
+    CurrentBlockText: string;
+    LastChunkType: string;
+    IsRestoring: Boolean;
+    IsProcessing: Boolean;
+  end;
+
+  // Event types defined early to be used in interfaces
+  TAgentStatusChangeEvent = procedure(Sender: TObject; const Msg: string) of object;
+  TAgentStateChangeEvent = procedure(Sender: TObject; const OldState, NewState: TAgentState) of object;
+  TAgentEndTurnEvent = procedure(Sender: TObject; const SessionId, StopReason: string) of object;
+  TAgentChunkEvent = procedure(Sender: TObject; const SessionId, Chunk, FullText: string) of object;
+  TAgentStreamingEndEvent = procedure(Sender: TObject; const SessionId, AType: string) of object;
+  TAgentFSWriteEvent = procedure(Sender: TObject; const SessionId, Path, OldContent, NewContent: string) of object;
+
+  TAgentPermissionRequestEvent = procedure(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray) of object;
+  TSessionMetadataUpdateEvent = procedure(Sender: TObject; const SessionId: string) of object;
+  TSessionPropertyUpdateEvent = procedure(Sender: TObject; const SessionId, PropertyName, NewValue: string) of object;
+  TAgentRPCEvent = procedure(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string) of object;
+  
+  TNewSessionEvent = procedure(Sender: TObject; AResponse: TJsonObject) of object;
+  TSessionResumedEvent = procedure(Sender: TObject; const SessionId: string) of object;
+
   TSessionInfo = class
   private
     FAgent: TObject;
@@ -69,23 +95,6 @@ type
     property LastHistoryTick: Cardinal read FLastHistoryTick write FLastHistoryTick;
   end;
 
-  // Agent Events
-  TAgentStatusChangeEvent = procedure(Sender: TObject; const Msg: string) of object;
-  TAgentStateChangeEvent = procedure(Sender: TObject; const OldState, NewState: TAgentState) of object;
-  TAgentEndTurnEvent = procedure(Sender: TObject; const SessionId, StopReason: string) of object;
-  TAgentChunkEvent = procedure(Sender: TObject; const SessionId, Chunk, FullText: string) of object;
-  TAgentStreamingEndEvent = procedure(Sender: TObject; const SessionId, AType: string) of object;
-  TAgentFSWriteEvent = procedure(Sender: TObject; const SessionId, Path, OldContent, NewContent: string) of object;
-
-  TAgentPermissionRequestEvent = procedure(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray) of object;
-  TSessionMetadataUpdateEvent = procedure(Sender: TObject; const SessionId: string) of object;
-  TSessionPropertyUpdateEvent = procedure(Sender: TObject; const SessionId, PropertyName, NewValue: string) of object;
-  TAgentRPCEvent = procedure(Sender: TObject; ADirection: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const ARawText: string) of object;
-  
-  // ACP Specific Events
-  TNewSessionEvent = procedure(Sender: TObject; AResponse: TJsonObject) of object;
-  TSessionResumedEvent = procedure(Sender: TObject; const SessionId: string) of object;
-
   IAgentObserver = interface
     ['{7E1D8A21-5B3E-4B7E-A79B-8902A9E58A4F}']
     procedure OnAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
@@ -101,6 +110,50 @@ type
     procedure OnAgentFSWrite(Sender: TObject; const SessionId, Path, OldContent, NewContent: string);
     procedure OnAgentStateChange(Sender: TObject; const OldState, NewState: TAgentState);
   end;
+
+  // IACPAgent Interface to break circular dependency
+  IACPAgent = interface
+    ['{B1A2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D}']
+    function GetAgentType: TAgentType;
+    function GetSessionList: TArray<string>;
+    procedure AddObserver(AObserver: IAgentObserver);
+    procedure SetSessionLogPath(const SessionId, APath: string);
+    procedure SetWorkspace(const APath: string);
+    procedure ResumeSession(const SessionId: string);
+    procedure NewSession(AParams: TJsonObject);
+    procedure SendPrompt(const SessionId, AText: string);
+    procedure ChangeModel(const ASessionId, AModelId: string);
+    procedure CancelPrompt(const ASessionId: string);
+    procedure ReplyPermission(const ID, SessionId, OptionId: string);
+    function GetState: TAgentState;
+    function GetModels: TArray<TAgentModelInfo>;
+    function GetModelId: string;
+    function GetModes: TArray<TAgentModeInfo>;
+    function GetModeId: string;
+    function GetSessionsJson(const ASessionId: string): string;
+    function GetIsConnected: Boolean;
+
+    property AgentType: TAgentType read GetAgentType;
+    property State: TAgentState read GetState;
+    property ModelId: string read GetModelId;
+    property ModeId: string read GetModeId;
+  end;
+
+  IAgentControl = interface
+    ['{D93A8B12-4C1F-4B1E-B7C9-0E1234567890}']
+    procedure UpdateSession(ASession: TSessionInfo);
+    procedure UpdateSessionList;
+    procedure UpdateFileList(const ARootPath: string = '');
+    procedure ShowPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
+    procedure AddSession(ASession: TSessionInfo);
+    procedure RegisterAgent(AType: TAgentType; AAgent: IACPAgent);
+    function HandleRequest(const AUrl: string): Boolean;
+    procedure ExecuteJS(const AScript: string);
+  end;
+
+  TAgentFactoryFunc = reference to function(AType: TAgentType): IACPAgent;
+  // Forward declaration for Handler factory since TAgentHandler is in another unit
+  THandlerFactoryFunc = reference to function(AType: TAgentType; AAgent: IACPAgent; AControl: IAgentControl): TObject;
 
 implementation
 

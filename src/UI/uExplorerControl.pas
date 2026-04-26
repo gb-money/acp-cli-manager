@@ -98,7 +98,7 @@ begin
     FFileService.GetFilePreview(LPath,
       procedure(AContent, AExt: string)
       begin
-        System.Classes.TThread.Queue(nil, procedure
+        System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
         var
           LJsonContent: string;
         begin
@@ -110,7 +110,7 @@ begin
           except
             // Ignore format errors
           end;
-        end);
+        end));
       end,
       procedure(AError: string)
       begin
@@ -144,21 +144,21 @@ begin
   FFileService.GetDirectoryList(APath,
     procedure(AReturnedPath: string; ADataObj: TJsonObject)
     begin
-      System.Classes.TThread.Queue(nil, procedure
+      System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
       begin
         try
           FWebBrowser.EvaluateJavaScript(Format('window.ACP_EXPLORER.updateFileList(%s)', [ADataObj.ToJSON(False)]));
         finally
           ADataObj.Free;
         end;
-      end);
+      end));
     end,
     procedure(AError: string)
     begin
-      System.Classes.TThread.Queue(nil, procedure
+      System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
       begin
         FWebBrowser.EvaluateJavaScript('if (window.ACP && window.ACP.showModal) window.ACP.showModal("error", "Explorer Error", "' + AError.Replace('\', '\\').Replace('"', '\"') + '")');
-      end);
+      end));
     end
   );
 end;

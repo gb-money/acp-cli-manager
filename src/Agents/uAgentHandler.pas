@@ -3,28 +3,15 @@ unit uAgentHandler;
 interface
 
 uses
-  System.Classes, System.SysUtils, uACPAgent, uSessionManager, JsonDataObjects, uAgentTypes;
+  System.Classes, System.SysUtils, uAgentTypes, uSessionManager, JsonDataObjects;
 
 type
-  IAgentControl = interface
-    ['{B7E7B6C4-3D3C-4C8B-8F7E-9C8B7E7B6C4B}']
-    procedure UpdateSession(ASession: TSessionInfo);
-    procedure UpdateSessionList;
-    procedure UpdateFileList(const ARootPath: string = '');
-    procedure ShowPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
-    procedure StartStreaming(const ASessionId, AType: string);
-    procedure EndStreaming(const ASessionId, AType: string);
-    procedure ReceiveMessage(const ASessionId, AContent: string);
-    procedure ExecuteJS(const AScript: string);
-  end;
-
   TAgentHandler = class
-  protected
-    FSessionMgr: TSessionManager;
-    FAgent: TACPAgent;
-    FAgentControl: IAgentControl;
   public
-    constructor Create(ASessionMgr: TSessionManager; AAgent: TACPAgent; AAgentControl: IAgentControl); virtual;
+    FSessionMgr: TSessionManager;
+    FAgent: IACPAgent;
+    FAgentControl: IAgentControl;
+    constructor Create(ASessionMgr: TSessionManager; AAgent: IACPAgent; AAgentControl: IAgentControl); virtual;
     procedure CreateNewSession(const AWorkspaceDir: string); virtual; abstract;
     procedure Prompt(ASession: TSessionInfo; const AText: string); virtual; abstract;
     procedure ProcessRequestPermission(const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray); virtual; abstract;
@@ -32,7 +19,7 @@ type
 
 implementation
 
-constructor TAgentHandler.Create(ASessionMgr: TSessionManager; AAgent: TACPAgent; AAgentControl: IAgentControl);
+constructor TAgentHandler.Create(ASessionMgr: TSessionManager; AAgent: IACPAgent; AAgentControl: IAgentControl);
 begin
   FSessionMgr := ASessionMgr;
   FAgent := AAgent;
