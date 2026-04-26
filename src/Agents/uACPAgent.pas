@@ -189,7 +189,22 @@ procedure TACPAgent.ResumeSession(const SessionId: string);
 var LSession: TSessionInfo;
 begin
   LSession := FindSessionById(SessionId); if Assigned(LSession) then LSession.IsRestoring := True;
-  StartRestoration(SessionId); FDispatcher.LoadSession(SessionId, FWorkspace, nil);
+  StartRestoration(SessionId);
+  FDispatcher.LoadSession(SessionId, FWorkspace,
+    procedure(ASuccess: Boolean)
+    var LSessionCallback: TSessionInfo;
+    begin
+      LSessionCallback := FindSessionById(SessionId);
+      if Assigned(LSessionCallback) then
+      begin
+        LSessionCallback.IsRestoring := False;
+        LSessionCallback.IsWaitForResponse := False;
+        DoSessionResumed(SessionId);
+        System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateSession(LSessionCallback); end));
+      end;
+      FinalizeRestoration(SessionId);
+    end
+  );
 end;
 
 procedure TACPAgent.DoSessionResumed(const SessionId: string);
@@ -349,7 +364,7 @@ var Data: TSessionData; LIdx: Integer; LSession: TSessionInfo; LObs: IAgentObser
 begin
   if not FSessions.TryGetValue(SessionId, Data) then Data := Default(TSessionData); LIdx := UpdateObj.IndexOf('availableCommands');
   if LIdx >= 0 then begin Data.CommandsJson := UpdateObj.A['availableCommands'].ToJSON(False); FSessions.AddOrSetValue(SessionId, Data); end;
-  LSession := FindSessionById(SessionId); if Assigned(LSession) and LSession.IsRestoring then begin LSession.IsRestoring := False; LSession.IsWaitForResponse := False; DoSessionResumed(SessionId); System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin UpdateSession(LSession); end)); end;
+  
   for LObs in FObservers do LObs.OnAgentSessionMetadataUpdate(Self, SessionId);
 end;
 
