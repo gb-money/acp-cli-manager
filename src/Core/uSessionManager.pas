@@ -107,11 +107,11 @@ function TSessionManager.AddSession(AAgent: IACPAgent; AType: TAgentType; const 
 var
   LSessionDir: string;
 begin
-  Result := TSessionInfo.Create(TObject(AAgent), 'unknown', AType, ASessionId, AName, ACwd);
+  Result := TSessionInfo.Create(TObject(AAgent), AAgent.AgentName, AType, ASessionId, AName, ACwd);
 
   if not ASessionId.StartsWith('pending-') then begin
     LSessionDir := TPath.Combine(BaseConfigPath, 'sessions');
-    LSessionDir := TPath.Combine(LSessionDir, 'gemini' + '-cli'); // Default name fallback
+    LSessionDir := TPath.Combine(LSessionDir, AAgent.AgentName.ToLower + '-cli');
     LSessionDir := TPath.Combine(LSessionDir, ASessionId);
 
     if not TDirectory.Exists(LSessionDir) then

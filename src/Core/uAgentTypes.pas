@@ -114,6 +114,7 @@ type
   // IACPAgent Interface to break circular dependency
   IACPAgent = interface
     ['{B1A2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D}']
+    function GetAgentName: string;
     function GetAgentType: TAgentType;
     function GetSessionList: TArray<string>;
     procedure AddObserver(AObserver: IAgentObserver);
@@ -133,6 +134,7 @@ type
     function GetSessionsJson(const ASessionId: string): string;
     function GetIsConnected: Boolean;
 
+    property AgentName: string read GetAgentName;
     property AgentType: TAgentType read GetAgentType;
     property State: TAgentState read GetState;
     property ModelId: string read GetModelId;

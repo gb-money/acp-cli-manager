@@ -48,6 +48,7 @@ type
     procedure ResetGrouping(const ASessionId: string);
     
     { IACPAgent implementation helpers }
+    function GetAgentName: string;
     function GetAgentType: TAgentType;
     function GetSessionList: TArray<string>;
     procedure SetWorkspace(const APath: string);
@@ -222,6 +223,11 @@ var Data: TSessionData; begin if not FSessions.TryGetValue(SessionId, Data) then
 
 procedure TACPAgent.FinalizeRestoration(const SessionId: string);
 var Data: TSessionData; begin if FSessions.TryGetValue(SessionId, Data) then begin Data.IsRestoring := False; FSessions.AddOrSetValue(SessionId, Data); end; end;
+
+function TACPAgent.GetAgentName: string;
+begin
+  Result := FAgentName;
+end;
 
 function TACPAgent.GetAgentType: TAgentType; begin Result := FAgentType; end;
 function TACPAgent.GetState: TAgentState; begin Result := FState; end;
