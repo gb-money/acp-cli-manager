@@ -4,7 +4,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.IOUtils,
-  JsonDataObjects, uACPClient, uAgentTypes;
+  JsonDataObjects, uACPClient, uAgentTypes, uACPDispatcher;
 
 type
   TACPAgent = class;
@@ -28,7 +28,7 @@ type
     FAgentType: TAgentType;
     FState: TAgentState;
     FWorkspace: string;
-    FACPClient: TACPClient;
+    FDispatcher: TACPDispatcher;
     FSessionMgr: TObject; // Injected Manager (Type erased to break circular reference)
     FSessions: TDictionary<string, TSessionData>;
     FMethodHandlers: TDictionary<string, TMethodHandler>;
@@ -77,6 +77,8 @@ type
 
     procedure NotifySessionMetadataUpdate(const SessionId: string);
     procedure NotifyPropertyUpdate(const SessionId, PropertyName, NewValue: string);
+    
+    property Dispatcher: TACPDispatcher read FDispatcher;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -94,6 +96,7 @@ type
     procedure CancelPrompt(const ASessionId: string); virtual;
 
     procedure Send(const Method: string; Params: TJsonObject = nil; OnResponse: TACPResponseAnonCallback = nil; OnConditions: TArray<TACPResponseCondition> = nil; const SessionId: string = '');
+    procedure SendResponse(const ID: string; ResultObj: TJsonObject = nil);
     procedure ReplyPermission(const ID, SessionId, OptionId: string); virtual;
     procedure SetSessionLogPath(const SessionId, APath: string);
     procedure StartRestoration(const SessionId: string);
@@ -111,7 +114,6 @@ type
     property State: TAgentState read FState write SetState;
     property Workspace: string read FWorkspace write FWorkspace;
     property SessionList: TArray<string> read GetSessionList;
-    property ACPClient: TACPClient read FACPClient;
     property SessionManager: TObject read FSessionMgr write FSessionMgr;
     property Sessions: TDictionary<string, TSessionData> read FSessions;
     property IsConnected: Boolean read GetIsConnected;
@@ -136,10 +138,12 @@ begin
   FSessions := TDictionary<string, TSessionData>.Create;
   FMethodHandlers := TDictionary<string, TMethodHandler>.Create;
   FObservers := TList<IAgentObserver>.Create;
-  FACPClient := TACPClient.Create(Self);
-  FACPClient.OnReceive := HandleInternalReceive;
-  FACPClient.OnRawData := HandleInternalRawData;
-  FACPClient.OnTerminated := HandleInternalTerminated;
+  
+  var LClient := TACPClient.Create(Self);
+  FDispatcher := TACPDispatcher.Create(LClient);
+  FDispatcher.OnReceive := HandleInternalReceive;
+  FDispatcher.OnRawData := HandleInternalRawData;
+  FDispatcher.OnTerminated := HandleInternalTerminated;
 
   RegisterHandlers;
 end;
@@ -150,6 +154,7 @@ begin
   FMethodHandlers.Free;
   FSessions.Free;
   FObservers.Free;
+  FDispatcher.Free;
   inherited;
 end;
 
@@ -185,63 +190,26 @@ end;
 function TACPAgent.Start(const ACommandLine: string = ''): Boolean;
 begin
   if ACommandLine <> '' then
-    ACPClient.CommandLine := ACommandLine;
-  Result := ACPClient.Start;
+    Dispatcher.CommandLine := ACommandLine;
+  Result := Dispatcher.Start;
   if Result then
     State := asConnecting;
 end;
 
 procedure TACPAgent.Stop;
 begin
-  ACPClient.Stop;
+  Dispatcher.Stop;
   State := asDisconnected;
 end;
 
 procedure TACPAgent.NewSession(AParams: TJsonObject; OnResponse: TACPResponseAnonCallback);
-var
-  LCapturedSid: string;
-  LFirstResponse: TJsonObject;
 begin
-  LCapturedSid := '';
-  LFirstResponse := nil;
-  
-  // [1단계] session/new 요청 전송
-  ACPClient.Send('session/new', AParams,
-    procedure(AFinalUpdate: TJsonObject)
+  FDispatcher.CreateSession(Workspace, 
+    procedure(ASid: string; AResponse: TJsonObject)
     begin
-      try
-        // [최종 단계] 1단계에서 캡처했던 '진짜 응답'을 사용하여 완료 통지
-        if Assigned(LFirstResponse) then
-        begin
-          DoNewSession(LFirstResponse);
-          if Assigned(OnResponse) then OnResponse(LFirstResponse);
-        end;
-      finally
-        if Assigned(LFirstResponse) then LFirstResponse.Free;
-      end;
-    end,
-    [
-      // 조건 1: ID 매칭 및 sessionId 캡처
-      function(AObj: TJsonObject): Boolean
-      begin
-        Result := Assigned(AObj) and AObj.Contains('result') and AObj.O['result'].Contains('sessionId');
-        if Result then
-        begin
-          LCapturedSid := AObj.O['result'].S['sessionId'];
-          // 나중에 사용하기 위해 응답 객체 복제 (TACPClient에서 원본은 해제되므로 Clone 필요)
-          LFirstResponse := AObj.Clone as TJsonObject;
-        end;
-      end,
-      
-      // 조건 2: 초기화 알림 대기
-      function(AObj: TJsonObject): Boolean
-      begin
-        Result := Assigned(AObj) and 
-                  (AObj.S['id'] = '') and 
-                  (AObj.S['method'] = 'session/update') and 
-                  (AObj.O['params'].S['sessionId'] = LCapturedSid);
-      end
-    ]
+      DoNewSession(AResponse);
+      if Assigned(OnResponse) then OnResponse(AResponse);
+    end
   );
 end;
 
@@ -254,50 +222,13 @@ end;
 procedure TACPAgent.ResumeSession(const SessionId: string);
 var
   LSession: TSessionInfo;
-  LParams: TJsonObject;
 begin
   LSession := FindSessionById(SessionId);
   if Assigned(LSession) then
     LSession.IsRestoring := True;
   
   StartRestoration(SessionId);
-
-  // [핸드셰이크] session/load 요청 및 조건부 대기
-  LParams := TJsonObject.Create;
-  try
-    LParams.S['sessionId'] := SessionId;
-    LParams.S['cwd'] := Workspace;
-    LParams.A['mcpServers']; // 빈 배열 생성
-
-    ACPClient.Send('session/load', LParams,
-      procedure(AResponse: TJsonObject)
-      begin
-        // 최종 완료 시점 (조건을 모두 통과한 후 호출됨)
-        // 상세 상태 업데이트는 ProcessAvailableCommandsUpdate에서 공통으로 처리함
-      end,
-      [
-        // 조건 1: session/load 응답(Result) 확인
-        function(AObj: TJsonObject): Boolean
-        begin
-          Result := Assigned(AObj) and AObj.Contains('result') and AObj.O['result'].Contains('sessionId') and
-                    SameText(AObj.O['result'].S['sessionId'], SessionId);
-        end,
-
-        // 조건 2: available_commands_update 알림 대기
-        function(AObj: TJsonObject): Boolean
-        begin
-          Result := Assigned(AObj) and 
-                    (AObj.S['id'] = '') and 
-                    (AObj.S['method'] = 'session/update') and 
-                    (AObj.O['params'].S['sessionId'] = SessionId) and
-                    (AObj.O['params'].O['update'].S['sessionUpdate'] = 'available_commands_update');
-        end
-      ],
-      SessionId
-    );
-  finally
-    LParams.Free;
-  end;
+  FDispatcher.LoadSession(SessionId, Workspace, nil);
 end;
 
 procedure TACPAgent.DoSessionResumed(const SessionId: string);
@@ -342,7 +273,12 @@ end;
 
 procedure TACPAgent.Send(const Method: string; Params: TJsonObject; OnResponse: TACPResponseAnonCallback; OnConditions: TArray<TACPResponseCondition>; const SessionId: string);
 begin
-  FACPClient.Send(Method, Params, OnResponse, OnConditions, SessionId);
+  FDispatcher.Send(Method, Params, OnResponse, OnConditions, SessionId);
+end;
+
+procedure TACPAgent.SendResponse(const ID: string; ResultObj: TJsonObject);
+begin
+  FDispatcher.SendResponse(ID, ResultObj);
 end;
 
 procedure TACPAgent.SetSessionLogPath(const SessionId, APath: string);
@@ -372,7 +308,7 @@ end;
 
 function TACPAgent.GetIsConnected: Boolean;
 begin
-  Result := FACPClient.IsRunning;
+  Result := FDispatcher.IsRunning;
 end;
 
 function TACPAgent.IsRestoringSession(const SessionId: string): Boolean;
@@ -463,7 +399,7 @@ begin
       Outcome.S['outcome'] := 'selected';
       Outcome.S['optionId'] := OptionId;
     end;
-    FACPClient.SendResponse(ID, Res);
+    FDispatcher.SendResponse(ID, Res);
   finally
     Res.Free;
   end;
@@ -621,7 +557,7 @@ begin
       end;
     end;
     Res.S['content'] := Content;
-    ACPClient.SendResponse(ID, Res);
+    Dispatcher.SendResponse(ID, Res);
   finally
     Res.Free;
   end;
@@ -643,10 +579,10 @@ begin
     try
       TFile.WriteAllText(Path, Content, TEncoding.UTF8);
       // Empty Res will result in {"result": {}}
-      ACPClient.SendResponse(ID, Res); 
+      Dispatcher.SendResponse(ID, Res); 
     except
       on E: Exception do
-        ACPClient.SendResponse(ID, nil); 
+        Dispatcher.SendResponse(ID, nil); 
     end;
   finally Res.Free; end;
 end;
@@ -713,7 +649,7 @@ begin
     LSession.IsRestoring := False;
     LSession.IsWaitForResponse := False;
     DoSessionResumed(SessionId);
-    TThread.Queue(nil, procedure begin UpdateSession(LSession); end);
+    System.Classes.TThread.Queue(nil, procedure begin UpdateSession(LSession); end);
   end;
 
   for LObs in FObservers do

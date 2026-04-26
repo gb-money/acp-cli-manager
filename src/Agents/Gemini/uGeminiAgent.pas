@@ -32,6 +32,9 @@ type
 
 implementation
 
+uses
+  uACPDispatcher;
+
 { TGeminiAgent }
 
 constructor TGeminiAgent.Create(AOwner: TComponent);
@@ -81,57 +84,14 @@ begin
 end;
 
 procedure TGeminiAgent.Initialize(AParams: TJsonObject);
-var
-  LParams: TJsonObject;
-  WaitEvent: TEvent;
 begin
-  WaitEvent := TEvent.Create(nil, False, False, '');
-  try
-    State := asInitializing;
-    
-    if Assigned(AParams) then
-      LParams := AParams.Clone as TJsonObject
-    else
-      LParams := TACPProtocol.CreateInitializeParams('acp-manager', '0.0.1');
-      
-    try
-      Send('initialize', LParams,
-        procedure(AResponse: TJsonObject)
-        begin
-          try
-            if Assigned(AResponse) and not AResponse.Contains('error') then
-            begin
-              State := asReady;
-            end
-            else
-            begin
-              State := asError;
-            end;
-          finally
-            WaitEvent.SetEvent;
-          end;
-        end,
-        [
-          function(AResponse: TJsonObject): Boolean
-          begin
-            Result := AResponse.O['result'].Contains('authMethods');
-          end
-        ]);
-    finally
-      if not Assigned(AParams) then LParams.Free;
-    end;
-
-    if WaitEvent.WaitFor(60000) <> wrSignaled then
+  State := asInitializing;
+  Dispatcher.InitializeAgent('acp-manager', '0.0.1',
+    procedure(ASuccess: Boolean)
     begin
-      State := asError;
-      // 타임아웃 발생 시, 나중에 도착할 콜백에서 Free된 객체에 접근(AV)하는 것을 방지하기 위해 
-      // 이벤트를 해제하지 않고 누수시킵니다. (안전한 종료를 위한 타협)
-      WaitEvent := nil;
-    end;
-  finally
-    if Assigned(WaitEvent) then
-      WaitEvent.Free;
-  end;
+      if ASuccess then State := asReady else State := asError;
+    end
+  );
 end;
 
 procedure TGeminiAgent.EnsureReady(AOnReady: TProc);
@@ -179,33 +139,16 @@ begin
 end;
 
 procedure TGeminiAgent.NewSession(AParams: TJsonObject; OnResponse: TACPResponseAnonCallback);
-var
-  LClonedParams: TJsonObject;
 begin
-  if Assigned(AParams) then
-    LClonedParams := AParams.Clone as TJsonObject
-  else
-    LClonedParams := nil;
-
   EnsureReady(procedure
   begin
-    try
-      inherited NewSession(LClonedParams, OnResponse);
-    finally
-      if Assigned(LClonedParams) then
-        LClonedParams.Free;
-    end;
+    inherited NewSession(AParams, OnResponse);
   end);
 end;
 
 procedure TGeminiAgent.DoNewSession(AResponse: TJsonObject);
 begin
   inherited; // 기본 구현 호출 (이벤트 발생 등)
-
-  if Assigned(AResponse) and not AResponse.Contains('error') then
-  begin
-    var NewSessionId := AResponse.O['result'].S['sessionId'];
-  end;
 end;
 
 procedure TGeminiAgent.ResumeSession(const SessionId: string);
@@ -380,7 +323,7 @@ begin
   end;
 
   P := TACPProtocol.CreateSessionCancelParams(ASessionId);
-  try ACPClient.SendRaw('{"jsonrpc":"2.0","method":"session/cancel","params":' + P.ToJSON(False) + '}'); finally P.Free; end;
+  try Dispatcher.SendRaw('{"jsonrpc":"2.0","method":"session/cancel","params":' + P.ToJSON(False) + '}'); finally P.Free; end;
 end;
 
 procedure TGeminiAgent.ChangeModel(const ASessionId, AModelId: string);

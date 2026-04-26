@@ -16,6 +16,7 @@ uses
   uWebACPCommandHandler in 'src\Core\uWebACPCommandHandler.pas',
   uAgentProcess in 'src\Core\uAgentProcess.pas',
   uACPClient in 'src\ACP\uACPClient.pas',
+  uACPDispatcher in 'src\Core\uACPDispatcher.pas',
   uACPProtocol in 'src\ACP\uACPProtocol.pas',
   uGeminiAgent in 'src\Agents\Gemini\uGeminiAgent.pas',
   uGeminiAgentHandler in 'src\Agents\Gemini\uGeminiAgentHandler.pas',
