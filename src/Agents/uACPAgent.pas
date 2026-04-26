@@ -59,9 +59,7 @@ type
     function GetModeId: string;
     function GetSessionsJson(const ASessionId: string): string;
     function GetIsConnected: Boolean;
-    function IsRestoringSession(const SessionId: string): Boolean;
-    procedure SetSessionManager(AManager: TObject);
-  protected
+    
     procedure RegisterHandlers; virtual;
     procedure RegisterSessionUpdateHandlers; virtual;
     function FindSessionById(const ASessionId: string): TSessionInfo;
@@ -99,6 +97,7 @@ type
     procedure SendResponse(const ID: string; ResultObj: TJsonObject = nil);
     procedure ReplyPermission(const ID, SessionId, OptionId: string); virtual;
     procedure SetSessionLogPath(const SessionId, APath: string);
+    procedure SetSessionManager(AManager: TObject);
     procedure StartRestoration(const SessionId: string);
     procedure FinalizeRestoration(const SessionId: string);
     function IsRestoringSession(const SessionId: string): Boolean;
@@ -113,7 +112,7 @@ type
     property AgentType: TAgentType read GetAgentType;
     property State: TAgentState read GetState write SetState;
     property Workspace: string read FWorkspace write SetWorkspace;
-    property SessionManager: TObject read FSessionMgr write FSessionMgr;
+    property SessionManager: TObject read FSessionMgr write SetSessionManager;
     property Sessions: TDictionary<string, TSessionData> read FSessions;
   end;
 
@@ -234,6 +233,11 @@ begin FDispatcher.Send(Method, Params, OnResponse, OnConditions, SessionId); end
 procedure TACPAgent.SendResponse(const ID: string; ResultObj: TJsonObject); begin FDispatcher.SendResponse(ID, ResultObj); end;
 
 procedure TACPAgent.SetSessionLogPath(const SessionId, APath: string); begin end;
+
+procedure TACPAgent.SetSessionManager(AManager: TObject);
+begin
+  FSessionMgr := AManager;
+end;
 
 procedure TACPAgent.StartRestoration(const SessionId: string);
 var Data: TSessionData; begin if not FSessions.TryGetValue(SessionId, Data) then Data := Default(TSessionData); Data.IsRestoring := True; FSessions.AddOrSetValue(SessionId, Data); end;
@@ -362,11 +366,10 @@ begin
 end;
 
 procedure TACPAgent.ProcessAvailableCommandsUpdate(const SessionId: string; UpdateObj: TJsonObject);
-var Data: TSessionData; LIdx: Integer; LSession: TSessionInfo; LObs: IAgentObserver;
+var Data: TSessionData; LIdx: Integer; LObs: IAgentObserver;
 begin
   if not FSessions.TryGetValue(SessionId, Data) then Data := Default(TSessionData); LIdx := UpdateObj.IndexOf('availableCommands');
   if LIdx >= 0 then begin Data.CommandsJson := UpdateObj.A['availableCommands'].ToJSON(False); FSessions.AddOrSetValue(SessionId, Data); end;
-  
   for LObs in FObservers do LObs.OnAgentSessionMetadataUpdate(Self, SessionId);
 end;
 
