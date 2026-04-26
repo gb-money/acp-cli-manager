@@ -359,7 +359,7 @@ begin
     for LSid in LSessionIds do begin
       if Assigned(FAgentFactory) then LNewAgent := FAgentFactory(LAgent.GetAgentType) else LNewAgent := nil;
       if Assigned(LNewAgent) then RegisterAgent(LAgent.GetAgentType, LNewAgent) else LNewAgent := LAgent;
-      LSession := FSessionMgr.AddSession(LNewAgent, LAgent.GetAgentType, LSid, 'Loading...');
+      LSession := FSessionMgr.AddSession(LNewAgent, LAgent.GetAgentType, LSid, LSid);
       if Assigned(LSession) then begin LSession.LoadMetadata; if Assigned(LNewAgent) then LNewAgent.SetSessionLogPath(LSid, LSession.LogPath); end;
     end;
   end;

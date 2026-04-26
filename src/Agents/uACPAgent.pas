@@ -59,6 +59,8 @@ type
     function GetModeId: string;
     function GetSessionsJson(const ASessionId: string): string;
     function GetIsConnected: Boolean;
+    function IsRestoringSession(const SessionId: string): Boolean;
+    procedure SetSessionManager(AManager: TObject);
   protected
     procedure RegisterHandlers; virtual;
     procedure RegisterSessionUpdateHandlers; virtual;

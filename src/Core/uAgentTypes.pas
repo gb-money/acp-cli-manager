@@ -118,6 +118,7 @@ type
     function GetAgentType: TAgentType;
     function GetSessionList: TArray<string>;
     procedure AddObserver(AObserver: IAgentObserver);
+    procedure SetSessionManager(AManager: TObject);
     procedure SetSessionLogPath(const SessionId, APath: string);
     procedure SetWorkspace(const APath: string);
     procedure ResumeSession(const SessionId: string);
