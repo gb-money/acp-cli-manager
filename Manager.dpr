@@ -26,6 +26,7 @@ uses
   uDiffViewer in 'src\UI\uDiffViewer.pas' {frmDiffViewer},
   uDiffViewerControl in 'src\UI\uDiffViewerControl.pas',
   uDiffService in 'src\Core\uDiffService.pas',
+  uFileService in 'src\Core\uFileService.pas',
   uUIControl in 'src\UI\uUIControl.pas',
   JsonDataObjects in 'src\modules\JsonDataObjects\Source\JsonDataObjects.pas';
 
