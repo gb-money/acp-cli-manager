@@ -3,14 +3,17 @@ unit uFileViewerControl;
 interface
 
 uses
-  System.SysUtils, System.Classes, FMX.WebBrowser, System.IOUtils, JsonDataObjects;
+  System.SysUtils, System.Classes, FMX.WebBrowser, System.IOUtils, JsonDataObjects,
+  uFileService;
 
 type
   TFileViewerControl = class
   private
     FWebBrowser: TWebBrowser;
+    FFileService: TFileService;
   public
     constructor Create(AWebBrowser: TWebBrowser);
+    destructor Destroy; override;
     procedure LoadFile(const APath: string);
     function HandleRequest(const AUrl: string): Boolean;
   end;
@@ -22,6 +25,13 @@ implementation
 constructor TFileViewerControl.Create(AWebBrowser: TWebBrowser);
 begin
   FWebBrowser := AWebBrowser;
+  FFileService := TFileService.Create;
+end;
+
+destructor TFileViewerControl.Destroy;
+begin
+  FFileService.Free;
+  inherited;
 end;
 
 function TFileViewerControl.HandleRequest(const AUrl: string): Boolean;
@@ -31,26 +41,23 @@ begin
 end;
 
 procedure TFileViewerControl.LoadFile(const APath: string);
-var
-  LContent, LFileName: string;
-  LJsonContent: string;
 begin
-  if not TFile.Exists(APath) then Exit;
-
-  try
-    LFileName := TPath.GetFileName(APath);
-    LContent := TFile.ReadAllText(APath, TEncoding.UTF8);
-    
-    // JSON 문자열로 안전하게 변환 (이스케이프 처리)
-    LJsonContent := TJsonObject.Parse('"' + LContent.Replace('\', '\\').Replace('"', '\"').Replace(#13, '\r').Replace(#10, '\n') + '"').ToJSON;
-
-    FWebBrowser.EvaluateJavaScript(
-      Format('window.ACP_FILE_VIEWER.loadFile("%s", "%s", %s)', 
-      [LFileName, APath.Replace('\', '/'), LJsonContent])
-    );
-  except
-    on E: Exception do ;
-  end;
+  FFileService.LoadFile(APath,
+    procedure(AFileName, APath, AJsonContent: string)
+    begin
+      System.Classes.TThread.Queue(nil, procedure
+      begin
+        FWebBrowser.EvaluateJavaScript(
+          Format('window.ACP_FILE_VIEWER.loadFile("%s", "%s", %s)', 
+          [AFileName, APath.Replace('\', '/'), AJsonContent])
+        );
+      end);
+    end,
+    procedure(AError: string)
+    begin
+      // Handle error (e.g. show in UI via acp.shared.js)
+    end
+  );
 end;
 
 end.
