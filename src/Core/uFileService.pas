@@ -3,10 +3,13 @@ unit uFileService;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.Types, JsonDataObjects;
+  System.SysUtils, System.Classes, System.IOUtils, System.Types, JsonDataObjects,
+  System.Generics.Collections, System.Generics.Defaults;
 
 type
   TFileService = class
+  private
+    function IsIgnoredDir(const ADirName: string): Boolean;
   public
     // 파일 내용 로드 (성공 시 파일명, 경로, JSON 인코딩된 내용을 콜백으로 전달)
     procedure LoadFile(const APath: string; 
@@ -21,6 +24,16 @@ type
     // 파일 프리뷰 내용 조회 (성공 시 내용과 확장자를 콜백으로 전달)
     procedure GetFilePreview(const APath: string;
       OnSuccess: TProc<string, string>;
+      OnError: TProc<string>);
+
+    // 파일 히스토리 조회 (diff 내역)
+    procedure GetFileHistory(const ADiffsPath: string;
+      OnSuccess: TProc<TJsonArray>;
+      OnError: TProc<string>);
+
+    // 워크스페이스 파일 목록 재귀 조회
+    procedure GetWorkspaceFiles(const ARootPath: string;
+      OnSuccess: TProc<TJsonArray>;
       OnError: TProc<string>);
   end;
 
@@ -39,6 +52,10 @@ begin
   else if ASize >= K then Result := Format('%.2f KB', [ASize / K])
   else Result := Format('%d B', [ASize]);
 end;
+
+function TFileService.IsIgnoredDir(const ADirName: string): Boolean;
+const IGNORED: array[0..5] of string = ('.git', 'node_modules', '__history', '__recovery', '.gemini', 'Win32');
+var S: string; begin Result := False; for S in IGNORED do if SameText(ADirName, S) then Exit(True); end;
 
 procedure TFileService.LoadFile(const APath: string; 
   OnSuccess: TProc<string, string, string>; 
@@ -154,6 +171,106 @@ begin
     on E: Exception do
     begin
       if Assigned(OnError) then OnError('Preview failed: ' + E.Message);
+    end;
+  end;
+end;
+
+procedure TFileService.GetFileHistory(const ADiffsPath: string;
+  OnSuccess: TProc<TJsonArray>;
+  OnError: TProc<string>);
+var
+  LFiles: TStringDynArray;
+  LPath, LJsonText: string;
+  LArray: TJsonArray;
+  LObj, LItem: TJsonObject;
+  LList: TList<TJsonObject>;
+  I: Integer;
+begin
+  if not TDirectory.Exists(ADiffsPath) then
+  begin
+    if Assigned(OnSuccess) then OnSuccess(TJsonArray.Create);
+    Exit;
+  end;
+
+  LArray := TJsonArray.Create;
+  LList := TList<TJsonObject>.Create;
+  try
+    LFiles := TDirectory.GetFiles(ADiffsPath, '*.json', TSearchOption.soTopDirectoryOnly);
+    for LPath in LFiles do
+    begin
+      try
+        LJsonText := TFile.ReadAllText(LPath, TEncoding.UTF8);
+        LObj := TJsonObject.Parse(LJsonText) as TJsonObject;
+        if Assigned(LObj) then LList.Add(LObj);
+      except
+        // Skip invalid files
+      end;
+    end;
+
+    LList.Sort(TComparer<TJsonObject>.Construct(
+      function(const Left, Right: TJsonObject): Integer
+      begin
+        Result := CompareText(Right.S['timestamp'], Left.S['timestamp']);
+      end));
+
+    for I := 0 to LList.Count - 1 do
+    begin
+      LItem := LArray.AddObject;
+      LItem.Assign(LList[I]);
+    end;
+
+    if Assigned(OnSuccess) then OnSuccess(LArray) else LArray.Free;
+  finally
+    for I := 0 to LList.Count - 1 do LList[I].Free;
+    LList.Free;
+  end;
+end;
+
+procedure TFileService.GetWorkspaceFiles(const ARootPath: string;
+  OnSuccess: TProc<TJsonArray>;
+  OnError: TProc<string>);
+var
+  LArray: TJsonArray;
+  LTargetRoot: string;
+
+  procedure ScanDir(const ADir: string);
+  var
+    LFile, LSubDir: string;
+    LRelPath: string;
+  begin
+    try
+      for LFile in TDirectory.GetFiles(ADir) do
+      begin
+        LRelPath := ExtractRelativePath(LTargetRoot, LFile);
+        LArray.Add(LRelPath.Replace('\', '/'));
+      end;
+
+      for LSubDir in TDirectory.GetDirectories(ADir) do
+      begin
+        if not IsIgnoredDir(TPath.GetFileName(LSubDir)) then
+          ScanDir(LSubDir);
+      end;
+    except
+    end;
+  end;
+
+begin
+  if not TDirectory.Exists(ARootPath) then
+  begin
+    if Assigned(OnError) then OnError('Workspace root not found: ' + ARootPath);
+    Exit;
+  end;
+
+  LTargetRoot := IncludeTrailingPathDelimiter(ARootPath);
+  LArray := TJsonArray.Create;
+  try
+    ScanDir(ExcludeTrailingPathDelimiter(LTargetRoot));
+    if Assigned(OnSuccess) then OnSuccess(LArray) else LArray.Free;
+  except
+    on E: Exception do
+    begin
+      LArray.Free;
+      if Assigned(OnError) then OnError('Workspace scan failed: ' + E.Message);
     end;
   end;
 end;

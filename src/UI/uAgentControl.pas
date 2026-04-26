@@ -6,7 +6,7 @@ uses
   System.SysUtils, System.Classes, FMX.WebBrowser, uSessionManager, uACPAgent,
   System.NetEncoding, FMX.Dialogs, System.Actions, FMX.ActnList, System.IOUtils,
   System.UITypes, System.Generics.Collections, System.Generics.Defaults, uWebACPCommandHandler,
-  uAgentHandler, JsonDataObjects, uAgentTypes, uACPClient;
+  uAgentHandler, JsonDataObjects, uAgentTypes, uACPClient, uFileService;
 
 type
   TNewChatEvent = procedure(Sender: TObject; const AgentName: string) of object;
@@ -25,6 +25,7 @@ type
     FAgentList: TDictionary<TAgentType, TACPAgent>;
     FHandlers: TDictionary<TAgentType, TAgentHandler>;
     FOnRawData: TAgentRPCEvent;
+    FFileService: TFileService;
     
     // Agent Event Handlers (UI Routing & Logging)
     procedure DoAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
@@ -58,7 +59,6 @@ type
     procedure HandleGetFileContent(const Params: TDictionary<string, string>);
     procedure HandleGetFileHistory(const Params: TDictionary<string, string>);
     
-    function IsIgnoredDir(const ADirName: string): Boolean;
     function GetWorkspaceDisplayText(const ACwd: string): string;
     function SessionToJSON(ASessionInfo: TSessionInfo): TJsonObject;
     function GetHandler(AType: TAgentType): TAgentHandler;
@@ -123,6 +123,8 @@ begin
   FCommandHandler.OnCommand := HandleInternalCommand;
   FCommandHandler.OnLog := HandleInternalLog;
 
+  FFileService := TFileService.Create;
+
   LExeDir := ExtractFilePath(ParamStr(0));
   if LExeDir.Contains('Win32') or LExeDir.Contains('Win64') then
     FWorkspaceRoot := TPath.GetFullPath(TPath.Combine(LExeDir, '..\..\'))
@@ -141,6 +143,7 @@ begin
   FHandlers.Free;
   FAgentList.Free;
   FCommandHandler.Free;
+  FFileService.Free;
   inherited;
 end;
 
@@ -567,8 +570,8 @@ var LModelId: string; LActive: TSessionInfo;
 begin
   if Params.TryGetValue('modelId', LModelId) then begin
     LActive := FSessionMgr.ActiveSession;
-    if Assigned(LActive) and (LActive.Agent is TGeminiAgent) then begin
-      TGeminiAgent(LActive.Agent).ChangeModel(LActive.SessionId, LModelId);
+    if Assigned(LActive) and (LActive.Agent is TACPAgent) then begin
+      TACPAgent(LActive.Agent).ChangeModel(LActive.SessionId, LModelId);
     end;
   end;
 end;
@@ -587,24 +590,33 @@ procedure TAgentControl.HandleCancelPrompt(const Params: TDictionary<string, str
 var LActive: TSessionInfo;
 begin
   LActive := FSessionMgr.ActiveSession;
-  if Assigned(LActive) and (LActive.Agent is TGeminiAgent) then begin
-    TGeminiAgent(LActive.Agent).CancelPrompt(LActive.SessionId); ShowTyping(False);
+  if Assigned(LActive) and (LActive.Agent is TACPAgent) then begin
+    TACPAgent(LActive.Agent).CancelPrompt(LActive.SessionId); ShowTyping(False);
   end;
 end;
 
 procedure TAgentControl.HandleGetFileContent(const Params: TDictionary<string, string>);
-var LRelPath, LFullPath, LContent, LCallbackId, LTargetRoot: string; LObj: TJsonObject; LActive: TSessionInfo;
+var LRelPath, LFullPath, LCallbackId, LTargetRoot: string; LActive: TSessionInfo;
 begin
   if Params.TryGetValue('path', LRelPath) and Params.TryGetValue('callbackId', LCallbackId) then begin
     LActive := FSessionMgr.ActiveSession;
     if Assigned(LActive) and (LActive.Cwd <> '') then LTargetRoot := LActive.Cwd else LTargetRoot := FWorkspaceRoot;
-    LFullPath := TPath.Combine(LTargetRoot, LRelPath); LContent := '';
-    if TFile.Exists(LFullPath) then LContent := TFile.ReadAllText(LFullPath, TEncoding.UTF8);
-    LObj := TJsonObject.Create;
-    try
-      LObj.S['path'] := LRelPath; LObj.S['content'] := LContent; LObj.S['uri'] := 'file:///' + LFullPath.Replace('\', '/');
-      ExecuteJS('window.ACP.onFileContentReceived("' + LCallbackId + '", ' + LObj.ToJSON(False) + ')');
-    finally LObj.Free; end;
+    LFullPath := TPath.Combine(LTargetRoot, LRelPath);
+    
+    var LCallback := LCallbackId;
+    FFileService.LoadFile(LFullPath,
+      procedure(AFileName, APath, AJsonContent: string)
+      begin
+        TThread.Queue(nil, TThreadProcedure(procedure
+        begin
+          ExecuteJS('window.ACP.onFileContentReceived("' + LCallback + '", ' + AJsonContent + ')');
+        end));
+      end,
+      procedure(AError: string)
+      begin
+        // Handle error if needed
+      end
+    );
   end;
 end;
 
@@ -624,27 +636,31 @@ begin
 end;
 
 procedure TAgentControl.HandleGetFileHistory(const Params: TDictionary<string, string>);
-var LActive: TSessionInfo; LFiles: TStringDynArray; LPath, LJsonText: string; LArray: TJsonArray; LObj, LItem: TJsonObject; LList: TList<TJsonObject>; I: Integer;
+var LActive: TSessionInfo;
 begin
-  LActive := FSessionMgr.ActiveSession; if not Assigned(LActive) or (LActive.DiffsPath = '') then Exit;
-  LArray := TJsonArray.Create; LList := TList<TJsonObject>.Create;
-  try
-    if TDirectory.Exists(LActive.DiffsPath) then begin
-      LFiles := TDirectory.GetFiles(LActive.DiffsPath, '*.json', TSearchOption.soTopDirectoryOnly);
-      for LPath in LFiles do begin
-        try LJsonText := TFile.ReadAllText(LPath, TEncoding.UTF8); LObj := TJsonObject.Parse(LJsonText) as TJsonObject; if Assigned(LObj) then LList.Add(LObj); except end;
-      end;
-      LList.Sort(TComparer<TJsonObject>.Construct(function(const Left, Right: TJsonObject): Integer begin Result := CompareText(Right.S['timestamp'], Left.S['timestamp']); end));
-      for I := 0 to LList.Count - 1 do begin LItem := LArray.AddObject; LItem.Assign(LList[I]); end;
-    end;
-    LJsonText := LArray.ToJSON(False);
-    System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
-    var LBase64: string;
+  LActive := FSessionMgr.ActiveSession; 
+  if not Assigned(LActive) or (LActive.DiffsPath = '') then Exit;
+  
+  FFileService.GetFileHistory(LActive.DiffsPath,
+    procedure(AArray: TJsonArray)
+    var LJsonText, LBase64: string;
     begin
-      LBase64 := TNetEncoding.Base64.Encode(LJsonText).Replace(#13, '').Replace(#10, '');
-      ExecuteJS('window.ACP.updateFileHistoryBase64("' + LBase64 + '")');
-    end));
-  finally for I := 0 to LList.Count - 1 do LList[I].Free; LList.Free; LArray.Free; end;
+      try
+        LJsonText := AArray.ToJSON(False);
+        LBase64 := TNetEncoding.Base64.Encode(LJsonText).Replace(#13, '').Replace(#10, '');
+        TThread.Queue(nil, TThreadProcedure(procedure
+        begin
+          ExecuteJS('window.ACP.updateFileHistoryBase64("' + LBase64 + '")');
+        end));
+      finally
+        AArray.Free;
+      end;
+    end,
+    procedure(AError: string)
+    begin
+      // Handle error
+    end
+  );
 end;
 
 procedure TAgentControl.HandleInternalLog(Sender: TObject; const LogMsg: string); begin if Assigned(frmDebugRPC) then frmDebugRPC.AddACPLog(LogMsg); end;
@@ -779,43 +795,28 @@ procedure TAgentControl.BreakGrouping; begin System.Classes.TThread.Queue(nil, T
 
 procedure TAgentControl.UpdateFileList(const ARootPath: string);
 var
-  LArray: TJsonArray;
   LTargetRoot: string;
-
-  procedure ScanDir(const ADir: string);
-  var
-    LFile, LSubDir: string;
-    LRelPath: string;
-  begin
-    try
-      for LFile in TDirectory.GetFiles(ADir) do
-      begin
-        LRelPath := ExtractRelativePath(LTargetRoot, LFile);
-        LArray.Add(LRelPath.Replace('\', '/'));
-      end;
-
-      for LSubDir in TDirectory.GetDirectories(ADir) do
-      begin
-        if not IsIgnoredDir(TPath.GetFileName(LSubDir)) then
-          ScanDir(LSubDir);
-      end;
-    except
-    end;
-  end;
-
 begin
   LTargetRoot := ARootPath;
   if LTargetRoot = '' then LTargetRoot := FWorkspaceRoot;
-  if not TDirectory.Exists(LTargetRoot) then Exit;
-
-  LTargetRoot := IncludeTrailingPathDelimiter(LTargetRoot);
-  LArray := TJsonArray.Create;
-  try
-    ScanDir(ExcludeTrailingPathDelimiter(LTargetRoot));
-    ExecuteJS('window.ACP.setWorkspaceFiles(' + LArray.ToJSON + ')');
-  finally
-    LArray.Free;
-  end;
+  
+  FFileService.GetWorkspaceFiles(LTargetRoot,
+    procedure(AArray: TJsonArray)
+    begin
+      TThread.Queue(nil, TThreadProcedure(procedure
+      begin
+        try
+          ExecuteJS('window.ACP.setWorkspaceFiles(' + AArray.ToJSON + ')');
+        finally
+          AArray.Free;
+        end;
+      end));
+    end,
+    procedure(AError: string)
+    begin
+      // Handle error
+    end
+  );
 end;
 
 procedure TAgentControl.ShowPermissionUI(const ASessionId, AID, AMethod, AToolCallJson, AOptionsJson: string);
@@ -836,10 +837,6 @@ end;
 procedure TAgentControl.ShowTyping(const AShow: Boolean); begin System.Classes.TThread.Queue(nil, TThreadProcedure(procedure begin ExecuteJS(Format('window.ACP.showProcessing(%s)', [BoolToStr(AShow, True).ToLower])); end)); end;
 
 procedure TAgentControl.ExecuteJS(const AScript: string); begin if Assigned(FWebBrowser) then FWebBrowser.EvaluateJavaScript(AScript); end;
-
-function TAgentControl.IsIgnoredDir(const ADirName: string): Boolean;
-const IGNORED: array[0..5] of string = ('.git', 'node_modules', '__history', '__recovery', '.gemini', 'Win32');
-var S: string; begin Result := False; for S in IGNORED do if SameText(ADirName, S) then Exit(True); end;
 
 function TAgentControl.GetWorkspaceDisplayText(const ACwd: string): string; begin if ACwd = '' then Exit(''); Result := TPath.GetFileName(ExcludeTrailingPathDelimiter(ACwd)); end;
 

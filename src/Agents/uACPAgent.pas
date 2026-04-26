@@ -98,8 +98,11 @@ type
     procedure EndTurn(const SessionId, StopReason: string); virtual;
     procedure UpdateSession(ASession: TSessionInfo); virtual;
 
+    procedure ChangeModel(const ASessionId, AModelId: string); virtual;
+    procedure CancelPrompt(const ASessionId: string); virtual;
+
     procedure Send(const Method: string; Params: TJsonObject = nil; OnResponse: TACPResponseAnonCallback = nil; OnConditions: TArray<TACPResponseCondition> = nil; const SessionId: string = '');
-    procedure ReplyPermission(const ID, SessionId, OptionId: string);
+    procedure ReplyPermission(const ID, SessionId, OptionId: string); virtual;
     procedure SetSessionLogPath(const SessionId, APath: string);
     procedure StartRestoration(const SessionId: string);
     procedure FinalizeRestoration(const SessionId: string);
@@ -329,6 +332,16 @@ begin
   end;
   
   DoEndTurn(SessionId, StopReason);
+end;
+
+procedure TACPAgent.ChangeModel(const ASessionId, AModelId: string);
+begin
+  // Base implementation: Do nothing
+end;
+
+procedure TACPAgent.CancelPrompt(const ASessionId: string);
+begin
+  // Base implementation: Do nothing
 end;
 
 procedure TACPAgent.DoEndTurn(const SessionId, StopReason: string);

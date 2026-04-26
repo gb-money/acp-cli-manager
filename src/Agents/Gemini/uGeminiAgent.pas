@@ -23,8 +23,9 @@ type
     procedure NewSession(AParams: TJsonObject; OnResponse: TACPResponseAnonCallback = nil); override;
     procedure ResumeSession(const SessionId: string); override;
     procedure SendPrompt(const SessionId, AText: string); override;
-    procedure ChangeModel(const SessionId, AModelId: string);
-    procedure CancelPrompt(const SessionId: string);
+    procedure ChangeModel(const ASessionId, AModelId: string); override;
+    procedure CancelPrompt(const ASessionId: string); override;
+    procedure ReplyPermission(const ID, SessionId, OptionId: string); override;
     
     function IsReady: Boolean;
   end;
@@ -367,29 +368,29 @@ begin
   finally Params.Free; end;
 end;
 
-procedure TGeminiAgent.CancelPrompt(const SessionId: string);
+procedure TGeminiAgent.CancelPrompt(const ASessionId: string);
 var 
   P: TJsonObject;
   LSession: TSessionInfo;
 begin
-  LSession := FindSessionById(SessionId);
+  LSession := FindSessionById(ASessionId);
   if Assigned(LSession) then
   begin
     LSession.IsWaitForResponse := False;
     if Assigned(OnSessionMetadataUpdate) then
-      OnSessionMetadataUpdate(Self, SessionId);
+      OnSessionMetadataUpdate(Self, ASessionId);
   end;
 
-  P := TACPProtocol.CreateSessionCancelParams(SessionId);
+  P := TACPProtocol.CreateSessionCancelParams(ASessionId);
   try ACPClient.SendRaw('{"jsonrpc":"2.0","method":"session/cancel","params":' + P.ToJSON(False) + '}'); finally P.Free; end;
 end;
 
-procedure TGeminiAgent.ChangeModel(const SessionId, AModelId: string);
+procedure TGeminiAgent.ChangeModel(const ASessionId, AModelId: string);
 var P: TJsonObject;
 begin
   P := TJsonObject.Create;
   try
-    P.S['sessionId'] := SessionId; P.S['modelId'] := AModelId;
+    P.S['sessionId'] := ASessionId; P.S['modelId'] := AModelId;
     Send('session/set_model', P,
       procedure(AResponse: TJsonObject)
       var
@@ -414,6 +415,12 @@ begin
       ]);
   finally P.Free; end;
 end;
+
+procedure TGeminiAgent.ReplyPermission(const ID, SessionId, OptionId: string);
+begin
+  inherited ReplyPermission(ID, SessionId, OptionId);
+end;
+
 function TGeminiAgent.IsReady: Boolean; 
 begin 
   Result := State = asReady;
@@ -421,9 +428,7 @@ end;
 
 procedure TGeminiAgent.DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject);
 begin 
-  
   inherited;
-  
 end;
 
 end.
