@@ -84,14 +84,30 @@ begin
 end;
 
 procedure TGeminiAgent.Initialize(AParams: TJsonObject);
+var
+  WaitEvent: TEvent;
 begin
-  State := asInitializing;
-  Dispatcher.InitializeAgent('acp-manager', '0.0.1',
-    procedure(ASuccess: Boolean)
+  WaitEvent := TEvent.Create(nil, False, False, '');
+  try
+    State := asInitializing;
+    Dispatcher.InitializeAgent('acp-manager', '0.0.1',
+      procedure(ASuccess: Boolean)
+      begin
+        if ASuccess then State := asReady else State := asError;
+        if Assigned(WaitEvent) then
+          WaitEvent.SetEvent;
+      end
+    );
+
+    if WaitEvent.WaitFor(60000) <> wrSignaled then
     begin
-      if ASuccess then State := asReady else State := asError;
-    end
-  );
+      State := asError;
+      WaitEvent := nil;
+    end;
+  finally
+    if Assigned(WaitEvent) then
+      WaitEvent.Free;
+  end;
 end;
 
 procedure TGeminiAgent.EnsureReady(AOnReady: TProc);
