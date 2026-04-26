@@ -233,7 +233,7 @@ procedure TGeminiAgent.CancelPrompt(const ASessionId: string);
 var P: TJsonObject; LSession: TSessionInfo;
 begin
   LSession := FindSessionById(ASessionId); if Assigned(LSession) then begin LSession.IsWaitForResponse := False; NotifySessionMetadataUpdate(ASessionId); end;
-  P := TACPProtocol.CreateSessionCancelParams(ASessionId); try Dispatcher.SendRaw('{"jsonrpc":"2.0","method":"session/cancel","params":' + P.ToJSON(False) + '}'); finally P.Free; end;
+  P := TACPProtocol.CreateSessionCancelParams(ASessionId); try Dispatcher.SendRaw('{"jsonrpc":"2.0","method":"session/cancel","params":' + P.ToJSON(False) + '}', P, ASessionId); finally P.Free; end;
 end;
 
 procedure TGeminiAgent.ChangeModel(const ASessionId, AModelId: string);

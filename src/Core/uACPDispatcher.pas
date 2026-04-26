@@ -32,7 +32,7 @@ type
       OnConditions: TArray<TACPResponseCondition> = nil; 
       const SessionId: string = '');
     procedure SendResponse(const ID: string; ResultObj: TJsonObject = nil);
-    procedure SendRaw(const JsonStr: string);
+    procedure SendRaw(const JsonStr: string; AObj: TJsonObject = nil; const SessionId: string = '');
 
     // Lifecycle specialized helpers
     procedure InitializeAgent(const AgentName, Version: string; OnReady: TProc<Boolean>);
@@ -102,9 +102,9 @@ begin
   FClient.SendResponse(ID, ResultObj);
 end;
 
-procedure TACPDispatcher.SendRaw(const JsonStr: string);
+procedure TACPDispatcher.SendRaw(const JsonStr: string; AObj: TJsonObject; const SessionId: string);
 begin
-  FClient.SendRaw(JsonStr);
+  FClient.SendRaw(JsonStr, AObj, SessionId);
 end;
 
 procedure TACPDispatcher.SetCommandLine(const Value: string);

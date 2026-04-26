@@ -50,7 +50,7 @@ type
     procedure Stop;
     procedure Send(const Method: string; Params: TJsonObject = nil; OnResponse: TACPResponseAnonCallback = nil; OnConditions: TArray<TACPResponseCondition> = nil; const SessionId: string = '');
     procedure SendResponse(const ID: string; ResultObj: TJsonObject = nil);
-    procedure SendRaw(const JsonStr: string);
+    procedure SendRaw(const JsonStr: string; AObj: TJsonObject = nil; const SessionId: string = '');
     function IsRunning: Boolean;
     property CommandLine: string read GetCommandLine write SetCommandLine;
     property OnReceive: TACPReceiveEvent read FOnReceive write FOnReceive;
@@ -113,7 +113,7 @@ begin
   FCallbacks.Clear;
 end;
 
-procedure TACPClient.SendRaw(const JsonStr: string);
+procedure TACPClient.SendRaw(const JsonStr: string; AObj: TJsonObject; const SessionId: string);
 var
   FinalStr: string;
 begin
@@ -124,7 +124,7 @@ begin
   FinalStr := StringReplace(FinalStr, #10, '', [rfReplaceAll]);
 
   if Assigned(FOnRawData) then
-    FOnRawData(Self, rdOutgoing, '', nil, FinalStr);
+    FOnRawData(Self, rdOutgoing, SessionId, AObj, FinalStr);
 
   FBufferLock.Enter;
   try
@@ -165,7 +165,7 @@ begin
         FCallbacks.Add(LRecord);
       end;
 
-      SendRaw(ReqObj.ToJSON(False));
+      SendRaw(ReqObj.ToJSON(False), ReqObj, SessionId);
     finally
       ReqObj.Free;
     end;
@@ -193,7 +193,7 @@ begin
     else
       RespObj.O['result']; // Empty {}
 
-    SendRaw(RespObj.ToJSON(False));
+    SendRaw(RespObj.ToJSON(False), RespObj);
   finally
     RespObj.Free;
   end;
