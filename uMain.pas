@@ -65,9 +65,11 @@ begin
   FAgentControl := TAgentControl.Create(WebBrowserMain, FSessionMgr);
   FAgentControl.OnRawData := DoRawDataForDebug;
   
+  // Inject Factories
   FAgentControl.AgentFactory := CreateAgent;
   FAgentControl.HandlerFactory := CreateHandler;
 
+  // Register initial agents
   FAgentControl.RegisterAgent(atGemini, CreateAgent(atGemini));
   FAgentControl.LoadAllSessions;
 
@@ -91,77 +93,125 @@ begin
 end;
 
 procedure TS.DoOpenExplorer(Sender: TObject);
-var LPath: string;
+var
+  LPath: string;
 begin
-  if not Assigned(frmFileExplorer) then frmFileExplorer := TfrmFileExplorer.Create(Application);
-  LPath := ''; if Assigned(FSessionMgr.ActiveSession) then LPath := FSessionMgr.ActiveSession.Cwd;
-  if LPath = '' then LPath := FSessionMgr.BaseConfigPath;
-  frmFileExplorer.Explore(LPath); frmFileExplorer.Show;
+  if not Assigned(frmFileExplorer) then
+    frmFileExplorer := TfrmFileExplorer.Create(Application);
+    
+  LPath := '';
+  if Assigned(FSessionMgr.ActiveSession) then
+    LPath := FSessionMgr.ActiveSession.Cwd;
+    
+  if LPath = '' then
+    LPath := FSessionMgr.BaseConfigPath;
+    
+  frmFileExplorer.Explore(LPath);
+  frmFileExplorer.Show;
 end;
 
 procedure TS.DoOpenFileViewer(Sender: TObject; const APath: string);
 begin
-  if not Assigned(frmFileViewer) then frmFileViewer := TfrmFileViewer.Create(Application);
-  frmFileViewer.ViewFile(APath); frmFileViewer.Show;
+  if not Assigned(frmFileViewer) then
+    frmFileViewer := TfrmFileViewer.Create(Application);
+    
+  frmFileViewer.ViewFile(APath);
+  frmFileViewer.Show;
 end;
 
 procedure TS.DoOpenDiffViewer(Sender: TObject; const ASessionId, APath, AHashId: string);
 begin
-  if not Assigned(frmDiffViewer) then frmDiffViewer := TfrmDiffViewer.Create(Application);
-  frmDiffViewer.ViewDiffSession(FSessionMgr, ASessionId, APath, AHashId); frmDiffViewer.Show;
+  if not Assigned(frmDiffViewer) then
+    frmDiffViewer := TfrmDiffViewer.Create(Application);
+    
+  frmDiffViewer.ViewDiffSession(FSessionMgr, ASessionId, APath, AHashId);
+  frmDiffViewer.Show;
 end;
 
 procedure TS.DoOpenFileDialogRequested(Sender: TObject);
 begin
-  if Assigned(FAgentControl) then FAgentControl.HandleOpenFileDialog(nil);
+  if Assigned(FAgentControl) then
+    FAgentControl.HandleOpenFileDialog(nil);
 end;
 
 procedure TS.DoUIReady(Sender: TObject);
 begin
-  if not FInitialized then begin FInitialized := True; if Assigned(FAgentControl) then FAgentControl.UpdateSessionList; end;
+  if not FInitialized then
+  begin
+    FInitialized := True;
+    if Assigned(FAgentControl) then
+      FAgentControl.UpdateSessionList;
+  end;
 end;
 
 procedure TS.DoRawDataForDebug(Sender: TObject; Direction: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const RawText: string);
 begin
-  if Assigned(frmDebugRPC) then begin
+  if Assigned(frmDebugRPC) then
+  begin
     var LDirStr: string;
-    case Direction of rdIncoming: LDirStr := 'IN'; rdOutgoing: LDirStr := 'OUT'; else LDirStr := 'SYS'; end;
-    TThread.Queue(nil, TThreadProcedure(procedure begin frmDebugRPC.AddLog(LDirStr, RawText); end));
+    case Direction of
+      rdIncoming: LDirStr := 'IN';
+      rdOutgoing: LDirStr := 'OUT';
+    else
+      LDirStr := 'SYS';
+    end;
+    
+    TThread.Queue(nil, TThreadProcedure(procedure
+    begin
+      frmDebugRPC.AddLog(LDirStr, RawText);
+    end));
   end;
 end;
 
 procedure TS.FormShow(Sender: TObject);
-var LHtmlPath: string;
+var
+  LHtmlPath: string;
 begin
-  if not Assigned(frmDebugRPC) then frmDebugRPC := TfrmDebugRPC.Create(Application);
+  if not Assigned(frmDebugRPC) then
+    frmDebugRPC := TfrmDebugRPC.Create(Application);
+    
   frmDebugRPC.Show;
+  
   LHtmlPath := TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'src/UI/assets/index.html');
-  if not TFile.Exists(LHtmlPath) then LHtmlPath := TPath.GetFullPath(TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), '../../src/UI/assets/index.html'));
-  if TFile.Exists(LHtmlPath) then WebBrowserMain.Navigate('file://' + LHtmlPath) else ShowMessage('index.html not found: ' + LHtmlPath);
+  if not TFile.Exists(LHtmlPath) then
+  begin
+    LHtmlPath := TPath.GetFullPath(
+      TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), '../../src/UI/assets/index.html')
+    );
+  end;
+  
+  if TFile.Exists(LHtmlPath) then
+    WebBrowserMain.Navigate('file://' + LHtmlPath)
+  else
+    ShowMessage('index.html not found: ' + LHtmlPath);
 end;
 
 procedure TS.WebBrowserMainDidFinishLoad(ASender: TObject);
 begin
-  if Assigned(WebBrowserMain) and WebBrowserMain.Visible then WebBrowserMain.SetFocus;
+  if Assigned(WebBrowserMain) and WebBrowserMain.Visible then
+    WebBrowserMain.SetFocus;
 end;
 
 procedure TS.WebBrowserMainShouldStartLoadWithRequest(ASender: TObject; const URL: string);
 begin
-  if URL.IsEmpty or URL.ToLower.Contains('index.html') or URL.ToLower.StartsWith('about:') or URL.ToLower.StartsWith('javascript:') then Exit;
+  if URL.IsEmpty or URL.ToLower.Contains('index.html') or 
+     URL.ToLower.StartsWith('about:') or URL.ToLower.StartsWith('javascript:') then
+    Exit;
+    
   if FAgentControl.HandleRequest(URL) then Exit;
   if FUIControl.HandleRequest(URL) then Exit;
 end;
 
 procedure TS.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
-begin CanClose := True; end;
+begin
+  CanClose := True;
+end;
 
 procedure TS.FormClose(Sender: TObject; var Action: TCloseAction);
-var Agent: IACPAgent;
 begin
   if Assigned(FAgentControl) then FreeAndNil(FAgentControl);
   if Assigned(FUIControl) then FreeAndNil(FUIControl);
   if Assigned(FSessionMgr) then FreeAndNil(FSessionMgr);
-  // Agents are managed by FAgentControl usually, but let's be safe if they are in FAgents
 end;
 
 end.

@@ -20,8 +20,40 @@ uses
   System.RegularExpressions, System.IOUtils;
 
 procedure TGeminiAgentHandler.CreateNewSession(const AWorkspaceDir: string);
+var
+  LPendingId: string;
+  LPendingSession: TSessionInfo;
+  LParams: TJsonObject;
 begin
-  // Placeholder
+  if not Assigned(FAgent) then
+    Exit;
+  
+  LPendingId := 'pending-' + TGuid.NewGuid.ToString;
+  LPendingSession := FSessionMgr.AddSession(
+    FAgent, 
+    FAgent.AgentType, 
+    LPendingId, 
+    FSessionMgr.GetUniqueSessionName('New Chat'), 
+    AWorkspaceDir
+  );
+  
+  LPendingSession.IsLoading := True;
+  FSessionMgr.SelectSession(LPendingSession);
+  
+  if Assigned(FAgentControl) then
+  begin
+    FAgentControl.ExecuteJS('window.ACP.clearChat()');
+    FAgentControl.AddSession(LPendingSession); 
+    FAgentControl.UpdateFileList(AWorkspaceDir);
+  end;
+
+  FAgent.SetWorkspace(AWorkspaceDir);
+  LParams := TACPProtocol.CreateSessionNewParams(AWorkspaceDir, '');
+  try
+    FAgent.NewSession(LParams);
+  finally
+    LParams.Free;
+  end;
 end;
 
 procedure TGeminiAgentHandler.ProcessRequestPermission(const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
@@ -29,13 +61,23 @@ begin
   TThread.Queue(nil, TThreadProcedure(procedure
   begin
     if Assigned(FAgentControl) then
-      FAgentControl.ShowPermissionUI(SessionId, ID, Method, ToolCall.ToJSON(False), Options.ToJSON(False));
+    begin
+      FAgentControl.ShowPermissionUI(
+        SessionId, 
+        ID, 
+        Method, 
+        ToolCall.ToJSON(False), 
+        Options.ToJSON(False)
+      );
+    end;
   end));
 end;
 
 procedure TGeminiAgentHandler.Prompt(ASession: TSessionInfo; const AText: string);
 begin
-  if not Assigned(FAgent) or not Assigned(ASession) then Exit;
+  if not Assigned(FAgent) or not Assigned(ASession) then
+    Exit;
+    
   FAgent.SendPrompt(ASession.SessionId, AText);
 end;
 
