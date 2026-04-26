@@ -180,7 +180,7 @@ begin
         Result := Assigned(AObj) and 
                   (AObj.S['id'] = '') and 
                   (AObj.S['method'] = 'session/update') and 
-                  (AObj.O['params'].S['sessionId'] = LCapturedSid);
+                  SameText(AObj.O['params'].S['sessionId'], LCapturedSid);
       end
     ]
   );
@@ -213,7 +213,7 @@ begin
         Result := Assigned(AObj) and 
                   (AObj.S['id'] = '') and 
                   (AObj.S['method'] = 'session/update') and 
-                  (AObj.O['params'].S['sessionId'] = SessionId) and
+                  SameText(AObj.O['params'].S['sessionId'], SessionId) and
                   (AObj.O['params'].O['update'].S['sessionUpdate'] = 'available_commands_update');
       end
     ],

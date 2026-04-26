@@ -129,8 +129,8 @@ var
 begin
   inherited Create(AOwner);
   FState := asDisconnected;
-  FSessions := TDictionary<string, TSessionData>.Create;
-  FMethodHandlers := TDictionary<string, TMethodHandler>.Create;
+  FSessions := TDictionary<string, TSessionData>.Create(TStringComparer.OrdinalIgnoreCase);
+  FMethodHandlers := TDictionary<string, TMethodHandler>.Create(TStringComparer.OrdinalIgnoreCase);
   FObservers := TList<IAgentObserver>.Create;
   
   LClient := TACPClient.Create(Self);
