@@ -202,6 +202,7 @@ var
   LTargetFile, LJSON: string;
   LBase: TJsonBaseObject;
   LIsRestoring: Boolean;
+  LAgent: IACPAgent;
 begin
   if (ASession = nil) or (ASession.LogPath = '') then Exit;
   
