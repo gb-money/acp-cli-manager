@@ -121,7 +121,7 @@ var LHandler: TAgentHandler;
 begin for LHandler in FHandlers.Values do LHandler.Free; FHandlers.Free; FAgentList.Free; FCommandHandler.Free; FFileService.Free; inherited; end;
 
 procedure TAgentControl.RegisterAgent(AType: TAgentType; AAgent: IACPAgent);
-begin if Assigned(AAgent) then begin FAgentList.AddOrSetValue(AType, AAgent); AAgent.AddObserver(Self); end; end;
+begin if Assigned(AAgent) then begin FAgentList.AddOrSetValue(AType, AAgent); AAgent.SetSessionManager(FSessionMgr); AAgent.AddObserver(Self); end; end;
 
 procedure TAgentControl.AddSession(ASession: TSessionInfo);
 var LObj: TJsonObject; LBase64: string;
@@ -265,7 +265,7 @@ begin
   if Params.TryGetValue('id', LSid) then begin
     LTarget := FSessionMgr.GetSessionById(LSid);
     if Assigned(LTarget) and Assigned(LTarget.Agent) and Supports(LTarget.Agent, IACPAgent, LAgent) then begin
-       LTarget.IsLoading := True; UpdateSession(LTarget); HandleSelectSession(LTarget);
+       LTarget.IsLoading := True; LTarget.IsRestoring := True; UpdateSession(LTarget); HandleSelectSession(LTarget);
        LAgent.SetWorkspace(LTarget.Cwd); LAgent.ResumeSession(LSid);
     end;
   end;

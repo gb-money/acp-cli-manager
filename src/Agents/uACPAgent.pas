@@ -327,7 +327,7 @@ function TACPAgent.FindSessionById(const ASessionId: string): TSessionInfo;
 var LSessions: TList<TSessionInfo>; LSession: TSessionInfo;
 begin
   Result := nil; if not Assigned(FSessionMgr) then Exit; LSessions := TSessionManager(FSessionMgr).GetSessionListSnapshot;
-  try for LSession in LSessions do if LSession.SessionId = ASessionId then begin Result := LSession; Break; end; finally LSessions.Free; end;
+  try for LSession in LSessions do if SameText(LSession.SessionId, ASessionId) then begin Result := LSession; Break; end; finally LSessions.Free; end;
 end;
 
 procedure TACPAgent.ResetGrouping(const ASessionId: string);

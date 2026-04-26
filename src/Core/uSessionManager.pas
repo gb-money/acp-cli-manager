@@ -280,7 +280,7 @@ begin
   Lock;
   try
     for LSession in FSessions do
-      if LSession.SessionId = ASessionId then
+      if SameText(LSession.SessionId, ASessionId) then
       begin
         Result := LSession;
         Break;
