@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
     <!-- jsdiff library for diffing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.1.0/diff.min.js"></script>
-    
+
     <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
@@ -42,9 +42,10 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #262626; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #484847; }
-        
-        .diff-row { display: grid; grid-template-columns: 3.5rem 1fr 3.5rem 1fr; border-bottom: 1px solid rgba(72, 72, 71, 0.1); }
+
+        .diff-row { display: grid; grid-template-columns: 3.5rem 1fr 2rem 3.5rem 1fr; border-bottom: 1px solid rgba(72, 72, 71, 0.1); }
         .diff-num { color: #484847; text-align: right; padding-right: 1rem; user-select: none; font-size: 0.75rem; border-right: 1px solid rgba(72, 72, 71, 0.2); background: rgba(26, 26, 26, 0.3); }
+        .diff-action { display: flex; align-items: center; justify-content: center; border-right: 1px solid rgba(72, 72, 71, 0.2); background: rgba(26, 26, 26, 0.1); }
         .diff-content { padding-left: 1rem; white-space: pre-wrap; word-break: break-all; font-family: 'Fira Code', monospace; font-size: 0.825rem; min-height: 1.5rem; line-height: 1.5rem; }
         .diff-added { background-color: rgba(63, 255, 139, 0.08); }
         .diff-added .diff-content { color: #3fff8b; }
@@ -53,200 +54,8 @@
         .sticky-header { position: sticky; top: 0; z-index: 20; }
     </style>
 
-    <script>
-        window.sendAcp = function(url) {
-            const finalUrl = url.includes('://') ? url : 'acp-action://' + url;
-            let iframe = document.getElementById('acp-comm-frame');
-            if (!iframe) {
-                iframe = document.createElement('iframe'); 
-                iframe.id = 'acp-comm-frame';
-                iframe.style.display = 'none'; 
-                document.body.appendChild(iframe);
-            }
-            iframe.src = finalUrl + (finalUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-        };
-
-        window.ACP = {
-            activeSessionId: '',
-            targetPath: '',
-            
-            updateSessionList: (data) => {
-                const sessions = typeof data === 'string' ? JSON.parse(data) : data;
-                const container = document.getElementById('sessionListContainer');
-                
-                container.innerHTML = sessions.map(s => `
-                    <div onclick="window.ACP.selectSession('${s.id}')" 
-                        class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer group relative overflow-hidden ${s.id === window.ACP.activeSessionId ? 'bg-surface-container-high border-l-[3px] border-primary' : 'hover:bg-surface-container-high/50 text-on-surface-variant hover:text-on-surface border-l-[3px] border-transparent'}">
-                        <div class="relative z-10">
-                            <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/20">
-                                <span class="material-icons text-lg ${s.id === window.ACP.activeSessionId ? 'text-primary' : ''}">${s.id === window.ACP.activeSessionId ? 'forum' : 'chat_bubble_outline'}</span>
-                            </div>
-                            <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 ${s.online ? 'bg-primary' : 'bg-gray-400'} rounded-full border-2 border-surface-container-lowest"></div>
-                        </div>
-                        <div class="flex-1 min-w-0 z-10">
-                            <div class="text-sm font-headline ${s.id === window.ACP.activeSessionId ? 'font-semibold text-primary' : 'font-medium'} truncate">${s.name}</div>
-                            <div class="text-xs ${s.id === window.ACP.activeSessionId ? 'text-on-surface-variant' : 'opacity-60'} truncate">${s.workspace || ''}</div>
-                        </div>
-                    </div>`).join('');
-            },
-
-            selectSession: (sessionId) => {
-                window.ACP.activeSessionId = sessionId;
-                window.sendAcp('select-session?id=' + sessionId);
-                document.getElementById('emptyState').classList.remove('hidden');
-                document.getElementById('diffContent').innerHTML = '';
-                document.getElementById('fileName').innerText = 'Compare Changes';
-                document.getElementById('filePath').innerText = 'No file selected';
-                document.getElementById('addCount').innerText = '+0';
-                document.getElementById('removeCount').innerText = '-0';
-            },
-
-            updateFileHistoryBase64: (base64) => {
-                try {
-                    const binary = window.atob(base64);
-                    const bytes = new Uint8Array(binary.length);
-                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                    const json = new TextDecoder().decode(bytes);
-                    const history = JSON.parse(json);
-                    
-                    const container = document.getElementById('fileHistoryContainer');
-                    if (!container) return;
-                    
-                    if (!history || history.length === 0) {
-                        container.innerHTML = '<div class="p-8 text-center text-xs text-on-surface-variant italic opacity-30">No history available</div>';
-                        return;
-                    }
-                    
-                    const grouped = {};
-                    history.forEach(item => {
-                        const file = item.path.split(/[\/\\]/).pop();
-                        if (!grouped[file]) grouped[file] = { path: item.path, entries: [] };
-                        grouped[file].entries.push(item);
-                    });
-                    
-                    container.innerHTML = Object.keys(grouped).map(file => {
-                        const data = grouped[file];
-                        const lastTime = data.entries[0].timestamp.split(' ')[1];
-                        
-                        // Check if this file should be expanded automatically
-                        const isTarget = window.ACP.targetPath === data.path;
-                        const expandClass = isTarget ? '' : 'hidden';
-                        const chevronIcon = isTarget ? 'expand_more' : 'chevron_right';
-
-                        const entriesHtml = data.entries.map((e, idx) => {
-                            const time = e.timestamp.split(' ')[1];
-                            const isFirst = idx === 0;
-                            const colorClass = isFirst ? 'bg-primary' : 'bg-on-surface-variant';
-                            return `
-                                <div class="relative cursor-pointer hover:bg-white/5 p-1 rounded" onclick="window.sendAcp('load-diff?hashId=${e.id}&sessionId=${window.ACP.activeSessionId}')">
-                                    <span class="absolute -left-[21px] top-2 w-2 h-2 rounded-full ${colorClass} border-2 border-surface-container-low"></span>
-                                    <p class="text-xs text-on-surface hover:text-primary transition-colors">Diff: ${e.id || 'Snap'}</p>
-                                    <p class="text-[10px] text-on-surface-variant font-mono mt-0.5">${time}</p>
-                                </div>
-                            `;
-                        }).join('');
-                        
-                        return `
-                            <div class="bg-surface-container rounded-xl border border-outline-variant/10 overflow-hidden mb-2">
-                                <div onclick="this.nextElementSibling.classList.toggle('hidden'); const icon = this.querySelector('.chevron'); icon.innerText = icon.innerText === 'expand_more' ? 'chevron_right' : 'expand_more';" class="p-3 flex items-start gap-3 cursor-pointer hover:bg-surface-container-high transition-colors">
-                                    <span class="material-symbols-outlined text-primary mt-0.5 text-[18px]">description</span>
-                                    <div class="flex-1 min-w-0">
-                                        <p class="text-sm font-medium ${isTarget ? 'text-primary' : 'text-on-surface'} truncate" title="${data.path}">${file}</p>
-                                        <p class="text-xs text-on-surface-variant mt-0.5">Last Modified ${lastTime}</p>
-                                    </div>
-                                    <span class="material-symbols-outlined text-on-surface-variant text-[16px] chevron">${chevronIcon}</span>
-                                </div>
-                                <div class="${expandClass} px-4 pb-3 pt-1 border-t border-outline-variant/5 bg-surface-container-low/50">
-                                    <div class="relative pl-4 mt-2 space-y-3 before:absolute before:inset-y-0 before:left-[7px] before:w-px before:bg-outline-variant/20">
-                                        ${entriesHtml}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
-
-                    // If a target path was requested, load its latest diff automatically
-                    if (window.ACP.targetPath) {
-                        const targetFileGroup = grouped[window.ACP.targetPath.split(/[\/\\]/).pop()];
-                        if (targetFileGroup && targetFileGroup.entries.length > 0) {
-                            window.sendAcp(`load-diff?hashId=${targetFileGroup.entries[0].id}&sessionId=${window.ACP.activeSessionId}`);
-                            window.ACP.targetPath = ''; // Clear after auto-loading
-                        }
-                    }
-                    
-                } catch (e) { console.error('File History render error:', e); }
-            },
-
-            loadDiffFromData: (filename, path, oldText, newText) => {
-                document.getElementById('emptyState').classList.add('hidden');
-                document.getElementById('fileName').innerText = filename;
-                document.getElementById('filePath').innerText = path;
-                
-                const container = document.getElementById('diffContent');
-                container.innerHTML = '';
-                
-                let adds = 0;
-                let removes = 0;
-
-                // Use jsdiff to compute line differences
-                const diffBlocks = window.Diff.diffLines(oldText || '', newText || '');
-                let oldLineNum = 1;
-                let newLineNum = 1;
-
-                diffBlocks.forEach(part => {
-                    const lines = part.value.replace(/\n$/, '').split('\n');
-                    
-                    lines.forEach(line => {
-                        const rowEl = document.createElement('div');
-                        
-                        let type = 'unchanged';
-                        let oldNum = '';
-                        let newNum = '';
-
-                        if (part.added) {
-                            type = 'added';
-                            newNum = newLineNum++;
-                            adds++;
-                        } else if (part.removed) {
-                            type = 'removed';
-                            oldNum = oldLineNum++;
-                            removes++;
-                        } else {
-                            oldNum = oldLineNum++;
-                            newNum = newLineNum++;
-                        }
-
-                        rowEl.className = `diff-row ${type === 'added' ? 'diff-added' : type === 'removed' ? 'diff-removed' : ''}`;
-                        const escapedContent = window.ACP.escapeHtml(line);
-
-                        rowEl.innerHTML = `
-                            <div class="diff-num">${oldNum}</div>
-                            <div class="diff-content">${type === 'added' ? '' : escapedContent}</div>
-                            <div class="diff-num">${newNum}</div>
-                            <div class="diff-content">${type === 'removed' ? '' : escapedContent}</div>
-                        `;
-                        container.appendChild(rowEl);
-                    });
-                });
-
-                document.getElementById('addCount').innerText = `+${adds}`;
-                document.getElementById('removeCount').innerText = `-${removes}`;
-            },
-
-            escapeHtml: (unsafe) => {
-                return unsafe
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#039;");
-            }
-        };
-
-        window.addEventListener('DOMContentLoaded', () => {
-            window.sendAcp('ready');
-        });
-    </script>
+    <script src="assets/js/acp.shared.js"></script>
+    <script src="assets/js/diff_view.UI.js"></script>
 </head>
 
 <body class="bg-surface text-on-surface font-body h-screen flex overflow-hidden antialiased">
@@ -274,9 +83,28 @@
                     <p id="filePath" class="text-[10px] text-on-surface-variant font-mono">No file selected</p>
                 </div>
             </div>
-            <div id="diffSummary" class="text-[11px] font-medium flex gap-3">
-                <span id="addCount" class="text-primary">+0</span>
-                <span id="removeCount" class="text-error">-0</span>
+            <div class="flex items-center gap-6">
+                <div id="diffSummary" class="text-[11px] font-medium flex gap-3">
+                    <span id="addCount" class="text-primary">+0</span>
+                    <span id="removeCount" class="text-error">-0</span>
+                </div>
+
+                <!-- Compare Mode Toggle -->
+                <div class="flex items-center bg-surface-container-low rounded-lg p-0.5 border border-outline-variant/10">
+                    <button id="btnModeSnapshot" onclick="window.ACP.setCompareMode(false)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all bg-surface-container-highest text-primary shadow-sm">
+                        <span class="material-symbols-outlined text-[16px]">history</span>
+                        Snapshot
+                    </button>
+                    <button id="btnModeLatest" onclick="window.ACP.setCompareMode(true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container-high">
+                        <span class="material-symbols-outlined text-[16px]">text_compare</span>
+                        Latest
+                    </button>
+                </div>
+
+                <button id="btnRollback" class="hidden flex items-center gap-2 bg-transparent border border-outline-variant/50 text-on-surface px-4 py-2 rounded-full hover:bg-surface-container-high transition-colors font-label text-sm font-medium active:scale-95" onclick="window.ACP.rollbackCurrentDiff()">
+                    <span class="material-symbols-outlined text-sm">settings_backup_restore</span>
+                    <span id="btnRollbackText">Rollback to #---</span>
+                </button>
             </div>
         </header>
 
@@ -284,13 +112,14 @@
         <div class="flex-1 overflow-auto relative">
             <div class="min-w-[900px]">
                 <!-- Table Header -->
-                <div class="sticky-header grid grid-cols-[3.5rem_1fr_3.5rem_1fr] bg-surface-container-highest/95 backdrop-blur-sm border-b border-outline-variant/20 py-2 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                <div class="sticky-header grid grid-cols-[3.5rem_1fr_2rem_3.5rem_1fr] bg-surface-container-highest/95 backdrop-blur-sm border-b border-outline-variant/20 py-2 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
                     <div class="text-center border-r border-outline-variant/20">OLD</div>
                     <div class="pl-4 border-r border-outline-variant/20">Original Source</div>
+                    <div class="text-center border-r border-outline-variant/20">ACT</div>
                     <div class="text-center border-r border-outline-variant/20">NEW</div>
                     <div class="pl-4">Modified Content</div>
                 </div>
-                
+
                 <!-- Diff Rows -->
                 <div id="diffContent" class="flex flex-col pb-8">
                     <!-- Rows injected here -->
@@ -317,4 +146,5 @@
         </div>
     </aside>
 </body>
+
 </html>

@@ -136,8 +136,10 @@ window.ACP = Object.assign(window.ACP || {}, {
             if (window.ACP.targetPath) {
                 const targetFileGroup = grouped[window.ACP.targetPath.split(/[\/\\]/).pop()];
                 if (targetFileGroup && targetFileGroup.entries.length > 0) {
-                    window.sendDiff(`load-diff?hashId=${targetFileGroup.entries[0].id}&sessionId=${window.ACP.activeSessionId}`);
+                    const hashToLoad = window.ACP.targetHashId || targetFileGroup.entries[0].id;
+                    window.sendDiff(`load-diff?hashId=${hashToLoad}&sessionId=${window.ACP.activeSessionId}`);
                     window.ACP.targetPath = ''; // Clear after auto-loading
+                    window.ACP.targetHashId = '';
                 }
             }
 
