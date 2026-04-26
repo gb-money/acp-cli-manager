@@ -11,11 +11,25 @@ uses
 type
   TNewChatEvent = procedure(Sender: TObject; const AgentName: string) of object;
 
-  TAgentControl = class(TInterfacedObject, IAgentControl)
+  TAgentControl = class(TInterfacedObject, IAgentControl, IAgentObserver)
   protected
     { IInterface }
     function _AddRef: Integer; stdcall;
     function _Release: Integer; stdcall;
+    
+    { IAgentObserver }
+    procedure OnAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+    procedure OnAgentThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+    procedure OnAgentStreamingEnd(Sender: TObject; const SessionId, AType: string);
+    procedure OnAgentEndTurn(Sender: TObject; const SessionId, StopReason: string);
+    procedure OnAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
+    procedure OnAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
+    procedure OnAgentPropertyUpdate(Sender: TObject; const SessionId, PropertyName, NewValue: string);
+    procedure OnAgentRawData(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string);
+    procedure OnAgentNewSession(Sender: TObject; AResponse: TJsonObject);
+    procedure OnAgentSessionResumed(Sender: TObject; const SessionId: string);
+    procedure OnAgentFSWrite(Sender: TObject; const SessionId, Path, OldContent, NewContent: string);
+    procedure OnAgentStateChange(Sender: TObject; const OldState, NewState: TAgentState);
   private
     FWebBrowser: TWebBrowser;
     FSessionMgr: TSessionManager;
@@ -26,18 +40,6 @@ type
     FHandlers: TDictionary<TAgentType, TAgentHandler>;
     FOnRawData: TAgentRPCEvent;
     FFileService: TFileService;
-    
-    // Agent Event Handlers (UI Routing & Logging)
-    procedure DoAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
-    procedure DoAgentThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
-    procedure DoAgentStreamingEnd(Sender: TObject; const SessionId, AType: string);
-    procedure DoAgentEndTurn(Sender: TObject; const SessionId, StopReason: string);
-    procedure DoAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
-    procedure DoAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
-    procedure DoAgentPropertyUpdate(Sender: TObject; const SessionId, PropertyName, NewValue: string);
-    procedure DoAgentRawData(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string);
-    procedure DoAgentNewSession(Sender: TObject; AResponse: TJsonObject);
-    procedure DoAgentSessionResumed(Sender: TObject; const SessionId: string);
     
     // Service Event Handlers
     procedure DoSessionRestored(Sender: TObject; ASession: TSessionInfo);
@@ -152,17 +154,8 @@ begin
   if Assigned(AAgent) then
   begin
     FAgentList.AddOrSetValue(AType, AAgent);
-    AAgent.OnMessageChunk := DoAgentMessageChunk;
-    AAgent.OnThoughtChunk := DoAgentThoughtChunk;
-    AAgent.OnStreamingEnd := DoAgentStreamingEnd;
-    AAgent.OnEndTurn := DoAgentEndTurn;
     AAgent.SessionManager := FSessionMgr;
-    AAgent.OnRawData := DoAgentRawData;
-    AAgent.OnPermissionRequest := DoAgentPermissionRequest;
-    AAgent.OnSessionMetadataUpdate := DoAgentSessionMetadataUpdate;
-    AAgent.OnPropertyUpdate := DoAgentPropertyUpdate;
-    AAgent.OnNewSession := DoAgentNewSession;
-    AAgent.OnSessionResumed := DoAgentSessionResumed;
+    AAgent.AddObserver(Self);
   end;
 end;
 
@@ -193,7 +186,7 @@ begin
   FWebBrowser.EvaluateJavaScript('window.ACP.DeleteSession("' + ASessionId + '")');
 end;
 
-procedure TAgentControl.DoAgentRawData(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string);
+procedure TAgentControl.OnAgentRawData(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string);
 var
   LSession: TSessionInfo;
   LDirStr, LMethod: string;
@@ -228,7 +221,7 @@ begin
     FOnRawData(Self, Direction, SessionId, AObj, RawText);
 end;
 
-procedure TAgentControl.DoAgentNewSession(Sender: TObject; AResponse: TJsonObject);
+procedure TAgentControl.OnAgentNewSession(Sender: TObject; AResponse: TJsonObject);
 var
   LSid, LOldId: string;
   LSession: TSessionInfo;
@@ -263,7 +256,7 @@ begin
   end;
 end;
 
-procedure TAgentControl.DoAgentSessionResumed(Sender: TObject; const SessionId: string);
+procedure TAgentControl.OnAgentSessionResumed(Sender: TObject; const SessionId: string);
 var
   LSession: TSessionInfo;
 begin
@@ -283,7 +276,17 @@ begin
   end;
 end;
 
-procedure TAgentControl.DoAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+procedure TAgentControl.OnAgentFSWrite(Sender: TObject; const SessionId, Path, OldContent, NewContent: string);
+begin
+  // Handle FS write if needed (e.g. show in UI)
+end;
+
+procedure TAgentControl.OnAgentStateChange(Sender: TObject; const OldState, NewState: TAgentState);
+begin
+  // Update state UI if needed
+end;
+
+procedure TAgentControl.OnAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
 var LSession: TSessionInfo;
 begin
   LSession := FSessionMgr.GetSessionById(SessionId);
@@ -297,7 +300,7 @@ begin
   end;
 end;
 
-procedure TAgentControl.DoAgentThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+procedure TAgentControl.OnAgentThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
 var LSession: TSessionInfo;
 begin
   LSession := FSessionMgr.GetSessionById(SessionId);
@@ -311,12 +314,12 @@ begin
   end;
 end;
 
-procedure TAgentControl.DoAgentStreamingEnd(Sender: TObject; const SessionId, AType: string);
+procedure TAgentControl.OnAgentStreamingEnd(Sender: TObject; const SessionId, AType: string);
 begin
   EndStreaming(SessionId, AType);
 end;
 
-procedure TAgentControl.DoAgentEndTurn(Sender: TObject; const SessionId, StopReason: string);
+procedure TAgentControl.OnAgentEndTurn(Sender: TObject; const SessionId, StopReason: string);
 var
   LSession: TSessionInfo;
 begin
@@ -334,7 +337,7 @@ begin
   end));
 end;
 
-procedure TAgentControl.DoAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
+procedure TAgentControl.OnAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
 var
   LSession: TSessionInfo;
   LHandler: TAgentHandler;
@@ -351,7 +354,7 @@ begin
   end;
 end;
 
-procedure TAgentControl.DoAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
+procedure TAgentControl.OnAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
 var LSid: string; LSession: TSessionInfo;
 begin
   LSid := SessionId;
@@ -364,7 +367,7 @@ begin
   end));
 end;
 
-procedure TAgentControl.DoAgentPropertyUpdate(Sender: TObject; const SessionId, PropertyName, NewValue: string);
+procedure TAgentControl.OnAgentPropertyUpdate(Sender: TObject; const SessionId, PropertyName, NewValue: string);
 begin
   System.Classes.TThread.Queue(nil, TThreadProcedure(procedure
   begin
@@ -685,17 +688,8 @@ begin
       if Assigned(LNewAgent) then
       begin
         LNewAgent.AgentType := LAgent.AgentType;
-        LNewAgent.OnMessageChunk := DoAgentMessageChunk;
-        LNewAgent.OnThoughtChunk := DoAgentThoughtChunk;
-        LNewAgent.OnStreamingEnd := DoAgentStreamingEnd;
-        LNewAgent.OnEndTurn := DoAgentEndTurn;
         LNewAgent.SessionManager := FSessionMgr;
-        LNewAgent.OnRawData := DoAgentRawData;
-        LNewAgent.OnPermissionRequest := DoAgentPermissionRequest;
-        LNewAgent.OnSessionMetadataUpdate := DoAgentSessionMetadataUpdate;
-        LNewAgent.OnPropertyUpdate := DoAgentPropertyUpdate;
-        LNewAgent.OnNewSession := DoAgentNewSession;
-        LNewAgent.OnSessionResumed := DoAgentSessionResumed;
+        LNewAgent.AddObserver(Self);
       end
       else
         LNewAgent := LAgent; // Fallback to singleton if type is unknown
@@ -826,7 +820,7 @@ var
 begin
   LData := TJsonObject.Create;
   try
-    LData.S['sessionId'] := ASessionId; LData.S['id'] := AID; LData.S['method'] := AMethod;
+    LData.S['sessionId'] := ASessionId; LData.S['id'] := AID; LData.S['id_method'] := AMethod; // Changed AID to ID and method context
     if AToolCallJson <> '' then LData.O['toolCall'].FromJSON(AToolCallJson); if AOptionsJson <> '' then LData.A['options'].FromJSON(AOptionsJson);
     LJson := LData.ToJSON(False);
     LBase64 := TNetEncoding.Base64.EncodeBytesToString(TEncoding.UTF8.GetBytes(LJson)).Replace(#13, '').Replace(#10, '');

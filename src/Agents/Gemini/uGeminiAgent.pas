@@ -235,8 +235,7 @@ begin
   if Assigned(LSession) then
   begin
     LSession.IsWaitForResponse := True;
-    if Assigned(OnSessionMetadataUpdate) then
-      OnSessionMetadataUpdate(Self, SessionId);
+    NotifySessionMetadataUpdate(SessionId);
   end;
 
   if not Sessions.TryGetValue(SessionId, LD) then
@@ -377,8 +376,7 @@ begin
   if Assigned(LSession) then
   begin
     LSession.IsWaitForResponse := False;
-    if Assigned(OnSessionMetadataUpdate) then
-      OnSessionMetadataUpdate(Self, ASessionId);
+    NotifySessionMetadataUpdate(ASessionId);
   end;
 
   P := TACPProtocol.CreateSessionCancelParams(ASessionId);

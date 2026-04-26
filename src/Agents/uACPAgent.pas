@@ -33,23 +33,12 @@ type
     FSessions: TDictionary<string, TSessionData>;
     FMethodHandlers: TDictionary<string, TMethodHandler>;
     FSessionUpdateHandlers: TDictionary<string, TSessionUpdateHandler>;
+    FObservers: TList<IAgentObserver>;
 
     FAvailableModels: TArray<TAgentModelInfo>;
     FCurrentModelId: string;
     FAvailableModes: TArray<TAgentModeInfo>;
     FCurrentModeId: string;
-
-    FOnEndTurn: TAgentEndTurnEvent;
-    FOnMessageChunk: TAgentChunkEvent;
-    FOnThoughtChunk: TAgentChunkEvent;
-    FOnStreamingEnd: TAgentStreamingEndEvent;
-    FOnFSWrite: TAgentFSWriteEvent;
-    FOnRawData: TAgentRPCEvent;
-    FOnPermissionRequest: TAgentPermissionRequestEvent;
-    FOnSessionMetadataUpdate: TSessionMetadataUpdateEvent;
-    FOnPropertyUpdate: TSessionPropertyUpdateEvent;
-    FOnNewSession: TNewSessionEvent;
-    FOnSessionResumed: TSessionResumedEvent;
 
     procedure SetState(const Value: TAgentState);
     procedure HandleInternalReceive(Sender: TObject; const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject);
@@ -85,6 +74,9 @@ type
     procedure DoFSWrite(const SessionId, Path, OldContent, NewContent: string);
     procedure DoNewSession(AResponse: TJsonObject); virtual;
     procedure DoSessionResumed(const SessionId: string); virtual;
+
+    procedure NotifySessionMetadataUpdate(const SessionId: string);
+    procedure NotifyPropertyUpdate(const SessionId, PropertyName, NewValue: string);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -111,6 +103,9 @@ type
     procedure HandleModes(AModes: TJsonObject);
     procedure HandleModels(AModels: TJsonObject);
 
+    procedure AddObserver(AObserver: IAgentObserver);
+    procedure RemoveObserver(AObserver: IAgentObserver);
+
     property AgentName: string read FAgentName write FAgentName;
     property AgentType: TAgentType read FAgentType write FAgentType;
     property State: TAgentState read FState write SetState;
@@ -125,18 +120,6 @@ type
     property ModelId: string read FCurrentModelId write FCurrentModelId;
     property Modes: TArray<TAgentModeInfo> read FAvailableModes write FAvailableModes;
     property ModeId: string read FCurrentModeId write FCurrentModeId;
-
-    property OnEndTurn: TAgentEndTurnEvent read FOnEndTurn write FOnEndTurn;
-    property OnMessageChunk: TAgentChunkEvent read FOnMessageChunk write FOnMessageChunk;
-    property OnThoughtChunk: TAgentChunkEvent read FOnThoughtChunk write FOnThoughtChunk;
-    property OnStreamingEnd: TAgentStreamingEndEvent read FOnStreamingEnd write FOnStreamingEnd;
-    property OnFSWrite: TAgentFSWriteEvent read FOnFSWrite write FOnFSWrite;
-    property OnRawData: TAgentRPCEvent read FOnRawData write FOnRawData;
-    property OnPermissionRequest: TAgentPermissionRequestEvent read FOnPermissionRequest write FOnPermissionRequest;
-    property OnSessionMetadataUpdate: TSessionMetadataUpdateEvent read FOnSessionMetadataUpdate write FOnSessionMetadataUpdate;
-    property OnPropertyUpdate: TSessionPropertyUpdateEvent read FOnPropertyUpdate write FOnPropertyUpdate;
-    property OnNewSession: TNewSessionEvent read FOnNewSession write FOnNewSession;
-    property OnSessionResumed: TSessionResumedEvent read FOnSessionResumed write FOnSessionResumed;
   end;
 
 implementation
@@ -152,6 +135,7 @@ begin
   FState := asDisconnected;
   FSessions := TDictionary<string, TSessionData>.Create;
   FMethodHandlers := TDictionary<string, TMethodHandler>.Create;
+  FObservers := TList<IAgentObserver>.Create;
   FACPClient := TACPClient.Create(Self);
   FACPClient.OnReceive := HandleInternalReceive;
   FACPClient.OnRawData := HandleInternalRawData;
@@ -165,6 +149,7 @@ begin
   FSessionUpdateHandlers.Free;
   FMethodHandlers.Free;
   FSessions.Free;
+  FObservers.Free;
   inherited;
 end;
 
@@ -230,7 +215,6 @@ begin
         begin
           DoNewSession(LFirstResponse);
           if Assigned(OnResponse) then OnResponse(LFirstResponse);
-          if Assigned(FOnNewSession) then FOnNewSession(Self, LFirstResponse);
         end;
       finally
         if Assigned(LFirstResponse) then LFirstResponse.Free;
@@ -262,7 +246,9 @@ begin
 end;
 
 procedure TACPAgent.DoNewSession(AResponse: TJsonObject);
+var LObs: IAgentObserver;
 begin
+  for LObs in FObservers do LObs.OnAgentNewSession(Self, AResponse);
 end;
 
 procedure TACPAgent.ResumeSession(const SessionId: string);
@@ -315,9 +301,9 @@ begin
 end;
 
 procedure TACPAgent.DoSessionResumed(const SessionId: string);
+var LObs: IAgentObserver;
 begin
-  if Assigned(FOnSessionResumed) then
-    FOnSessionResumed(Self, SessionId);
+  for LObs in FObservers do LObs.OnAgentSessionResumed(Self, SessionId);
 end;
 
 procedure TACPAgent.EndTurn(const SessionId, StopReason: string);
@@ -345,8 +331,9 @@ begin
 end;
 
 procedure TACPAgent.DoEndTurn(const SessionId, StopReason: string);
+var LObs: IAgentObserver;
 begin
-  if Assigned(FOnEndTurn) then FOnEndTurn(Self, SessionId, StopReason);
+  for LObs in FObservers do LObs.OnAgentEndTurn(Self, SessionId, StopReason);
 end;
 
 procedure TACPAgent.UpdateSession(ASession: TSessionInfo);
@@ -404,6 +391,7 @@ var
   LI: Integer;
   LK: string;
   LNewModes: TArray<TAgentModeInfo>;
+  LObs: IAgentObserver;
 begin
   if not Assigned(AModes) then Exit;
   
@@ -424,8 +412,8 @@ begin
   Modes := LNewModes;
   
   for LK in FSessions.Keys do
-    if Assigned(FOnSessionMetadataUpdate) then
-      FOnSessionMetadataUpdate(Self, LK);
+    for LObs in FObservers do
+      LObs.OnAgentSessionMetadataUpdate(Self, LK);
 end;
 
 procedure TACPAgent.HandleModels(AModels: TJsonObject);
@@ -434,6 +422,7 @@ var
   LI: Integer;
   LK: string;
   LNewModels: TArray<TAgentModelInfo>;
+  LObs: IAgentObserver;
 begin
   if not Assigned(AModels) then Exit;
   
@@ -454,8 +443,8 @@ begin
   Models := LNewModels;
   
   for LK in FSessions.Keys do
-    if Assigned(FOnSessionMetadataUpdate) then
-      FOnSessionMetadataUpdate(Self, LK);
+    for LObs in FObservers do
+      LObs.OnAgentSessionMetadataUpdate(Self, LK);
 end;
 
 procedure TACPAgent.ReplyPermission(const ID, SessionId, OptionId: string);
@@ -545,7 +534,6 @@ end;
 
 procedure TACPAgent.DoReceive(const ID, Method: string; Params, ResultObj, ErrorObj: TJsonObject);
 var
-  LSessionId: string;
   LHandler: TMethodHandler;
 begin
   // session/new 또는 session/load 응답 처리 (메타데이터 자동 업데이트)
@@ -566,9 +554,9 @@ begin
 end;
 
 procedure TACPAgent.HandleInternalRawData(Sender: TObject; Direction: TRPCDirection; const ASessionId: string; AObj: TJsonObject; const RawText: string);
+var LObs: IAgentObserver;
 begin
-  if Assigned(FOnRawData) then
-    FOnRawData(Self, Direction, ASessionId, AObj, RawText);
+  for LObs in FObservers do LObs.OnAgentRawData(Self, Direction, ASessionId, AObj, RawText);
 end;
 
 function TACPAgent.FindSessionById(const ASessionId: string): TSessionInfo;
@@ -668,6 +656,7 @@ var
   LSID, LMethod: string;
   LToolCall: TJsonObject;
   LOptions: TJsonArray;
+  LObs: IAgentObserver;
 begin
   LSID := Params.S['sessionId'];
   // Do NOT reset grouping here. Let it stay in the current bubble.
@@ -676,8 +665,11 @@ begin
   LToolCall := Params.O['toolCall'];
   LOptions := Params.A['options'];
   
-  if Assigned(FOnPermissionRequest) then
-    FOnPermissionRequest(Self, ID, LMethod, LSID, LToolCall, LOptions)
+  if FObservers.Count > 0 then
+  begin
+    for LObs in FObservers do
+      LObs.OnAgentPermissionRequest(Self, ID, LMethod, LSID, LToolCall, LOptions);
+  end
   else
     ReplyPermission(ID, LSID, 'cancelled');
 end;
@@ -707,6 +699,7 @@ var
   Data: TSessionData;
   LIdx: Integer;
   LSession: TSessionInfo;
+  LObs: IAgentObserver;
 begin
   if not FSessions.TryGetValue(SessionId, Data) then Data := Default(TSessionData);
   LIdx := UpdateObj.IndexOf('availableCommands');
@@ -723,8 +716,8 @@ begin
     TThread.Queue(nil, procedure begin UpdateSession(LSession); end);
   end;
 
-  if Assigned(FOnSessionMetadataUpdate) then
-    FOnSessionMetadataUpdate(Self, SessionId);
+  for LObs in FObservers do
+    LObs.OnAgentSessionMetadataUpdate(Self, SessionId);
 end;
 
 procedure TACPAgent.ProcessChunkUpdate(const SessionId: string; UpdateObj: TJsonObject);
@@ -771,9 +764,6 @@ begin
     Data.CurrentBlockText := Data.CurrentBlockText + ChunkText;
     LFullText := Data.CurrentBlockText;
     
-    // UI logic removed: No filtering of 'USER:' or '--- content from' markers.
-    // The Agent layer should only handle protocol/data flow.
-
     if CleanType = 'thought' then begin
       Data.FullThought := Data.FullThought + ChunkText;
       if not LIsRestoring then DoThoughtChunk(SessionId, ChunkText, LFullText);
@@ -833,33 +823,63 @@ begin
 end;
 
 procedure TACPAgent.DoMessageChunk(const SessionId, Chunk, FullText: string);
+var LObs: IAgentObserver;
 begin
-  if Assigned(FOnMessageChunk) then FOnMessageChunk(Self, SessionId, Chunk, FullText);
+  for LObs in FObservers do LObs.OnAgentMessageChunk(Self, SessionId, Chunk, FullText);
 end;
 
 procedure TACPAgent.DoThoughtChunk(const SessionId, Chunk, FullText: string);
+var LObs: IAgentObserver;
 begin
-  if Assigned(FOnThoughtChunk) then FOnThoughtChunk(Self, SessionId, Chunk, FullText);
+  for LObs in FObservers do LObs.OnAgentThoughtChunk(Self, SessionId, Chunk, FullText);
 end;
 
 procedure TACPAgent.DoStreamingEnd(const SessionId, AType: string);
+var LObs: IAgentObserver;
 begin
-  if Assigned(FOnStreamingEnd) then FOnStreamingEnd(Self, SessionId, AType);
+  for LObs in FObservers do LObs.OnAgentStreamingEnd(Self, SessionId, AType);
 end;
 
 procedure TACPAgent.DoFSWrite(const SessionId, Path, OldContent, NewContent: string);
+var LObs: IAgentObserver;
 begin
-  if Assigned(FOnFSWrite) then FOnFSWrite(Self, SessionId, Path, OldContent, NewContent);
+  for LObs in FObservers do LObs.OnAgentFSWrite(Self, SessionId, Path, OldContent, NewContent);
+end;
+
+procedure TACPAgent.AddObserver(AObserver: IAgentObserver);
+begin
+  if not FObservers.Contains(AObserver) then
+    FObservers.Add(AObserver);
+end;
+
+procedure TACPAgent.RemoveObserver(AObserver: IAgentObserver);
+begin
+  FObservers.Remove(AObserver);
+end;
+
+procedure TACPAgent.NotifySessionMetadataUpdate(const SessionId: string);
+var LObs: IAgentObserver;
+begin
+  for LObs in FObservers do LObs.OnAgentSessionMetadataUpdate(Self, SessionId);
+end;
+
+procedure TACPAgent.NotifyPropertyUpdate(const SessionId, PropertyName, NewValue: string);
+var LObs: IAgentObserver;
+begin
+  for LObs in FObservers do LObs.OnAgentPropertyUpdate(Self, SessionId, PropertyName, NewValue);
 end;
 
 procedure TACPAgent.SetState(const Value: TAgentState);
 var
   OldState: TAgentState;
+  LObs: IAgentObserver;
 begin
   if FState <> Value then
   begin
     OldState := FState;
     FState := Value;
+    for LObs in FObservers do
+      LObs.OnAgentStateChange(Self, OldState, FState);
   end;
 end;
 

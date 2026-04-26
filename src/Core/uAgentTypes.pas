@@ -86,6 +86,22 @@ type
   TNewSessionEvent = procedure(Sender: TObject; AResponse: TJsonObject) of object;
   TSessionResumedEvent = procedure(Sender: TObject; const SessionId: string) of object;
 
+  IAgentObserver = interface
+    ['{7E1D8A21-5B3E-4B7E-A79B-8902A9E58A4F}']
+    procedure OnAgentMessageChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+    procedure OnAgentThoughtChunk(Sender: TObject; const SessionId, Chunk, FullText: string);
+    procedure OnAgentStreamingEnd(Sender: TObject; const SessionId, AType: string);
+    procedure OnAgentEndTurn(Sender: TObject; const SessionId, StopReason: string);
+    procedure OnAgentPermissionRequest(Sender: TObject; const ID, Method, SessionId: string; ToolCall: TJsonObject; Options: TJsonArray);
+    procedure OnAgentSessionMetadataUpdate(Sender: TObject; const SessionId: string);
+    procedure OnAgentPropertyUpdate(Sender: TObject; const SessionId, PropertyName, NewValue: string);
+    procedure OnAgentRawData(Sender: TObject; Direction: TRPCDirection; const SessionId: string; AObj: TJsonObject; const RawText: string);
+    procedure OnAgentNewSession(Sender: TObject; AResponse: TJsonObject);
+    procedure OnAgentSessionResumed(Sender: TObject; const SessionId: string);
+    procedure OnAgentFSWrite(Sender: TObject; const SessionId, Path, OldContent, NewContent: string);
+    procedure OnAgentStateChange(Sender: TObject; const OldState, NewState: TAgentState);
+  end;
+
 implementation
 
 { TSessionInfo }
