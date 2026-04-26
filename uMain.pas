@@ -40,7 +40,7 @@ var
 implementation
 
 uses
-  uDebugRPC;
+  uDebugRPC, uFileExplorer, uFileViewer, uDiffViewer;
 
 {$R *.fmx}
 
@@ -97,15 +97,39 @@ begin
 end;
 
 procedure TS.DoOpenExplorer(Sender: TObject);
+var
+  LPath: string;
 begin
+  if not Assigned(frmFileExplorer) then
+    frmFileExplorer := TfrmFileExplorer.Create(Application);
+
+  LPath := '';
+  if Assigned(FSessionMgr.ActiveSession) then
+    LPath := FSessionMgr.ActiveSession.Cwd;
+
+  if LPath = '' then
+    LPath := FSessionMgr.BaseConfigPath;
+
+  frmFileExplorer.Explore(LPath);
+  frmFileExplorer.Show;
 end;
 
 procedure TS.DoOpenFileViewer(Sender: TObject; const APath: string);
 begin
+  if not Assigned(frmFileViewer) then
+    frmFileViewer := TfrmFileViewer.Create(Application);
+
+  frmFileViewer.ViewFile(APath);
+  frmFileViewer.Show;
 end;
 
 procedure TS.DoOpenDiffViewer(Sender: TObject; const ASessionId, APath, AHashId: string);
 begin
+  if not Assigned(frmDiffViewer) then
+    frmDiffViewer := TfrmDiffViewer.Create(Application);
+
+  frmDiffViewer.ViewDiffSession(FSessionMgr, ASessionId, APath, AHashId);
+  frmDiffViewer.Show;
 end;
 
 procedure TS.DoOpenFileDialogRequested(Sender: TObject);
