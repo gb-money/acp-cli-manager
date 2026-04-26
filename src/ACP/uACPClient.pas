@@ -152,7 +152,7 @@ begin
       ReqObj.I['id'] := FLastMessageId;
 
       if Assigned(Params) then
-        ReqObj.O['params'].Assign(Params);
+        ReqObj.O['params'].FromJSON(Params.ToJSON(False));
 
       if Assigned(OnResponse) or (Length(OnConditions) > 0) then
       begin
@@ -189,7 +189,7 @@ begin
 
     // 표준 JSON-RPC 응답: method 없이 result 필드 사용
     if Assigned(ResultObj) then
-      RespObj.O['result'].Assign(ResultObj)
+      RespObj.O['result'].FromJSON(ResultObj.ToJSON(False))
     else
       RespObj.O['result']; // Empty {}
 
@@ -381,7 +381,15 @@ begin
 
       // 5. 일반 수신 이벤트 발생
       if Assigned(FOnReceive) and not FAgentProcess.IsStopping then
-        FOnReceive(Self, LId, LMethod, LParams, LResult, LError);
+      begin
+        try
+          FOnReceive(Self, LId, LMethod, LParams, LResult, LError);
+        except
+          on E: Exception do
+            if Assigned(FOnRawData) then
+              FOnRawData(Self, rdInternal, '', nil, 'Exception in OnReceive event: ' + E.Message);
+        end;
+      end;
     finally
       LBaseObj.Free;
     end;
