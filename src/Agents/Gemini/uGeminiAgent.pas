@@ -199,7 +199,7 @@ begin
   if Assigned(LSession) then begin LSession.IsWaitForResponse := True; NotifySessionMetadataUpdate(SessionId); end;
   if not Sessions.TryGetValue(SessionId, LD) then LD := Default(TSessionData);
   LD.FullThought := ''; LD.FullMessage := ''; LD.CurrentBlockText := ''; LD.LastChunkType := ''; LD.IsProcessing := True; 
-  Sessions.AddOrSetValue(SessionId, LD);
+  Sessions.AddOrSetValue(SessionId.ToLower, LD);
   Params := TJsonObject.Create;
   try
     Params.S['sessionId'] := SessionId; PromptArr := Params.A['prompt']; LWorkspaceName := TPath.GetFileName(ExcludeTrailingPathDelimiter(Workspace));

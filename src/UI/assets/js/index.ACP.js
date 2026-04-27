@@ -440,12 +440,12 @@ window.ACP = {
         div.innerHTML = html;
     },
 
-    finalizeThought: () => {
+    finalizeThought: (durationOverride) => {
         if (window.ACP.lastAiThoughtId) {
             const hdr = document.getElementById(window.ACP.lastAiThoughtId.headerId);
             const cnt = document.getElementById(window.ACP.lastAiThoughtId.contentId);
             if (hdr) {
-                const duration = Math.round((Date.now() - window.ACP.thoughtStartTime) / 1000);
+                const duration = (durationOverride !== undefined) ? durationOverride : Math.round((Date.now() - window.ACP.thoughtStartTime) / 1000);
                 hdr.classList.remove('py-1.5');
                 hdr.classList.add('py-2');
                 hdr.querySelector('.material-icons').classList.remove('text-primary');
@@ -755,7 +755,7 @@ window.ACP = {
                     window.ACP.parseAndRenderThought(msg.content, tIds.contentId);
                     window.ACP.lastAiThoughtId = tIds;
                     window.ACP.lastBlockType = 'thought';
-                    window.ACP.finalizeThought();
+                    window.ACP.finalizeThought(0);
                 } else {
                     const id = window.ACP.addMessageToUI(targetRole, '', msg.timestamp);
                     const div = document.getElementById(id);

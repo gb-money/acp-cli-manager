@@ -129,8 +129,8 @@ var
 begin
   inherited Create(AOwner);
   FState := asDisconnected;
-  FSessions := TDictionary<string, TSessionData>.Create(TStringComparer.OrdinalIgnoreCase);
-  FMethodHandlers := TDictionary<string, TMethodHandler>.Create(TStringComparer.OrdinalIgnoreCase);
+  FSessions := TDictionary<string, TSessionData>.Create;
+  FMethodHandlers := TDictionary<string, TMethodHandler>.Create;
   FObservers := TList<IAgentObserver>.Create;
   
   LClient := TACPClient.Create(Self);
@@ -154,11 +154,11 @@ end;
 
 procedure TACPAgent.RegisterHandlers;
 begin
-  FMethodHandlers.Add('fs/read_text_file', HandleFSRead);
-  FMethodHandlers.Add('fs/write_text_file', HandleFSWrite);
-  FMethodHandlers.Add('session/update', HandleSessionUpdate);
-  FMethodHandlers.Add('session/request_permission', HandleRequestPermission);
-  FMethodHandlers.Add('session/tool_call', HandleToolCall);
+  FMethodHandlers.Add('fs/read_text_file'.ToLower, HandleFSRead);
+  FMethodHandlers.Add('fs/write_text_file'.ToLower, HandleFSWrite);
+  FMethodHandlers.Add('session/update'.ToLower, HandleSessionUpdate);
+  FMethodHandlers.Add('session/request_permission'.ToLower, HandleRequestPermission);
+  FMethodHandlers.Add('session/tool_call'.ToLower, HandleToolCall);
   
   RegisterSessionUpdateHandlers;
 end;
@@ -166,14 +166,14 @@ end;
 procedure TACPAgent.RegisterSessionUpdateHandlers;
 begin
   FSessionUpdateHandlers := TDictionary<string, TSessionUpdateHandler>.Create;
-  FSessionUpdateHandlers.Add('available_commands_update', ProcessAvailableCommandsUpdate);
-  FSessionUpdateHandlers.Add('agent_thought_chunk', ProcessChunkUpdate);
-  FSessionUpdateHandlers.Add('agent_message_chunk', ProcessChunkUpdate);
-  FSessionUpdateHandlers.Add('user_message_chunk', ProcessChunkUpdate);
-  FSessionUpdateHandlers.Add('tool_call_update', ProcessToolCallUpdate);
-  FSessionUpdateHandlers.Add('tool_call', ProcessToolCallUpdate);
-  FSessionUpdateHandlers.Add('models_update', ProcessModelsUpdate);
-  FSessionUpdateHandlers.Add('modes_update', ProcessModesUpdate);
+  FSessionUpdateHandlers.Add('available_commands_update'.ToLower, ProcessAvailableCommandsUpdate);
+  FSessionUpdateHandlers.Add('agent_thought_chunk'.ToLower, ProcessChunkUpdate);
+  FSessionUpdateHandlers.Add('agent_message_chunk'.ToLower, ProcessChunkUpdate);
+  FSessionUpdateHandlers.Add('user_message_chunk'.ToLower, ProcessChunkUpdate);
+  FSessionUpdateHandlers.Add('tool_call_update'.ToLower, ProcessToolCallUpdate);
+  FSessionUpdateHandlers.Add('tool_call'.ToLower, ProcessToolCallUpdate);
+  FSessionUpdateHandlers.Add('models_update'.ToLower, ProcessModelsUpdate);
+  FSessionUpdateHandlers.Add('modes_update'.ToLower, ProcessModesUpdate);
 end;
 
 procedure TACPAgent.Connect;
@@ -309,7 +309,7 @@ procedure TACPAgent.StartRestoration(const SessionId: string);
 var
   Data: TSessionData;
 begin
-  if not FSessions.TryGetValue(SessionId, Data) then
+  if not FSessions.TryGetValue(SessionId.ToLower, Data) then
     Data := Default(TSessionData);
     
   Data.IsRestoring := True;
@@ -320,7 +320,7 @@ procedure TACPAgent.FinalizeRestoration(const SessionId: string);
 var
   Data: TSessionData;
 begin
-  if FSessions.TryGetValue(SessionId, Data) then
+  if FSessions.TryGetValue(SessionId.ToLower, Data) then
   begin
     Data.IsRestoring := False;
     FSessions.AddOrSetValue(SessionId, Data);
@@ -386,7 +386,7 @@ function TACPAgent.IsRestoringSession(const SessionId: string): Boolean;
 var
   Data: TSessionData;
 begin
-  if FSessions.TryGetValue(SessionId, Data) then
+  if FSessions.TryGetValue(SessionId.ToLower, Data) then
     Result := Data.IsRestoring
   else
     Result := False;
@@ -695,7 +695,7 @@ begin
   UpdateObj := Params.O['update'];
   UpdateType := UpdateObj.S['sessionUpdate'];
   
-  if FSessionUpdateHandlers.TryGetValue(UpdateType, LHandler) then
+  if FSessionUpdateHandlers.TryGetValue(UpdateType.ToLower, LHandler) then
     LHandler(SessionId, UpdateObj);
 end;
 
@@ -705,7 +705,7 @@ var
   LIdx: Integer;
   LObs: IAgentObserver;
 begin
-  if not FSessions.TryGetValue(SessionId, Data) then
+  if not FSessions.TryGetValue(SessionId.ToLower, Data) then
     Data := Default(TSessionData);
     
   LIdx := UpdateObj.IndexOf('availableCommands');
@@ -730,9 +730,9 @@ var
 begin
   UpdateType := UpdateObj.S['sessionUpdate'];
   LSession := FindSessionById(SessionId);
-  LIsRestoring := Assigned(LSession) and LSession.IsRestoring;
+  LIsRestoring := Assigned(LSession) and LSession.IsRestoring and (not Data.IsProcessing);
   
-  if not FSessions.TryGetValue(SessionId, Data) then
+  if not FSessions.TryGetValue(SessionId.ToLower, Data) then
     Data := Default(TSessionData);
     
   ChunkText := '';
@@ -789,7 +789,7 @@ var
   ContentObj: TJsonObject;
   I, LIdx: Integer;
 begin
-  if not FSessions.TryGetValue(SessionId, Data) then
+  if not FSessions.TryGetValue(SessionId.ToLower, Data) then
     Data := Default(TSessionData);
     
   if Data.LastChunkType <> '' then
@@ -863,5 +863,13 @@ begin
       LObs.OnAgentStateChange(Self, OldState, FState);
   end;
 end;
+
+end.
+FState);
+  end;
+end;
+
+end.
+d;
 
 end.
