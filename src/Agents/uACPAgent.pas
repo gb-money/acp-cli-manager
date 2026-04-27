@@ -4,13 +4,15 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.IOUtils,
-  JsonDataObjects, uACPClient, uAgentTypes, uACPDispatcher;
+  JsonDataObjects, uACPClient, uAgentTypes, uACPDispatcher, uFileService;
 
 type
   TMethodHandler = procedure(const ID: string; Params: TJsonObject) of object;
   TSessionUpdateHandler = procedure(const SessionId: string; UpdateObj: TJsonObject) of object;
 
   TACPAgent = class(TComponent, IACPAgent)
+  private
+    FFileService: TFileService;
   protected
     FAgentName: string;
     FAgentType: TAgentType;
@@ -77,6 +79,7 @@ type
     procedure NotifyPropertyUpdate(const SessionId, PropertyName, NewValue: string);
     
     property Dispatcher: TACPDispatcher read FDispatcher;
+    property FileService: TFileService read FFileService;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -149,6 +152,7 @@ begin
   FSessions.Free;
   FObservers.Free;
   FDispatcher.Free;
+  if Assigned(FFileService) then FFileService.Free;
   inherited;
 end;
 
@@ -303,6 +307,11 @@ end;
 procedure TACPAgent.SetSessionManager(AManager: TObject);
 begin
   FSessionMgr := AManager;
+  if Assigned(FSessionMgr) then
+  begin
+    if Assigned(FFileService) then FFileService.Free;
+    FFileService := TFileService.Create(TSessionManager(FSessionMgr));
+  end;
 end;
 
 procedure TACPAgent.StartRestoration(const SessionId: string);
@@ -313,7 +322,7 @@ begin
     Data := Default(TSessionData);
     
   Data.IsRestoring := True;
-  FSessions.AddOrSetValue(SessionId, Data);
+  FSessions.AddOrSetValue(SessionId.ToLower, Data);
 end;
 
 procedure TACPAgent.FinalizeRestoration(const SessionId: string);
@@ -323,7 +332,7 @@ begin
   if FSessions.TryGetValue(SessionId.ToLower, Data) then
   begin
     Data.IsRestoring := False;
-    FSessions.AddOrSetValue(SessionId, Data);
+    FSessions.AddOrSetValue(SessionId.ToLower, Data);
   end;
 end;
 
@@ -371,7 +380,7 @@ function TACPAgent.GetSessionsJson(const ASessionId: string): string;
 var
   Data: TSessionData;
 begin
-  if FSessions.TryGetValue(ASessionId, Data) then
+  if FSessions.TryGetValue(ASessionId.ToLower, Data) then
     Result := Data.CommandsJson
   else
     Result := '';
@@ -405,18 +414,21 @@ begin
   if AModes.Contains('currentModeId') then
     FCurrentModeId := AModes.S['currentModeId'];
     
-  LArr := AModes.A['availableModes'];
-  SetLength(LNewModes, LArr.Count);
-  for LI := 0 to LArr.Count - 1 do
+  if AModes.Contains('availableModes') then
   begin
-    LNewModes[LI].ModeId := LArr.O[LI].S['id'];
-    LNewModes[LI].Name := LArr.O[LI].S['name'];
-    if LArr.O[LI].Contains('description') then
-      LNewModes[LI].Description := LArr.O[LI].S['description']
-    else
-      LNewModes[LI].Description := '';
+    LArr := AModes.A['availableModes'];
+    SetLength(LNewModes, LArr.Count);
+    for LI := 0 to LArr.Count - 1 do
+    begin
+      LNewModes[LI].ModeId := LArr.O[LI].S['id'];
+      LNewModes[LI].Name := LArr.O[LI].S['name'];
+      if LArr.O[LI].Contains('description') then
+        LNewModes[LI].Description := LArr.O[LI].S['description']
+      else
+        LNewModes[LI].Description := '';
+    end;
+    FAvailableModes := LNewModes;
   end;
-  FAvailableModes := LNewModes;
   
   for LK in FSessions.Keys do
     for LObs in FObservers do
@@ -434,20 +446,27 @@ begin
   if not Assigned(AModels) then Exit;
   
   if AModels.Contains('currentModelId') then
-    FCurrentModelId := AModels.S['currentModelId'];
-    
-  LArr := AModels.A['availableModels'];
-  SetLength(LNewModels, LArr.Count);
-  for LI := 0 to LArr.Count - 1 do
   begin
-    LNewModels[LI].ModelId := LArr.O[LI].S['modelId'];
-    LNewModels[LI].Name := LArr.O[LI].S['name'];
-    if LArr.O[LI].Contains('description') then
-      LNewModels[LI].Description := LArr.O[LI].S['description']
-    else
-      LNewModels[LI].Description := '';
+    FCurrentModelId := AModels.S['currentModelId'];
+    for LK in FSessions.Keys do
+      NotifyPropertyUpdate(LK, 'currentModelId', FCurrentModelId);
   end;
-  FAvailableModels := LNewModels;
+    
+  if AModels.Contains('availableModels') then
+  begin
+    LArr := AModels.A['availableModels'];
+    SetLength(LNewModels, LArr.Count);
+    for LI := 0 to LArr.Count - 1 do
+    begin
+      LNewModels[LI].ModelId := LArr.O[LI].S['modelId'];
+      LNewModels[LI].Name := LArr.O[LI].S['name'];
+      if LArr.O[LI].Contains('description') then
+        LNewModels[LI].Description := LArr.O[LI].S['description']
+      else
+        LNewModels[LI].Description := '';
+    end;
+    FAvailableModels := LNewModels;
+  end;
   
   for LK in FSessions.Keys do
     for LObs in FObservers do
@@ -455,26 +474,29 @@ begin
 end;
 
 procedure TACPAgent.ReplyPermission(const ID, SessionId, OptionId: string);
-var
-  Res, Outcome: TJsonObject;
 begin
-  Res := TJsonObject.Create;
-  try
-    Outcome := Res.O['outcome'];
-    if SameText(OptionId, 'cancelled') then
-      Outcome.S['outcome'] := 'cancelled'
-    else
-    begin
-      Outcome.S['outcome'] := 'selected';
-      Outcome.S['optionId'] := OptionId;
+  TThread.Queue(nil, procedure
+  var
+    Res, Outcome: TJsonObject;
+  begin
+    Res := TJsonObject.Create;
+    try
+      Outcome := Res.O['outcome'];
+      if SameText(OptionId, 'cancelled') then
+        Outcome.S['outcome'] := 'cancelled'
+      else
+      begin
+        Outcome.S['outcome'] := 'selected';
+        Outcome.S['optionId'] := OptionId;
+      end;
+      FDispatcher.SendResponse(ID, Res);
+    finally
+      Res.Free;
     end;
-    FDispatcher.SendResponse(ID, Res);
-  finally
-    Res.Free;
-  end;
-  
-  if SessionId <> '' then
-    ResetGrouping(SessionId);
+    
+    if SessionId <> '' then
+      ResetGrouping(SessionId);
+  end);
 end;
 
 function TACPAgent.GetSessionList: TArray<string>;
@@ -550,7 +572,7 @@ begin
   end;
   
   if (Method <> '') then
-    if FMethodHandlers.TryGetValue(Method, LHandler) then
+    if FMethodHandlers.TryGetValue(Method.ToLower, LHandler) then
       LHandler(ID, Params);
 end;
 
@@ -588,7 +610,7 @@ var
   Data: TSessionData;
   LSession: TSessionInfo;
 begin
-  if (ASessionId <> '') and FSessions.TryGetValue(ASessionId, Data) then
+  if (ASessionId <> '') and FSessions.TryGetValue(ASessionId.ToLower, Data) then
   begin
     if Data.LastChunkType <> '' then
       DoStreamingEnd(ASessionId, Data.LastChunkType);
@@ -602,58 +624,97 @@ begin
     
     Data.CurrentBlockText := '';
     Data.LastChunkType := '';
-    FSessions.AddOrSetValue(ASessionId, Data);
+    FSessions.AddOrSetValue(ASessionId.ToLower, Data);
   end;
 end;
 
 procedure TACPAgent.HandleFSRead(const ID: string; Params: TJsonObject);
 var
-  Path, Content, LSid: string;
-  Res: TJsonObject;
+  Path, LSid: string;
 begin
   LSid := Params.S['sessionId'];
   if LSid <> '' then ResetGrouping(LSid);
   Path := Params.S['path'];
-  
-  Res := TJsonObject.Create;
-  try
-    Content := '';
-    if TFile.Exists(Path) then
+
+  if Assigned(FileService) then
+  begin
+    FileService.ReadTextFile(Path,
+      procedure(AContent: string)
+      begin
+        TThread.Queue(nil, procedure
+        var
+          Res: TJsonObject;
+        begin
+          Res := TJsonObject.Create;
+          try
+            Res.S['content'] := AContent;
+            Dispatcher.SendResponse(ID, Res);
+          finally
+            Res.Free;
+          end;
+        end);
+      end,
+      procedure(AError: string)
+      begin
+        TThread.Queue(nil, procedure
+        var
+          Res: TJsonObject;
+        begin
+          Res := TJsonObject.Create;
+          try
+            Res.S['content'] := ''; // Return empty on error per protocol
+            Dispatcher.SendResponse(ID, Res);
+          finally
+            Res.Free;
+          end;
+        end);
+      end
+    );
+  end
+  else
+  begin
+    TThread.Queue(nil, procedure
+    var
+      Res: TJsonObject;
     begin
+      Res := TJsonObject.Create;
       try
-        Content := TFile.ReadAllText(Path, TEncoding.UTF8);
-      except
-        Content := '';
+        Res.S['content'] := '';
+        Dispatcher.SendResponse(ID, Res);
+      finally
+        Res.Free;
       end;
-    end;
-    Res.S['content'] := Content;
-    Dispatcher.SendResponse(ID, Res);
-  finally
-    Res.Free;
+    end);
   end;
 end;
-
 procedure TACPAgent.HandleFSWrite(const ID: string; Params: TJsonObject);
 var
   Path, Content, LSid: string;
-  Res: TJsonObject;
 begin
   LSid := Params.S['sessionId'];
   if LSid <> '' then ResetGrouping(LSid);
   Path := Params.S['path'];
   Content := Params.S['content'];
   
-  Res := TJsonObject.Create;
-  try
-    try
-      TFile.WriteAllText(Path, Content, TEncoding.UTF8);
-      Dispatcher.SendResponse(ID, Res);
-    except
-      on E: Exception do
+  if Assigned(FileService) then
+  begin
+    FileService.WriteTextFile(LSid, Path, Content,
+      procedure
+      var
+        Res: TJsonObject;
+      begin
+        Res := TJsonObject.Create;
+        try
+          Dispatcher.SendResponse(ID, Res);
+        finally
+          Res.Free;
+        end;
+      end,
+      procedure(AError: string)
+      begin
         Dispatcher.SendResponse(ID, nil);
-    end;
-  finally
-    Res.Free;
+      end
+    );
   end;
 end;
 
@@ -712,7 +773,7 @@ begin
   if LIdx >= 0 then
   begin
     Data.CommandsJson := UpdateObj.A['availableCommands'].ToJSON(False);
-    FSessions.AddOrSetValue(SessionId, Data);
+    FSessions.AddOrSetValue(SessionId.ToLower, Data);
   end;
   
   for LObs in FObservers do
@@ -730,10 +791,15 @@ var
 begin
   UpdateType := UpdateObj.S['sessionUpdate'];
   LSession := FindSessionById(SessionId);
-  LIsRestoring := Assigned(LSession) and LSession.IsRestoring and (not Data.IsProcessing);
   
   if not FSessions.TryGetValue(SessionId.ToLower, Data) then
     Data := Default(TSessionData);
+    
+  // Important: Check both the object flag and the internal record flag.
+  // We allow UI updates if the session is actively processing a prompt, even if restoration flags are still set.
+  LIsRestoring := (Assigned(LSession) and LSession.IsRestoring) or Data.IsRestoring;
+  if Data.IsProcessing then
+    LIsRestoring := False;
     
   ChunkText := '';
   LIdx := UpdateObj.IndexOf('content');
@@ -780,7 +846,7 @@ begin
       if not LIsRestoring then DoMessageChunk(SessionId, ChunkText, LFullText);
     end;
   end;
-  FSessions.AddOrSetValue(SessionId, Data);
+  FSessions.AddOrSetValue(SessionId.ToLower, Data);
 end;
 
 procedure TACPAgent.ProcessToolCallUpdate(const SessionId: string; UpdateObj: TJsonObject);
@@ -810,7 +876,7 @@ begin
       end;
     end;
   end;
-  FSessions.AddOrSetValue(SessionId, Data);
+  FSessions.AddOrSetValue(SessionId.ToLower, Data);
 end;
 
 procedure TACPAgent.ProcessModelsUpdate(const SessionId: string; UpdateObj: TJsonObject);
@@ -863,13 +929,5 @@ begin
       LObs.OnAgentStateChange(Self, OldState, FState);
   end;
 end;
-
-end.
-FState);
-  end;
-end;
-
-end.
-d;
 
 end.

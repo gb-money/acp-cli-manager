@@ -325,13 +325,18 @@ begin
           if LIsStep0 and (LReq.MessageId <> '') and (LId = LReq.MessageId) then
           begin
             // Step 0이고 ID가 일치함. 
-            LMethod := LReq.MethodName; // 🎯 메서드명 복원
+            // 🎯 실제 '응답'(result 또는 error 포함)인 경우에만 메서드명을 복원하고 매칭함
+            if LParsedObj.Contains('result') or LParsedObj.Contains('error') then
+            begin
+              LMethod := LReq.MethodName;
+              LMatch := True;
+            end
+            else
+              LMatch := False;
             
             // 조건이 있다면 조건까지 통과해야 함.
-            if (LStep < Length(LReq.Conditions)) and Assigned(LReq.Conditions[LStep]) then
-              LMatch := LReq.Conditions[LStep](LParsedObj)
-            else
-              LMatch := True; // 조건이 없으면 ID 일치만으로 통과
+            if LMatch and (LStep < Length(LReq.Conditions)) and Assigned(LReq.Conditions[LStep]) then
+              LMatch := LReq.Conditions[LStep](LParsedObj);
           end
           else if (LStep < Length(LReq.Conditions)) and Assigned(LReq.Conditions[LStep]) then
           begin

@@ -391,8 +391,9 @@ window.ACP = {
 
     createThoughtContainer: (timestamp) => {
         const container = document.getElementById('mainChatCanvasInner');
-        const id = 'thought-' + Date.now();
-        const hdrId = 'thought-hdr-' + Date.now();
+        const suffix = Math.random().toString(36).substring(2, 7);
+        const id = 'thought-' + Date.now() + '-' + suffix;
+        const hdrId = 'thought-hdr-' + Date.now() + '-' + suffix;
         const actualTimestamp = timestamp || window.ACP.getLocalTimeString();
         window.ACP.thoughtStartTime = Date.now();
 
@@ -460,6 +461,9 @@ window.ACP = {
                     if (arrow) arrow.innerText = isHidden ? 'expand_less' : 'expand_more';
                 };
             }
+            // Clear the ID to mark as finalized
+            window.ACP.lastAiThoughtId = null;
+            if (window.ACP.lastBlockType === 'thought') window.ACP.lastBlockType = '';
         }
     },
 
@@ -629,6 +633,24 @@ window.ACP = {
         if (stopReason) window.ACP.endStreaming('message');
     },
 
+    handlePermissionSelect: (btn, id, optionId) => {
+        if (btn.disabled || btn.classList.contains('pointer-events-none')) return;
+
+        const container = btn.parentElement;
+        window.sendAcp(`permission-response?id=${id}&optionId=${optionId}`);
+
+        const buttons = container.querySelectorAll('button');
+        buttons.forEach(b => {
+            b.classList.add('pointer-events-none');
+            if (b === btn) {
+                b.classList.remove('bg-surface-container-low', 'hover:bg-surface-container', 'text-on-surface');
+                b.classList.add('bg-primary', 'text-black', 'border-primary');
+            } else {
+                b.classList.add('opacity-20', 'grayscale');
+            }
+        });
+    },
+
     ShowPermissionUI: (base64) => {
         try {
             const json = window.ACP.decodeBase64Utf8(base64);
@@ -663,7 +685,7 @@ window.ACP = {
 
             container.innerHTML = displayOptions.map(opt => {
                 return `
-                    <button onclick="window.sendAcp('permission-response?id=${id}&optionId=${opt.optionId}'); this.parentElement.classList.add('opacity-50', 'pointer-events-none')"
+                    <button onclick="window.ACP.handlePermissionSelect(this, '${id}', '${opt.optionId}')"
                         class="flex items-center justify-center px-4 py-2 rounded-xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/20 text-[11px] font-semibold text-on-surface transition-all shadow-sm active:scale-95">
                         <span class="truncate">${opt.name}</span>
                     </button>`;
@@ -745,9 +767,10 @@ window.ACP = {
             if (wasSmooth) outer.classList.remove('scroll-smooth');
 
             document.getElementById('mainChatCanvasInner').innerHTML = '';
+            window.ACP.lastRenderedDate = null;
             window.ACP.breakGrouping();
 
-            data.forEach(msg => {
+            data.forEach((msg, idx) => {
                 const r = msg.role;
                 const targetRole = r === 'user' ? 'me' : 'ai';
                 if (r === 'thought') {
@@ -755,7 +778,18 @@ window.ACP = {
                     window.ACP.parseAndRenderThought(msg.content, tIds.contentId);
                     window.ACP.lastAiThoughtId = tIds;
                     window.ACP.lastBlockType = 'thought';
-                    window.ACP.finalizeThought(0);
+
+                    // Calculate duration from history timestamps
+                    let duration = 0;
+                    const nextMsg = data[idx + 1];
+                    if (nextMsg && (nextMsg.role === 'ai' || nextMsg.role === 'assistant')) {
+                        const start = new Date(msg.timestamp).getTime();
+                        const end = new Date(nextMsg.timestamp).getTime();
+                        if (!isNaN(start) && !isNaN(end)) {
+                            duration = Math.max(0, Math.round((end - start) / 1000));
+                        }
+                    }
+                    window.ACP.finalizeThought(duration);
                 } else {
                     const id = window.ACP.addMessageToUI(targetRole, '', msg.timestamp);
                     const div = document.getElementById(id);
@@ -785,6 +819,9 @@ window.ACP = {
         window.ACP.lastAiThoughtId = null;
         window.ACP.lastBlockType = '';
         window.ACP.lastMessageRole = '';
+        window.ACP.isThoughtStreaming = false;
+        window.ACP.isMessageStreaming = false;
+        window.ACP.currentStreamingContainerId = null;
     },
 
     getTriggerInfo: (triggerChar) => {

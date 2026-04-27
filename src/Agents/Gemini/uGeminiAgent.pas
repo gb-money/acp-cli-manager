@@ -196,9 +196,15 @@ var
   LSession: TSessionInfo;
 begin
   LSession := FindSessionById(SessionId);
-  if Assigned(LSession) then begin LSession.IsWaitForResponse := True; NotifySessionMetadataUpdate(SessionId); end;
-  if not Sessions.TryGetValue(SessionId, LD) then LD := Default(TSessionData);
-  LD.FullThought := ''; LD.FullMessage := ''; LD.CurrentBlockText := ''; LD.LastChunkType := ''; LD.IsProcessing := True; 
+  if Assigned(LSession) then begin 
+    LSession.IsWaitForResponse := True; 
+    LSession.IsRestoring := False; // Clear restoration flag on active prompt
+    NotifySessionMetadataUpdate(SessionId); 
+  end;
+  if not Sessions.TryGetValue(SessionId.ToLower, LD) then LD := Default(TSessionData);
+  LD.FullThought := ''; LD.FullMessage := ''; LD.CurrentBlockText := ''; LD.LastChunkType := ''; 
+  LD.IsProcessing := True; 
+  LD.IsRestoring := False; // Ensure record flag is also cleared
   Sessions.AddOrSetValue(SessionId.ToLower, LD);
   Params := TJsonObject.Create;
   try

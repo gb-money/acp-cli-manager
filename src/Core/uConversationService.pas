@@ -259,7 +259,7 @@ begin
   LObj := TJsonObject.Create;
   try
     try
-      LHash := Copy(THashMD5.GetHashString(ANewText + FormatDateTime('yyyymmddhhnnsszzz', Now) + IntToStr(Random(MaxInt))), 1, 8);
+      LHash := LowerCase(Copy(THashMD5.GetHashString(ANewText + FormatDateTime('yyyymmddhhnnsszzz', Now) + IntToStr(Random(MaxInt))), 1, 8));
       LObj.S['id'] := LHash;
       LObj.S['timestamp'] := FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
       LObj.S['path'] := APath;

@@ -4,13 +4,27 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Types, JsonDataObjects,
-  System.Generics.Collections, System.Generics.Defaults;
+  System.Generics.Collections, System.Generics.Defaults, System.Hash, uAgentTypes, uSessionManager;
 
 type
   TFileService = class
   private
+    FSessionMgr: TSessionManager;
     function IsIgnoredDir(const ADirName: string): Boolean;
+    function GetLocalTimeString: string;
   public
+    constructor Create(ASessionMgr: TSessionManager = nil);
+
+    // 파일 쓰기 및 히스토리 기록
+    procedure WriteTextFile(const ASessionId, APath, AContent: string;
+      OnSuccess: TProc;
+      OnError: TProc<string>);
+
+    // 파일 텍스트 읽기
+    procedure ReadTextFile(const APath: string;
+      OnSuccess: TProc<string>;
+      OnError: TProc<string>);
+
     // 파일 내용 로드 (성공 시 파일명, 경로, JSON 인코딩된 내용을 콜백으로 전달)
     procedure LoadFile(const APath: string; 
       OnSuccess: TProc<string, string, string>; 
@@ -40,6 +54,113 @@ type
 implementation
 
 { TFileService }
+
+constructor TFileService.Create(ASessionMgr: TSessionManager);
+begin
+  FSessionMgr := ASessionMgr;
+end;
+
+function TFileService.GetLocalTimeString: string;
+var
+  d: TDateTime;
+begin
+  d := Now;
+  Result := FormatDateTime('yyyy-mm-dd hh:nn:ss', d);
+end;
+
+procedure TFileService.WriteTextFile(const ASessionId, APath, AContent: string;
+  OnSuccess: TProc;
+  OnError: TProc<string>);
+var
+  LSession: TSessionInfo;
+  LOldContent, LDiffPath, LHashId: string;
+  LDiffObj: TJsonObject;
+  LSessions: TList<TSessionInfo>;
+  I: Integer;
+begin
+  LSession := nil;
+  if not Assigned(FSessionMgr) then
+  begin
+    if Assigned(OnError) then OnError('Session Manager not initialized');
+    Exit;
+  end;
+
+  LSessions := FSessionMgr.GetSessionListSnapshot;
+  try
+    for I := 0 to LSessions.Count - 1 do
+      if SameText(LSessions[I].SessionId, ASessionId) then
+      begin
+        LSession := LSessions[I];
+        Break;
+      end;
+  finally
+    // List is freed later, but we need the session data
+  end;
+
+  if not Assigned(LSession) then
+  begin
+    if Assigned(OnError) then OnError('Session not found for file write: ' + ASessionId);
+    LSessions.Free;
+    Exit;
+  end;
+
+  try
+    // 1. Get old content for diff
+    LOldContent := '';
+    if TFile.Exists(APath) then
+      LOldContent := TFile.ReadAllText(APath, TEncoding.UTF8);
+
+    // 2. Write new content
+    TFile.WriteAllText(APath, AContent, TEncoding.UTF8);
+
+    // 3. Record history (Diff)
+    if (LSession.DiffsPath <> '') then
+    begin
+      TDirectory.CreateDirectory(LSession.DiffsPath);
+      LHashId := LowerCase(Copy(THashMD5.GetHashString(AContent + FormatDateTime('yyyymmddhhnnsszzz', Now) + Random(999999).ToString), 1, 8));
+      LDiffPath := TPath.Combine(LSession.DiffsPath, LHashId + '.json');
+      
+      LDiffObj := TJsonObject.Create;
+      try
+        LDiffObj.S['id'] := LHashId;
+        LDiffObj.S['path'] := APath;
+        LDiffObj.S['timestamp'] := GetLocalTimeString;
+        LDiffObj.S['oldContent'] := LOldContent;
+        LDiffObj.S['newContent'] := AContent;
+        TFile.WriteAllText(LDiffPath, LDiffObj.ToJSON, TEncoding.UTF8);
+      finally
+        LDiffObj.Free;
+      end;
+    end;
+
+    if Assigned(OnSuccess) then OnSuccess();
+  except
+    on E: Exception do
+      if Assigned(OnError) then OnError('File write failed: ' + E.Message);
+  end;
+  LSessions.Free;
+end;
+
+procedure TFileService.ReadTextFile(const APath: string;
+  OnSuccess: TProc<string>;
+  OnError: TProc<string>);
+var
+  LContent: string;
+begin
+  if not TFile.Exists(APath) then
+  begin
+    if Assigned(OnError) then OnError('File not found: ' + APath);
+    Exit;
+  end;
+
+  try
+    LContent := TFile.ReadAllText(APath, TEncoding.UTF8);
+    if Assigned(OnSuccess) then OnSuccess(LContent);
+  except
+    on E: Exception do
+      if Assigned(OnError) then OnError('Failed to read file: ' + E.Message);
+  end;
+end;
 
 function FormatSize(ASize: Int64): string;
 const
